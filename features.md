@@ -135,6 +135,7 @@ the prepare area uses two columns (see "layout of the tab live"):
     - parameter names: left aligned, normal text size, long names wrap onto a second line (full name on hover)
       - the name column spans the slider row and the play-button row, so a wrapped name does not push the play buttons down
     - each parameter has a range slider
+      - same look and handles as the clip timeline: "[" "]" bracket handles for the range, white value marker, neutral grey range
     - mix-type (alpha, lumakey, inverslumakey, add)
     - mix percentage
     - r, g, b channel
