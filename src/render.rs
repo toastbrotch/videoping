@@ -153,6 +153,7 @@ pub struct Renderer {
     pbo_idx: usize,
     pub ndi: Option<NdiSender>,
     pub ndi_error: Option<String>,
+    ndi_key: Option<String>,
     pub clip_status: HashMap<u64, ClipStatus>,
     pub pending_scrub: Vec<(u64, f32)>,
 }
@@ -178,6 +179,7 @@ impl Renderer {
             pbo_idx: 0,
             ndi: None,
             ndi_error: None,
+            ndi_key: None,
             clip_status: HashMap::new(),
             pending_scrub: vec![],
         };
@@ -584,31 +586,27 @@ impl Renderer {
         self.ndi_flip = flip;
     }
 
-    pub fn set_ndi(&mut self, enabled: bool, name: &str, fps: i32) {
-        let want = enabled.then(|| name.to_string());
-        let have = self.ndi.as_ref().map(|n| n.name.clone());
-        if want == have {
+    pub fn set_ndi(&mut self, enabled: bool, name: &str, lib_dir: &str, fps: i32) {
+        let want = enabled.then(|| format!("{name}\u{0}{lib_dir}"));
+        if want == self.ndi_key {
             return;
         }
         self.ndi = None;
+        self.ndi_error = None;
         self.pbo_pending = [false; 2];
-        if let Some(name) = want {
-            if self.ndi_error.as_ref().is_some_and(|e| e.starts_with(&format!("[{name}]"))) {
-                return; // don't retry every frame
-            }
-            match NdiSender::new(&name, fps) {
+        self.ndi_key = want.clone();
+        if want.is_some() {
+            // tried once per name / folder (not every frame)
+            match NdiSender::new(name, fps, lib_dir) {
                 Ok(s) => {
-                    eprintln!("ndi: sending as \"{name}\"");
+                    eprintln!("ndi: sending as \"{name}\" ({})", s.lib_path);
                     self.ndi = Some(s);
-                    self.ndi_error = None;
                 }
                 Err(e) => {
                     eprintln!("ndi: {e}");
-                    self.ndi_error = Some(format!("[{name}] {e}"));
+                    self.ndi_error = Some(e);
                 }
             }
-        } else {
-            self.ndi_error = None;
         }
     }
 

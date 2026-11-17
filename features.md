@@ -1,13 +1,13 @@
 videoping
 ---------
 
-videoping is a live vjing application, 4 columns, all column-borders are moveable to arrange, fullscreen, reduce ui-clutter, slick, darkmode, cleaned-up, most important buttons are directly available. foldout/tabs only when absolutely neede. maybe resolume 2.41 kind or vdmx , mcp and api, borrow from artcraft filmcraft, it is used by mouse but should be played with midicontrollers ultimately). keep in mind this is my personal vjing tool. for the midi mapping i have a 8x8 led-pushbutton controller (bhoreal https://github.com/toastbrotch/docs.bhoreal.com-archive/blob/master/docs/start.md ) and a 4x4 led enhanced rotary encoder controller (midifighter twister)
+videoping is a live vjing application, 5 columns, all column-borders are moveable to arrange, fullscreen, reduce ui-clutter, slick, darkmode, cleaned-up, most important buttons are directly available. foldout/tabs only when absolutely neede. maybe resolume 2.41 kind or vdmx , mcp and api, borrow from artcraft filmcraft, it is used by mouse but should be played with midicontrollers ultimately). keep in mind this is my personal vjing tool. for the midi mapping i have a 8x8 led-pushbutton controller (bhoreal https://github.com/toastbrotch/docs.bhoreal.com-archive/blob/master/docs/start.md ) and a 4x4 led enhanced rotary encoder controller (midifighter twister)
 
 # tabs
 
 the ui has top-level tabs:
 
-- **live**: everything described below (4 columns + master) — the default tab
+- **live**: everything described below — the default tab
 - later (not planned yet):
   - mapping
   - shader editor
@@ -15,6 +15,20 @@ the ui has top-level tabs:
   - sequencer
 
 everything below belongs to the tab "live".
+
+# layout of the tab "live"
+
+5 columns, all borders draggable:
+
+| column | content |
+|---|---|
+| 1 finder | finder preview, finder |
+| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, patch-bay |
+| 3 prepare detail | prepare preview pinned on top, below it (scrolls): clip interface, effect stack; default width ~30% of the window |
+| 4 mixer + output | main output preview pinned on top, below it (scrolls): mixer (3 layers), output effects, output options; takes the remaining width |
+
+- the prepare preview (column 3) and the main output preview (column 4) always stay on top, also when the rest of the column is scrolled
+- both previews always have the same size (the width of the narrower of the two columns)
 
 # save / load
 
@@ -52,7 +66,7 @@ explicit not implemented:
 - local ffgl generatoren compiled as so
 - local ffgl effect compiled as so
 
-# column 2
+# column 2 + 3 (prepare)
 
 ## prepare
 
@@ -67,18 +81,18 @@ here are the clips/generators in a 4x8 grid prepared and get enhanced with effec
 
 ### layout
 
-the prepare column is the widest column (all other columns are thinner). it is split in two:
+the prepare area uses two columns (see "layout of the tab live"):
 
-- left: 4x8 slot grid (4 wide, 8 high) = mirrors bhoreal columns 2-5 1:1
+- column 2: 4x8 slot grid (4 wide, 8 high) = mirrors bhoreal columns 2-5 1:1
   - each slot: thumbnail + name, empty slots are drop targets for the finder
   - live slot: border in the color of the mixer-layer it plays in (same as bhoreal LED)
   - thumbnails are static, only live or selected slots play (performance)
-  - click = select (shows detail on the right), double-click / bhoreal pad = load into selected mixer-layer
+  - click = select (shows detail in column 3), double-click / bhoreal pad = load into selected mixer-layer
   - more than 32 instances: pages of 32 slots, the bhoreal follows the page
   - move an instance to another slot: drag & drop
   - delete an instance: small x on the slot
     - also when it is live: the instance is removed and its mixer-layer becomes empty
-- right: detail of the selected instance
+- column 3: detail of the selected instance
   - prepare preview (on top)
   - generic clip interface (below)
   - effect stack (below)
@@ -115,9 +129,9 @@ the prepare column is the widest column (all other columns are thinner). it is s
 
 ## prepare preview
 
-- part of the detail panel (see layout above): shows the selected instance incl. its effects
+- top of column 3, always visible (does not scroll away): shows the selected instance incl. its effects
 
-# column 3
+# column 4 (mixer + output, merged)
 
 ## mixer
 - 3 layers (layering top-down)
@@ -138,6 +152,8 @@ the prepare column is the widest column (all other columns are thinner). it is s
 - mark the selected layer
 
 ## patch-bay for videosignals
+
+- placed in column 2, below the prepare grid (under master and bpm)
 
 goal: route video signals between any points, mainly backwards for feedback loops.
 
@@ -160,6 +176,7 @@ visuals:
 - not mapped to midi
 
 ## global bpm tabber
+- placed in column 2, below the prepare grid (under master)
 - tap button sets the bpm
 - bpm slider: change the bpm globally by hand (e.g. slow everything down), tap and slider set the same value
 - ½x and 2x buttons: halve / double the bpm instantly
@@ -167,10 +184,8 @@ visuals:
 - drives the speed of clips in bpm mode (beats per limited part)
 - drives the speed of animated parameter range sliders in bpm mode (beats per cycle)
 
-# column 4
-
 ## master (blackout, freeze, brightness)
-- one group at the top of column 4, directly visible, no foldout
+- one group in column 2, below the prepare grid, directly visible, no foldout
 - global blackout button
 - global freeze button
 - global brightness slider (0-100%) next to them
@@ -188,8 +203,10 @@ visuals:
   - resolution: fullHD (default)
   - screen
   - ndi name
+  - NDI library folder (folder with libndi.so.6, saved; empty = default places)
 
 ## output preview
+- main output preview at the top of column 4, always visible (does not scroll away)
 
 # midi mapping
 
@@ -207,7 +224,7 @@ visuals:
   - column 1: select/activate pads in the color of their layer
   - columns 2-5: instance pad lights up in the color of the layer it is live in, dim/off when not live
   - columns 6-8: effect pads in the color of their layer, bright = active, dim = inactive, off = no effect
-- global blackout and global freeze: same as the master buttons in column 4
+- global blackout and global freeze: same as the master buttons in column 2
 - more than 32 instances: paging, the bhoreal shows the current page of the prepare grid
 
 ## midifighter twister (4x4 rotary encoders)

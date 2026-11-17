@@ -28,22 +28,76 @@ sudo apt install \
 
 videoping does not ship NDI. It loads `libndi.so.6` at runtime, searched in this order:
 
-1. `$NDI_RUNTIME_DIR_V6/libndi.so.6`
-2. the system library path (`libndi.so.6`, e.g. `/usr/local/lib`)
+1. the **NDI library folder** set in the ui (output options, saved with the session)
+2. `$NDI_RUNTIME_DIR_V6`
+3. `/usr/local/lib`, `/usr/lib`, `/usr/lib/x86_64-linux-gnu`, `/opt/ndi/lib`, `~/.local/lib`
+4. the system library path
 
-Get the "NDI SDK for Linux" from https://ndi.video/for-developers/ndi-sdk/ and either copy
-`lib/x86_64-linux-gnu/libndi.so.6*` to `/usr/local/lib` (then `sudo ldconfig`) or point the
-variable at its folder:
+## install the regular NDI SDK (free)
 
-```sh
-export NDI_RUNTIME_DIR_V6=/path/to/NDI\ SDK\ for\ Linux/lib/x86_64-linux-gnu
-```
+1. Download the "NDI SDK for Linux" (free, the license is shown during install):
+   - website: https://ndi.video/for-developers/ndi-sdk/ (asks for name / email), or
+   - direct link:
 
-Note: some apps bundle the *NDI Advanced SDK development build*, which stops sending after
-30 minutes. Use the regular NDI runtime for shows.
+     ```sh
+     cd ~/Downloads
+     wget https://downloads.ndi.tv/SDK/NDI_SDK_Linux/Install_NDI_SDK_v6_Linux.tar.gz
+     ```
 
-NDI discovery uses mDNS: `avahi-daemon` must run and the firewall must allow mDNS (5353/udp)
-and the NDI ports (5960+ tcp/udp).
+2. Unpack it and run the installer script. It shows the NDI license; read it and accept with
+   `y`. The script creates the folder `NDI SDK for Linux` next to itself:
+
+   ```sh
+   tar -xzf Install_NDI_SDK_v6_Linux.tar.gz
+   sh Install_NDI_SDK_v6_Linux.sh
+   ls "NDI SDK for Linux/lib/x86_64-linux-gnu/"     # libndi.so  libndi.so.6  libndi.so.6.x.x
+   ```
+
+   (ARM boards: use `lib/aarch64-rpi4-linux-gnueabi` or the matching folder instead.)
+
+3. Make the library findable. Pick **one**:
+
+   - just for your user (only videoping looks there, nothing else is affected):
+
+     ```sh
+     mkdir -p ~/.local/lib
+     cp -P ~/Downloads/"NDI SDK for Linux/lib/x86_64-linux-gnu/"libndi.so* ~/.local/lib/
+     ```
+
+   - system-wide:
+
+     ```sh
+     sudo cp -P ~/Downloads/"NDI SDK for Linux/lib/x86_64-linux-gnu/"libndi.so* /usr/local/lib/
+     sudo ldconfig
+     ```
+
+   - or leave it where it is and enter the folder
+     `~/Downloads/NDI SDK for Linux/lib/x86_64-linux-gnu` as **NDI library folder** in the
+     output options.
+
+   If an older copy (e.g. the Varda development build) is already in that place, the new files
+   replace it.
+
+4. Make sure discovery works: `avahi-daemon` must run (`systemctl status avahi-daemon`) and
+   the firewall must allow mDNS (5353/udp) and the NDI ports (5960+ tcp/udp).
+
+5. Check that you have the regular build and not the 30-minute development build. This should
+   print `0`:
+
+   ```sh
+   strings ~/.local/lib/libndi.so.6 | grep -c "30 minutes"
+   ```
+
+6. Start videoping, open **output options**, turn on **NDI output**. It shows "NDI sending" in
+   green; hover it to see which libndi was loaded. Check it on another machine with
+   NDI Studio Monitor (Windows / macOS, part of the free NDI Tools) or any NDI receiver.
+
+If NDI can't be loaded, the output options show the error in red. When it works they show
+"NDI sending" (hover shows which libndi was loaded).
+
+Note: some apps bundle the *NDI Advanced SDK development build* (e.g. Varda), which stops
+sending after 30 minutes. It works for testing (copy its `libndi.so*` the same way), but use the
+regular NDI runtime for shows. libndi is never committed to this repo (proprietary license).
 
 # 3. build and install
 
@@ -138,11 +192,14 @@ Media (mp4, isf) is referenced by path, never copied.
 
 - **finder** (column 1): click = preview, double-click = add to the first free prepare slot
   (effects: add to the selected instance), drag onto a slot / effect stack.
-- **prepare** (column 2): 4x8 grid. Click = select (detail on the right), double-click =
+- **prepare grid** (column 2): 4x8 grid. Click = select (detail in column 3), double-click =
   load into the selected mixer-layer, drag = move, × = delete (also removes it from the mixer).
-- **mixer** (column 3): click a layer = select it + focus its instance. Drop a slot on a layer to load it.
-  BPM: TAP, slider, ½x / 2x.
-- **output** (column 4): BLACKOUT, FREEZE, brightness, output effects, output options
-  (resolution, output window, NDI).
+  Below the grid: **master** (BLACKOUT, FREEZE, brightness), **bpm** (TAP, slider, ½x / 2x)
+  and the patch-bay (not implemented yet).
+- **prepare detail** (column 3): preview on top (stays visible), below it clip controls and
+  effect stack of the selected instance.
+- **mixer + output** (column 4): main output preview on top (stays visible). Mixer: click a
+  layer = select it + focus its instance; drop a slot on a layer to load it. Below: output
+  effects, output options (resolution, output window, NDI).
 - **output window**: double-click or `F` = fullscreen, `Esc` = leave fullscreen. To choose the
   screen, move the window there first.

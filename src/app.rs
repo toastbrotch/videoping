@@ -1,4 +1,4 @@
-//! The "live" tab: 4 columns (finder | prepare | mixer | output) + top bar.
+//! The "live" tab: 5 columns (finder | prepare grid + master + bpm + patch-bay | prepare detail | mixer + output) + top bar.
 
 use crate::isf::{self, FileKind, InputKind, IsfInfo};
 use crate::render::{FrameCtx, Renderer, PREVIEW_ID};
@@ -53,6 +53,8 @@ pub struct App {
     status: String,
     status_time: Instant,
     output_aspect: f32,
+    /// available widths of column 3 / column 4 (last frame): both previews get the same size
+    preview_avail: [f32; 2],
 }
 
 fn autosave_path() -> PathBuf {
@@ -168,6 +170,7 @@ impl App {
             status,
             status_time: Instant::now(),
             output_aspect: 16.0 / 9.0,
+            preview_avail: [640.0; 2],
         }
     }
 
@@ -292,7 +295,7 @@ impl App {
         }
         let r = self.r.get_or_insert_with(|| Renderer::new(gl, w, h));
         r.resize(gl, w, h);
-        r.set_ndi(self.s.output.ndi_enabled, &self.s.output.ndi_name, 60);
+        r.set_ndi(self.s.output.ndi_enabled, &self.s.output.ndi_name, &self.s.output.ndi_lib_dir, 60);
         self.output_aspect = w as f32 / h as f32;
 
         let mut fc = FrameCtx { dt, bpm: self.s.bpm, beat_prev, beat_now: self.beat, rng: &mut self.rng };
@@ -527,14 +530,19 @@ impl App {
         }
     }
 
-    fn col_prepare(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
-        egui::Panel::left("prepare_grid").resizable(true).default_size(420.0).size_range(240.0..=900.0).show(ui, |ui| {
+    /// column 2: prepare grid, below it master, bpm and patch-bay
+    fn col_grid(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        egui::ScrollArea::vertical().id_salt("gridcol").auto_shrink([false, false]).show(ui, |ui| {
             self.prepare_grid(ui, frame);
-        });
-        egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                self.prepare_detail(ui, frame);
-            });
+            ui.add_space(6.0);
+            ui.separator();
+            self.section_master(ui);
+            ui.add_space(6.0);
+            ui.separator();
+            self.section_bpm(ui);
+            ui.add_space(6.0);
+            ui.separator();
+            self.section_patchbay(ui);
         });
     }
 
@@ -658,13 +666,15 @@ impl App {
         }
     }
 
-    fn prepare_detail(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+    /// pinned top of column 3: prepare preview + name / live / duplicate.
+    /// Returns the instance whose body should be shown below.
+    fn prepare_detail_header(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) -> Option<u64> {
         let Some(id) = self.s.selected_instance.filter(|id| self.s.find(*id).is_some()) else {
             ui.label(egui::RichText::new("select an instance in the grid").weak());
-            return;
+            return None;
         };
-        // prepare preview
-        let w = ui.available_width().min(640.0);
+        // prepare preview (same size as the main output preview)
+        let w = self.preview_width(ui, 0);
         let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
         let tex = self.r.as_ref().and_then(|r| r.output_of(id));
         let tid = self.tex_id(frame, tex);
@@ -693,6 +703,14 @@ impl App {
                     self.s.page = ns / SLOTS_PER_PAGE;
                 }
             }
+            return None;
+        }
+        Some(id)
+    }
+
+    /// scrollable part of column 3: clip interface / generator params, effect stack
+    fn prepare_detail_body(&mut self, ui: &mut Ui, id: u64) {
+        if self.s.find(id).is_none() {
             return;
         }
         if let Some(e) = self.r.as_ref().and_then(|r| r.player_error(id)) {
@@ -900,8 +918,16 @@ impl App {
             }
         }
 
-        ui.add_space(8.0);
-        ui.separator();
+    }
+
+    /// patch-bay (below the prepare grid)
+    fn section_patchbay(&mut self, ui: &mut Ui) {
+        ui.label("patch-bay");
+        ui.label(egui::RichText::new("not implemented yet").weak());
+    }
+
+    /// bpm tapper (below the prepare grid)
+    fn section_bpm(&mut self, ui: &mut Ui) {
         ui.label("bpm");
         ui.horizontal(|ui| {
             if ui.add(egui::Button::new(egui::RichText::new("TAP").strong()).min_size(vec2(56.0, 28.0))).clicked() {
@@ -927,13 +953,10 @@ impl App {
                 self.s.bpm = (self.s.bpm * 2.0).min(300.0);
             }
         });
-        ui.add_space(8.0);
-        ui.separator();
-        ui.label(egui::RichText::new("patch-bay: not implemented yet").weak());
     }
 
-    fn col_output(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
-        // master
+    /// master: blackout, freeze, brightness (below the prepare grid)
+    fn section_master(&mut self, ui: &mut Ui) {
         ui.label("master");
         ui.horizontal(|ui| {
             let m = &mut self.s.master;
@@ -947,10 +970,10 @@ impl App {
             }
         });
         ui.add(egui::Slider::new(&mut self.s.master.brightness, 0.0..=1.0).text("brightness"));
-        ui.separator();
-        egui::ScrollArea::vertical().id_salt("outfx").max_height(ui.available_height() * 0.5).show(ui, |ui| {
-            self.effect_stack(ui, Owner::Output);
-        });
+    }
+
+    fn col_output(&mut self, ui: &mut Ui) {
+        self.effect_stack(ui, Owner::Output);
         egui::CollapsingHeader::new("output options").default_open(false).show(ui, |ui| {
             let o = &mut self.s.output;
             let res = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
@@ -970,15 +993,33 @@ impl App {
                 ui.label("ndi name");
                 ui.add(egui::TextEdit::singleline(&mut o.ndi_name).desired_width(140.0));
             });
+            ui.horizontal(|ui| {
+                ui.label("NDI library folder");
+                ui.add(
+                    egui::TextEdit::singleline(&mut o.ndi_lib_dir)
+                        .hint_text("empty = default places")
+                        .desired_width(ui.available_width()),
+                )
+                .on_hover_text("folder that contains libndi.so.6, e.g. from the NDI SDK for Linux: lib/x86_64-linux-gnu");
+            });
             if let Some(e) = self.r.as_ref().and_then(|r| r.ndi_error.as_ref()) {
                 ui.colored_label(Color32::RED, e);
-            } else if self.r.as_ref().is_some_and(|r| r.ndi.is_some()) {
-                ui.label(egui::RichText::new("NDI sending").color(Color32::GREEN));
+            } else if let Some(n) = self.r.as_ref().and_then(|r| r.ndi.as_ref()) {
+                ui.label(egui::RichText::new("NDI sending").color(Color32::GREEN)).on_hover_text(&n.lib_path);
             }
         });
-        ui.separator();
-        // output preview (bottom)
-        let w = ui.available_width();
+    }
+
+    /// Prepare preview (col 0) and main output preview (col 1) share one width:
+    /// the narrower of the two columns, max 640.
+    fn preview_width(&mut self, ui: &Ui, col: usize) -> f32 {
+        self.preview_avail[col] = ui.available_width();
+        self.preview_avail[0].min(self.preview_avail[1]).clamp(80.0, 640.0)
+    }
+
+    /// main output preview (pinned at the top of column 4)
+    fn output_preview(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        let w = self.preview_width(ui, 1);
         let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
         let tex = self.r.as_ref().map(|r| r.out.tex);
         let tid = self.tex_id(frame, tex);
@@ -1159,13 +1200,32 @@ impl eframe::App for App {
         egui::Panel::left("col1").resizable(true).default_size(260.0).size_range(160.0..=600.0).show(ui, |ui| {
             self.col_finder(ui, frame);
         });
-        egui::Panel::right("col4").resizable(true).default_size(300.0).size_range(200.0..=700.0).show(ui, |ui| {
-            self.col_output(ui, frame);
+        egui::Panel::left("grid_col").resizable(true).default_size(420.0).size_range(240.0..=900.0).show(ui, |ui| {
+            self.col_grid(ui, frame);
         });
-        egui::Panel::right("col3").resizable(true).default_size(330.0).size_range(220.0..=700.0).show(ui, |ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| self.col_mixer(ui, frame));
+        // prepare detail: ~30% of the window by default (10% narrower than the old layout)
+        let detail_w = (ctx.content_rect().width() * 0.30).clamp(320.0, 900.0);
+        egui::Panel::left("detail_col").resizable(true).default_size(detail_w).size_range(260.0..=1000.0).show(ui, |ui| {
+            // preview stays on top, the rest scrolls below it
+            if let Some(id) = self.prepare_detail_header(ui, frame) {
+                ui.separator();
+                egui::ScrollArea::vertical().id_salt("detail").auto_shrink([false, false]).show(ui, |ui| {
+                    self.prepare_detail_body(ui, id);
+                });
+            }
         });
-        egui::CentralPanel::default().show(ui, |ui| self.col_prepare(ui, frame));
+        // mixer + output merged in the last column (takes the remaining width)
+        egui::CentralPanel::default().show(ui, |ui| {
+            // main output preview stays on top, the rest scrolls below it
+            self.output_preview(ui, frame);
+            ui.separator();
+            egui::ScrollArea::vertical().id_salt("mixout").auto_shrink([false, false]).show(ui, |ui| {
+                self.col_mixer(ui, frame);
+                ui.add_space(6.0);
+                ui.separator();
+                self.col_output(ui);
+            });
+        });
 
         self.output_window(&ctx, frame);
         if self.selftest.is_some() {
@@ -1176,8 +1236,15 @@ impl eframe::App for App {
         ctx.request_repaint();
     }
 
+    /// the self-test must not touch the stored ui layout
+    fn persist_egui_memory(&self) -> bool {
+        self.selftest.is_none()
+    }
+
     fn on_exit(&mut self, gl: Option<&glow::Context>) {
-        let _ = save_session(&self.s, &self.autosave_path);
+        if self.selftest.is_none() {
+            let _ = save_session(&self.s, &self.autosave_path);
+        }
         if let (Some(r), Some(gl)) = (self.r.as_mut(), gl) {
             r.ndi = None;
             let _ = gl;

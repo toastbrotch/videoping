@@ -319,6 +319,9 @@ pub struct OutputOptions {
     pub fullscreen: bool,
     pub ndi_enabled: bool,
     pub ndi_name: String,
+    /// folder with libndi.so.6 (empty = search the default places)
+    #[serde(default)]
+    pub ndi_lib_dir: String,
 }
 
 impl Default for OutputOptions {
@@ -330,6 +333,7 @@ impl Default for OutputOptions {
             fullscreen: false,
             ndi_enabled: false,
             ndi_name: "videoping".into(),
+            ndi_lib_dir: String::new(),
         }
     }
 }

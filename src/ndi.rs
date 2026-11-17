@@ -49,18 +49,34 @@ struct Lib {
     send_video: FnSendVideo,
 }
 
-fn load_lib() -> Result<Lib, String> {
-    let mut candidates = vec![];
-    if let Ok(dir) = std::env::var("NDI_RUNTIME_DIR_V6") {
-        candidates.push(format!("{dir}/libndi.so.6"));
-        candidates.push(format!("{dir}/libndi.so"));
+/// Folders searched for libndi.so.6 (in this order): the folder set in the ui, $NDI_RUNTIME_DIR_V6,
+/// common install folders, then the system library path.
+fn lib_candidates(lib_dir: &str) -> Vec<String> {
+    let mut dirs: Vec<String> = vec![];
+    if !lib_dir.trim().is_empty() {
+        dirs.push(lib_dir.trim().trim_end_matches('/').to_string());
     }
-    candidates.push("libndi.so.6".into());
-    candidates.push("libndi.so".into());
-    candidates.push("/usr/local/lib/libndi.so.6".into());
-    let mut last_err = String::new();
-    for c in &candidates {
-        match unsafe { libloading::Library::new(c) } {
+    if let Ok(d) = std::env::var("NDI_RUNTIME_DIR_V6") {
+        dirs.push(d.trim_end_matches('/').to_string());
+    }
+    for d in ["/usr/local/lib", "/usr/lib", "/usr/lib/x86_64-linux-gnu", "/opt/ndi/lib"] {
+        dirs.push(d.to_string());
+    }
+    if let Some(home) = dirs::home_dir() {
+        dirs.push(home.join(".local/lib").display().to_string());
+    }
+    let mut c: Vec<String> = dirs.iter().flat_map(|d| [format!("{d}/libndi.so.6"), format!("{d}/libndi.so")]).collect();
+    c.push("libndi.so.6".into());
+    c.push("libndi.so".into());
+    c
+}
+
+fn load_lib(lib_dir: &str) -> Result<(Lib, String), String> {
+    for c in lib_candidates(lib_dir) {
+        if c.starts_with('/') && !std::path::Path::new(&c).exists() {
+            continue;
+        }
+        match unsafe { libloading::Library::new(&c) } {
             Ok(lib) => unsafe {
                 let init: FnInit = *lib.get::<FnInit>(b"NDIlib_initialize\0").map_err(|e| e.to_string())?;
                 let send_create = *lib.get::<FnSendCreate>(b"NDIlib_send_create\0").map_err(|e| e.to_string())?;
@@ -70,12 +86,16 @@ fn load_lib() -> Result<Lib, String> {
                 if !init() {
                     return Err("NDIlib_initialize failed (unsupported CPU?)".into());
                 }
-                return Ok(Lib { _lib: lib, send_create, send_destroy, send_video });
+                return Ok((Lib { _lib: lib, send_create, send_destroy, send_video }, c));
             },
-            Err(e) => last_err = e.to_string(),
+            Err(e) => {
+                if c.starts_with('/') {
+                    return Err(format!("{c}: {e}"));
+                }
+            }
         }
     }
-    Err(format!("libndi.so not found (install the NDI runtime or set NDI_RUNTIME_DIR_V6): {last_err}"))
+    Err("libndi.so.6 not found: set \"NDI library folder\" in the output options (folder that contains libndi.so.6) or install the NDI runtime (see install.md)".into())
 }
 
 pub struct FrameMsg {
@@ -86,7 +106,8 @@ pub struct FrameMsg {
 
 /// NDI sender running on its own thread. Frames are dropped if the sender is busy.
 pub struct NdiSender {
-    pub name: String,
+    /// the libndi that was loaded
+    pub lib_path: String,
     tx: Option<SyncSender<FrameMsg>>,
     thread: Option<JoinHandle<()>>,
     /// recycled buffers from the sender thread
@@ -94,8 +115,8 @@ pub struct NdiSender {
 }
 
 impl NdiSender {
-    pub fn new(name: &str, fps: i32) -> Result<NdiSender, String> {
-        let lib = load_lib()?;
+    pub fn new(name: &str, fps: i32, lib_dir: &str) -> Result<NdiSender, String> {
+        let (lib, lib_path) = load_lib(lib_dir)?;
         let cname = CString::new(name).map_err(|e| e.to_string())?;
         let (tx, rx) = sync_channel::<FrameMsg>(1);
         let pool: Arc<std::sync::Mutex<Vec<Vec<u8>>>> = Default::default();
@@ -146,7 +167,7 @@ impl NdiSender {
             })
             .map_err(|e| e.to_string())?;
         ready_rx.recv().map_err(|e| e.to_string())??;
-        Ok(NdiSender { name: name.to_string(), tx: Some(tx), thread: Some(thread), pool })
+        Ok(NdiSender { lib_path, tx: Some(tx), thread: Some(thread), pool })
     }
 
     pub fn buffer(&self, size: usize) -> Vec<u8> {

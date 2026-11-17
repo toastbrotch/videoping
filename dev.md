@@ -54,7 +54,7 @@ Useful env vars:
 |---|---|
 | `NDI_RUNTIME_DIR_V6` | folder with `libndi.so.6` |
 | `GST_DEBUG=3` | GStreamer warnings (codec / decoding problems) |
-| `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (id-display generator over a clip with gameboy-camera), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, quits after ~7 s. Never touches the autosave. |
+| `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (id-display generator over a clip with gameboy-camera), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, quits after ~7 s. Never touches the autosave or the stored ui layout. |
 | `VIDEOPING_SELFTEST_CLIP=<mp4>` | clip for the self-test (default `<dir>/testclip.mp4`) |
 | `VIDEOPING_SELFTEST_NDI=1` | self-test also sends NDI |
 
@@ -71,7 +71,7 @@ Dev examples (no ui):
 
 ```sh
 cargo run --example transport_test -- clip.mp4   # forward / backward / bounce / bpm against GStreamer
-cargo run --example ndi_test                       # sends 2 s of test frames as "videoping-test"
+cargo run --example ndi_test -- /path/to/ndi/lib  # sends 2 s of test frames as "videoping-test"
 ```
 
 # architecture
@@ -79,7 +79,7 @@ cargo run --example ndi_test                       # sends 2 s of test frames as
 ```
 src/
   main.rs      eframe setup (glow / OpenGL renderer)
-  app.rs       the "live" tab: 4 columns, drag & drop, autosave, output window, self-test
+  app.rs       the "live" tab: 5 columns, drag & drop, autosave, output window, self-test
   widgets.rs   range slider, transport row, timeline, mix controls, texture painting
   state.rs     Session = everything that is saved (serde); animation logic (AnimParam, Speed)
   render.rs    render engine: instances, effect chains, mixer, output effects, master, NDI readback
@@ -125,7 +125,7 @@ egui   : paints textures via register_native_glow_texture (bottom-up -> flipped 
 
 # status of the prototype (milestone 1)
 
-done: live tab with 4 resizable columns, finder (mp4 / isf generator / isf effect, search, folders),
+done: live tab with 5 resizable columns, finder (mp4 / isf generator / isf effect, search, folders),
 prepare 4x8 grid with pages, detail panel (preview, clip transport, generator params, effect stack),
 3 mixer layers, bpm tapper, master (blackout / freeze / brightness), output effects, output
 window (fullscreen), NDI output, autosave + save / load, duplicate, drag & drop.
