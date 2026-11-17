@@ -142,6 +142,7 @@ impl App {
             timeline: None,
             drag_step: 0,
             in_before: None,
+            l2_mix: None,
         });
         let (s, status) = if let Some(t) = &selftest {
             (selftest_session(t), "selftest".to_string())
@@ -430,12 +431,12 @@ impl App {
             ui.label(egui::RichText::new("videoping").strong().color(ACCENT));
             ui.separator();
             let _ = widgets::choice(ui, true, "live");
-            ui.add_enabled(false, egui::Button::new("mapping").small());
-            ui.add_enabled(false, egui::Button::new("shader editor").small());
-            ui.add_enabled(false, egui::Button::new("midi mapping").small());
-            ui.add_enabled(false, egui::Button::new("sequencer").small());
+            ui.add_enabled(false, egui::Button::new(egui::RichText::new("mapping").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
+            ui.add_enabled(false, egui::Button::new(egui::RichText::new("shader editor").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
+            ui.add_enabled(false, egui::Button::new(egui::RichText::new("midi mapping").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
+            ui.add_enabled(false, egui::Button::new(egui::RichText::new("sequencer").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("load").clicked() {
+                if widgets::btn(ui, "load").clicked() {
                     let p = PathBuf::from(self.file_path.trim());
                     match load_session(&p) {
                         Ok(s) => {
@@ -452,7 +453,7 @@ impl App {
                         Err(e) => self.set_status(e),
                     }
                 }
-                if ui.small_button("save").clicked() {
+                if widgets::btn(ui, "save").clicked() {
                     let p = PathBuf::from(self.file_path.trim());
                     match save_session(&self.s, &p) {
                         Ok(_) => self.set_status(format!("saved {}", p.display())),
@@ -483,8 +484,8 @@ impl App {
         }
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search").desired_width(ui.available_width() - 28.0));
-            if ui.small_button("↻").on_hover_text("rescan folders").clicked() {
+            ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search").desired_width(field_width(ui, widgets::BTN.x)));
+            if widgets::btn(ui, "↻").on_hover_text("rescan folders").clicked() {
                 self.finder = scan(&self.s.finder_roots);
             }
         });
@@ -492,7 +493,7 @@ impl App {
             let mut remove = None;
             for (i, r) in self.s.finder_roots.iter().enumerate() {
                 ui.horizontal(|ui| {
-                    if ui.small_button("×").clicked() {
+                    if widgets::btn(ui, "×").clicked() {
                         remove = Some(i);
                     }
                     ui.label(r.display().to_string());
@@ -503,8 +504,8 @@ impl App {
                 self.finder = scan(&self.s.finder_roots);
             }
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.finder_new_root).hint_text("/path/to/folder").desired_width(ui.available_width() - 40.0));
-                if ui.small_button("add").clicked() {
+                ui.add(egui::TextEdit::singleline(&mut self.finder_new_root).hint_text("/path/to/folder").desired_width(field_width(ui, widgets::BTN.x + 8.0)));
+                if widgets::btn(ui, "add").clicked() {
                     let p = PathBuf::from(self.finder_new_root.trim());
                     if p.is_dir() {
                         self.s.finder_roots.push(p);
@@ -574,7 +575,7 @@ impl App {
         }
     }
 
-    /// column 2: prepare grid, below it master, bpm and patch-bay
+    /// column 2: prepare grid, below it master, bpm, patch-bay and output options
     fn col_grid(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         egui::ScrollArea::vertical().id_salt("gridcol").auto_shrink([false, false]).show(ui, |ui| {
             self.prepare_grid(ui, frame);
@@ -587,6 +588,9 @@ impl App {
             ui.add_space(6.0);
             ui.separator();
             self.section_patchbay(ui);
+            ui.add_space(6.0);
+            ui.separator();
+            self.section_output_options(ui);
         });
     }
 
@@ -595,15 +599,15 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("prepare");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("+").on_hover_text("add page").clicked() {
+                if widgets::btn(ui, "+").on_hover_text("add page").clicked() {
                     self.s.slots.extend(std::iter::repeat_n(None, SLOTS_PER_PAGE));
                     self.s.page = self.s.pages() - 1;
                 }
-                if ui.small_button("▶").clicked() && self.s.page + 1 < pages {
+                if widgets::btn(ui, "▶").clicked() && self.s.page + 1 < pages {
                     self.s.page += 1;
                 }
                 ui.label(format!("page {}/{}", self.s.page + 1, pages));
-                if ui.small_button("◀").clicked() && self.s.page > 0 {
+                if widgets::btn(ui, "◀").clicked() && self.s.page > 0 {
                     self.s.page -= 1;
                 }
             });
@@ -735,7 +739,7 @@ impl App {
                 ui.label(egui::RichText::new(format!("live in L{}", l + 1)).color(layer_color(l)));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("duplicate").clicked() {
+                if widgets::btn(ui, "duplicate").clicked() {
                     dup = true;
                 }
             });
@@ -835,7 +839,7 @@ impl App {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let handle = ui.add(egui::Label::new("≡").sense(Sense::drag())).on_hover_text("drag to reorder");
                     handle.dnd_set_drag_payload(Drag::Effect(owner, i));
-                    ui.checkbox(&mut fx.active, "");
+                    widgets::check(ui, &mut fx.active, ACCENT).on_hover_text("effect on/off");
                     let arrow = if fx.open { "▾" } else { "▸" };
                     let name = isf::display_name(&fx.path);
                     if ui.add(egui::Button::new(format!("{arrow} {name}")).frame(false)).clicked() {
@@ -845,7 +849,7 @@ impl App {
                         ui.colored_label(Color32::RED, "⚠").on_hover_text(e);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("×").clicked() {
+                        if widgets::btn(ui, "×").clicked() {
                             ev_remove = Some(i);
                         }
                     });
@@ -860,14 +864,15 @@ impl App {
                 if row.response.dnd_hover_payload::<Drag>().is_some() {
                     widgets::outline(ui, row.response.rect, 1.5, ACCENT);
                 }
-                if fx.open {
-                    ui.indent(("fx", fx.uid), |ui| {
-                        widgets::mix_controls(ui, &mut fx.mix, ("fxmix", fx.uid));
+                // mix-type, R G B and mix slider are always visible; parameters only when folded out
+                ui.indent(("fx", fx.uid), |ui| {
+                    widgets::mix_controls(ui, &mut fx.mix, ("fxmix", fx.uid));
+                    if fx.open {
                         if let Some(info) = infos.get(&fx.path) {
                             params_ui(ui, info, &mut fx.params, ("fxp", fx.uid));
                         }
-                    });
-                }
+                    }
+                });
             }
             if effects.is_empty() {
                 ui.label(egui::RichText::new("drop effects here").weak());
@@ -903,7 +908,10 @@ impl App {
         for li in 0..NUM_LAYERS {
             let color = layer_color(li);
             let selected = self.s.selected_layer == li;
-            let resp = egui::Frame::group(ui.style())
+            // the layer's own click sense is registered *below* its buttons (UiBuilder::sense),
+            // so the buttons keep their clicks and a click on the background selects the layer
+            let resp = ui.scope_builder(egui::UiBuilder::new().id_salt(("layer", li)).sense(Sense::click()), |ui| {
+            egui::Frame::group(ui.style())
                 .stroke(egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { color } else { color.gamma_multiply(0.3) }))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
@@ -911,18 +919,18 @@ impl App {
                         ui.spacing_mut().item_spacing.x = 3.0;
                         ui.label(egui::RichText::new(format!("L{}", li + 1)).strong().color(color));
                         let mut active = self.s.layers[li].active;
-                        widgets::toggle(ui, &mut active, "on", color);
+                        widgets::check(ui, &mut active, color).on_hover_text("layer on/off");
                         self.s.layers[li].active = active;
-                        if ui.small_button("↑").clicked() && li > 0 {
+                        if widgets::btn(ui, "↑").clicked() && li > 0 {
                             ev_move = Some((li, li - 1));
                         }
-                        if ui.small_button("↓").clicked() && li + 1 < NUM_LAYERS {
+                        if widgets::btn(ui, "↓").clicked() && li + 1 < NUM_LAYERS {
                             ev_move = Some((li, li + 1));
                         }
                         let name = self.s.layers[li].instance.and_then(|id| self.s.find(id)).map(|i| i.name.clone()).unwrap_or_else(|| "empty".into());
                         ui.label(truncate(&name, 22));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if self.s.layers[li].instance.is_some() && ui.small_button("×").on_hover_text("unload").clicked() {
+                            if self.s.layers[li].instance.is_some() && widgets::btn(ui, "×").on_hover_text("unload").clicked() {
                                 self.s.layers[li].instance = None;
                             }
                         });
@@ -934,6 +942,11 @@ impl App {
                         let tid = self.tex_id(frame, tex);
                         paint_tex(ui, rect, tid, self.output_aspect);
                         ui.vertical(|ui| {
+                            if li == 1 {
+                                if let Some(t) = self.selftest.as_mut() {
+                                    t.l2_mix = Some(ui.cursor().min);
+                                }
+                            }
                             widgets::mix_controls(ui, &mut self.s.layers[li].mix, ("layermix", li));
                         });
                     });
@@ -952,9 +965,11 @@ impl App {
                         }
                     }
                 });
-            // click on a layer: select it + focus its instance in prepare
-            let r = ui.interact(resp.response.rect, ui.scope_id().with(("layer", li)), Sense::click());
-            if r.clicked() {
+            });
+            // click on a layer (background or any of its controls): select it + focus its instance
+            let r = resp.response;
+            let clicked_inside = ui.input(|i| i.pointer.primary_clicked()) && r.contains_pointer();
+            if r.clicked() || clicked_inside {
                 self.s.selected_layer = li;
                 if let Some(id) = self.s.layers[li].instance {
                     self.s.selected_instance = Some(id);
@@ -1010,10 +1025,10 @@ impl App {
             ui.add(egui::Slider::new(&mut self.s.bpm, 20.0..=300.0).step_by(1.0).fixed_decimals(0).text("bpm"));
         });
         ui.horizontal(|ui| {
-            if ui.small_button("½x").clicked() {
+            if widgets::btn(ui, "½x").clicked() {
                 self.s.bpm = (self.s.bpm * 0.5).round().max(20.0);
             }
-            if ui.small_button("2x").clicked() {
+            if widgets::btn(ui, "2x").clicked() {
                 self.s.bpm = (self.s.bpm * 2.0).round().min(300.0);
             }
         });
@@ -1038,6 +1053,10 @@ impl App {
 
     fn col_output(&mut self, ui: &mut Ui) {
         self.effect_stack(ui, Owner::Output);
+    }
+
+    /// output options (column 2, below the patch-bay)
+    fn section_output_options(&mut self, ui: &mut Ui) {
         egui::CollapsingHeader::new("output options").default_open(false).show(ui, |ui| {
             let o = &mut self.s.output;
             let res = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
@@ -1194,15 +1213,33 @@ fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::
     }
 }
 
+/// Width of the parameter label column.
+const PARAM_LABEL_W: f32 = 120.0;
+
 fn anim_ui(ui: &mut Ui, label: &str, a: &mut AnimParam, min: f32, max: f32, integer: bool) {
-    ui.horizontal(|ui| {
-        ui.add_sized(vec2(110.0, 16.0), egui::Label::new(egui::RichText::new(label).small()).truncate());
-        widgets::range_slider(ui, a, min, max, integer);
+    // the label column spans both rows (slider + play buttons): a name that wraps onto a second
+    // line sits next to the play buttons instead of pushing them down
+    ui.horizontal_top(|ui| {
+        param_label(ui, label);
+        ui.vertical(|ui| {
+            widgets::range_slider(ui, a, min, max, integer);
+            widgets::transport_row(ui, &mut a.mode, &mut a.loop_mode, &mut a.speed, "/s");
+        });
     });
-    ui.horizontal(|ui| {
-        ui.add_space(114.0);
-        widgets::transport_row(ui, &mut a.mode, &mut a.loop_mode, &mut a.speed, "/s");
+}
+
+/// Parameter label: left aligned, normal text size, wraps onto a second line if too long.
+fn param_label(ui: &mut Ui, label: &str) {
+    ui.allocate_ui_with_layout(vec2(PARAM_LABEL_W, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.set_width(PARAM_LABEL_W);
+        ui.add(egui::Label::new(egui::RichText::new(label).size(widgets::BTN_TEXT)).wrap()).on_hover_text(label);
     });
+}
+
+/// Width for a text field followed by a button of width `button_w` on the same line, so the line
+/// never gets wider than the column (a too-wide line makes a resizable panel grow by itself).
+fn field_width(ui: &Ui, button_w: f32) -> f32 {
+    (ui.available_width() - button_w - ui.spacing().item_spacing.x - ui.spacing().button_padding.x * 2.0 - 2.0).max(40.0)
 }
 
 fn truncate(s: &str, n: usize) -> String {
@@ -1250,6 +1287,11 @@ fn style(ctx: &egui::Context) {
         s.visuals.selection.bg_fill = ACCENT;
         s.visuals.panel_fill = Color32::from_gray(18);
         s.visuals.extreme_bg_color = Color32::from_gray(8);
+        // less rounded corners on all buttons / fields
+        let w = &mut s.visuals.widgets;
+        for st in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
+            st.corner_radius = egui::CornerRadius::same(widgets::BTN_RADIUS);
+        }
     });
 }
 
@@ -1308,9 +1350,30 @@ impl eframe::App for App {
             _ => None,
         });
         let pending = self.r.as_ref().map(|r| r.pending_scrub.len()).unwrap_or(0);
+        let l2 = (self.s.layers[1].mix.mix_type, self.s.selected_layer);
         let Some(t) = self.selftest.as_mut() else { return };
         let Some(tl) = t.timeline else { return };
-        if t.start.elapsed().as_secs_f32() < 2.0 || t.drag_step > 12 {
+        if t.start.elapsed().as_secs_f32() < 2.0 || t.drag_step > 16 {
+            return;
+        }
+        // after the drag: click "Lk" (2nd mix button) of mixer layer L2
+        if t.drag_step >= 13 {
+            if let Some(m) = t.l2_mix {
+                let p = m + vec2(30.0 + 2.0 + 15.0, 9.0);
+                let btn = |pressed| egui::Event::PointerButton {
+                    pos: p,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                };
+                match t.drag_step {
+                    13 => raw.events.push(egui::Event::PointerMoved(p)),
+                    14 => raw.events.push(btn(true)),
+                    15 => raw.events.push(btn(false)),
+                    _ => eprintln!("selftest click: L2 mix-type = {:?} (expected LumaKey), selected layer = L{} (expected L2)", l2.0, l2.1 + 1),
+                }
+            }
+            t.drag_step += 1;
             return;
         }
         let in_pt = in_pt.unwrap_or(0.0);
@@ -1382,6 +1445,8 @@ struct SelfTest {
     timeline: Option<Rect>,
     drag_step: u32,
     in_before: Option<f32>,
+    /// top-left of L2's mix buttons (for the simulated click on "Lk")
+    l2_mix: Option<egui::Pos2>,
 }
 
 fn selftest_session(t: &SelfTest) -> Session {
@@ -1403,6 +1468,7 @@ fn selftest_session(t: &SelfTest) -> Session {
     });
     let clip_id = s.new_id();
     let fx_uid = s.new_id();
+    let fx2_uid = s.new_id();
     s.slots[8] = Some(Instance {
         id: clip_id,
         name: "testclip".into(),
@@ -1415,6 +1481,15 @@ fn selftest_session(t: &SelfTest) -> Session {
             params: isf::default_params(&fx_info),
             seed: rng.next_f32(),
             open: true,
+        }, EffectInst {
+            // second effect, folded in (shows mix controls only)
+            uid: fx2_uid,
+            path: root.join("isf-effect/gameboy-camera.fs"),
+            active: false,
+            mix: Mix { mix_type: MixType::Add, amount: 0.5, rgb: [true, false, true] },
+            params: isf::default_params(&fx_info),
+            seed: rng.next_f32(),
+            open: false,
         }],
         seed: rng.next_f32(),
     });

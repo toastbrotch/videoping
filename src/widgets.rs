@@ -3,7 +3,9 @@
 use crate::state::{AnimParam, ClipTransport, LoopMode, Mix, MixType, PlayMode, Speed};
 use egui::{pos2, vec2, Color32, Rect, Sense, Stroke, StrokeKind, Ui};
 
-pub const ACCENT: Color32 = Color32::from_rgb(230, 40, 140);
+/// Accent color (selected buttons, limiters, range sliders, effect checkbox): muted plum #8B4A87,
+/// chosen to sit in the hue gap furthest away from the layer colors (blue, green, orange).
+pub const ACCENT: Color32 = Color32::from_rgb(0x8B, 0x4A, 0x87);
 
 /// 0..1 value shown and edited as integer percent 0..100.
 pub fn percent_slider(ui: &mut Ui, v: &mut f32, label: &str) -> egui::Response {
@@ -15,14 +17,35 @@ pub fn percent_slider(ui: &mut Ui, v: &mut f32, label: &str) -> egui::Response {
     r
 }
 
-/// Small toggle button that lights up in `on_color` when active.
-pub fn toggle(ui: &mut Ui, on: &mut bool, label: &str, on_color: Color32) -> egui::Response {
-    let fill = if *on { on_color } else { ui.visuals().widgets.inactive.weak_bg_fill };
-    let text_color = if *on { readable_on(on_color) } else { ui.visuals().text_color() };
-    let r = ui.add(egui::Button::new(egui::RichText::new(label).color(text_color)).fill(fill).small());
+/// Minimum size of every button (= the R G B buttons).
+pub const BTN: egui::Vec2 = vec2(30.0, 18.0);
+/// Text size of buttons.
+pub const BTN_TEXT: f32 = 12.0;
+/// Corner radius of buttons, fields and checkboxes.
+pub const BTN_RADIUS: u8 = 2;
+
+/// Plain button, same size as the R G B buttons.
+pub fn btn(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.add(egui::Button::new(egui::RichText::new(text).size(BTN_TEXT)).min_size(BTN))
+}
+
+/// Big checkbox (18x18): filled with `on_color` and a check mark when on.
+/// Used for effects (active) and mixer layers (on).
+pub fn check(ui: &mut Ui, on: &mut bool, on_color: Color32) -> egui::Response {
+    let (rect, mut r) = ui.allocate_exact_size(vec2(BTN.y, BTN.y), Sense::click());
     if r.clicked() {
         *on = !*on;
+        r.mark_changed();
     }
+    let v = ui.style().interact(&r);
+    let p = ui.painter();
+    if *on {
+        p.rect_filled(rect, BTN_RADIUS as f32, on_color);
+        p.text(rect.center(), egui::Align2::CENTER_CENTER, "✔", egui::FontId::proportional(13.0), readable_on(on_color));
+    } else {
+        p.rect_filled(rect, BTN_RADIUS as f32, ui.visuals().widgets.inactive.weak_bg_fill);
+    }
+    p.rect_stroke(rect, BTN_RADIUS as f32, Stroke::new(1.0, v.fg_stroke.color.gamma_multiply(0.6)), StrokeKind::Inside);
     r
 }
 
@@ -35,8 +58,8 @@ pub fn readable_on(bg: Color32) -> Color32 {
 /// Button that is highlighted when `selected`.
 pub fn choice(ui: &mut Ui, selected: bool, label: &str) -> egui::Response {
     let fill = if selected { ACCENT } else { ui.visuals().widgets.inactive.weak_bg_fill };
-    let text_color = if selected { Color32::BLACK } else { ui.visuals().text_color() };
-    ui.add(egui::Button::new(egui::RichText::new(label).color(text_color)).fill(fill).small())
+    let text_color = if selected { readable_on(ACCENT) } else { ui.visuals().text_color() };
+    ui.add(egui::Button::new(egui::RichText::new(label).color(text_color).size(BTN_TEXT)).fill(fill).min_size(BTN))
 }
 
 pub fn layer_color(i: usize) -> Color32 {
@@ -156,10 +179,10 @@ pub fn speed_widget(ui: &mut Ui, speed: &mut Speed, free_label: &str) {
     } else {
         ui.add(egui::DragValue::new(&mut speed.free).range(0.01..=16.0).speed(0.01).suffix(free_label));
     }
-    if ui.small_button("½x").clicked() {
+    if btn(ui, "½x").clicked() {
         speed.half();
     }
-    if ui.small_button("2x").clicked() {
+    if btn(ui, "2x").clicked() {
         speed.double();
     }
 }
@@ -270,8 +293,8 @@ pub fn timeline(ui: &mut Ui, t: &mut ClipTransport, position: f64, duration: Opt
 /// One cell of the mix button grid (all cells same size, accent when on).
 fn cell(ui: &mut Ui, on: bool, text: &str) -> egui::Response {
     let fill = if on { ACCENT } else { ui.visuals().widgets.inactive.weak_bg_fill };
-    let color = if on { Color32::BLACK } else { ui.visuals().text_color() };
-    ui.add_sized(vec2(30.0, 18.0), egui::Button::new(egui::RichText::new(text).color(color).size(12.0)).fill(fill))
+    let color = if on { readable_on(ACCENT) } else { ui.visuals().text_color() };
+    ui.add_sized(BTN, egui::Button::new(egui::RichText::new(text).color(color).size(BTN_TEXT)).fill(fill))
 }
 
 /// Right margin of the "Ch R G B" group, keeps it away from the × of effect rows / layers.
@@ -282,14 +305,14 @@ const MIX_RIGHT_MARGIN: f32 = 28.0;
 ///   mix ───────────────────────── %
 pub fn mix_controls(ui: &mut Ui, mix: &mut Mix, id_salt: impl std::hash::Hash + std::fmt::Debug) {
     ui.push_id(id_salt, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-            for m in MixType::ALL {
-                if cell(ui, mix.mix_type == m, m.short()).on_hover_text(m.label()).clicked() {
-                    mix.mix_type = m;
-                }
-            }
+        let gap = 2.0;
+        let mix_w = 4.0 * (BTN.x + gap);
+        let ch_w = 22.0 + 3.0 * (BTN.x + gap) + MIX_RIGHT_MARGIN;
+        // not enough room for both groups on one line -> "Ch R G B" goes to its own line
+        let one_line = ui.available_width() >= mix_w + ch_w + 12.0;
+        let ch_group = |ui: &mut Ui, mix: &mut Mix| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing = vec2(gap, gap);
                 ui.add_space(MIX_RIGHT_MARGIN);
                 for i in (0..3).rev() {
                     if cell(ui, mix.rgb[i], ["R", "G", "B"][i]).on_hover_text("channel on/off").clicked() {
@@ -299,7 +322,21 @@ pub fn mix_controls(ui: &mut Ui, mix: &mut Mix, id_salt: impl std::hash::Hash + 
                 ui.add_space(2.0);
                 ui.label(egui::RichText::new("Ch").weak());
             });
+        };
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = vec2(gap, gap);
+            for m in MixType::ALL {
+                if cell(ui, mix.mix_type == m, m.short()).on_hover_text(m.label()).clicked() {
+                    mix.mix_type = m;
+                }
+            }
+            if one_line {
+                ch_group(ui, mix);
+            }
         });
+        if !one_line {
+            ui.horizontal(|ui| ch_group(ui, mix));
+        }
         percent_slider(ui, &mut mix.amount, "mix");
     });
 }

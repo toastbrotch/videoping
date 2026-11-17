@@ -3,6 +3,14 @@ videoping
 
 videoping is a live vjing application, 5 columns, all column-borders are moveable to arrange, fullscreen, reduce ui-clutter, slick, darkmode, cleaned-up, most important buttons are directly available. foldout/tabs only when absolutely neede. maybe resolume 2.41 kind or vdmx , mcp and api, borrow from artcraft filmcraft, it is used by mouse but should be played with midicontrollers ultimately). keep in mind this is my personal vjing tool. for the midi mapping i have a 8x8 led-pushbutton controller (bhoreal https://github.com/toastbrotch/docs.bhoreal.com-archive/blob/master/docs/start.md ) and a 4x4 led enhanced rotary encoder controller (midifighter twister)
 
+# ui style
+
+- accent color (selected buttons, R G B, limiters, range sliders, effect checkbox): muted plum #8B4A87, white text on it
+  - chosen from the hue gap furthest away from the layer colors (#1B6898 blue, #388E3C green, #C8640A orange), same calm saturation
+- all buttons have the same size as the R G B buttons (min 30x18, text 12), corners only slightly rounded (2 px)
+- on/off of effects and of mixer-layers is a big checkbox (18x18): effects in the accent color, layers in their layer color
+- mix-type + "Ch R G B" stay on one line when there is room, otherwise "Ch R G B" wraps to its own line (right aligned)
+
 # tabs
 
 the ui has top-level tabs:
@@ -23,9 +31,9 @@ everything below belongs to the tab "live".
 | column | content |
 |---|---|
 | 1 finder | finder preview, finder |
-| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, patch-bay |
+| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, patch-bay, output options |
 | 3 prepare detail | prepare preview pinned on top, below it (scrolls): clip interface, effect stack; default width ~30% of the window |
-| 4 mixer + output | main output preview pinned on top, below it (scrolls): mixer (3 layers), output effects, output options; takes the remaining width |
+| 4 mixer + output | main output preview pinned on top, below it (scrolls): mixer (3 layers), output effects; takes the remaining width |
 
 - the prepare preview (column 3) and the main output preview (column 4) always stay on top, also when the rest of the column is scrolled
 - both previews always have the same size (the width of the narrower of the two columns)
@@ -122,7 +130,10 @@ the prepare area uses two columns (see "layout of the tab live"):
   - reorder: drag & drop
   - remove: small x on the effect row
   - active/inactive
+  - mix-type, R G B and mix slider are always visible, also when the effect is folded in
   - all parameters (only on click folded out)
+    - parameter names: left aligned, normal text size, long names wrap onto a second line (full name on hover)
+      - the name column spans the slider row and the play-button row, so a wrapped name does not push the play buttons down
     - each parameter has a range slider
     - mix-type (alpha, lumakey, inverslumakey, add)
     - mix percentage
@@ -161,6 +172,7 @@ the prepare area uses two columns (see "layout of the tab live"):
     - same instance as in the prepare lane, so changes here and there are the same
     - effects are not shown here (only in the prepare detail)
   - click on a layer = select it + focus its instance in the prepare lane (shows its detail, switches the prepare page if needed)
+    - also when clicking one of the layer's controls (the controls still do their own action)
 - mark the selected layer
 
 ## patch-bay for videosignals
@@ -213,6 +225,7 @@ visuals:
 
 
 ## output options (fold open)
+  - placed in column 2, below the patch-bay
   - resolution: fullHD (default)
   - screen
   - ndi name

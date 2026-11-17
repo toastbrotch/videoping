@@ -198,11 +198,11 @@ Media (mp4, isf) is referenced by path, never copied.
 - **prepare grid** (column 2): 4x8 grid. Click = select (detail in column 3), double-click =
   load into the selected mixer-layer, drag = move, × = delete (also removes it from the mixer).
   Below the grid: **master** (BLACKOUT, FREEZE, brightness), **bpm** (TAP, slider, ½x / 2x)
-  and the patch-bay (not implemented yet).
+  the patch-bay (not implemented yet) and the **output options** (resolution, output window, NDI).
 - **prepare detail** (column 3): preview on top (stays visible), below it clip controls and
   effect stack of the selected instance.
 - **mixer + output** (column 4): main output preview on top (stays visible). Mixer: click a
   layer = select it + focus its instance; drop a slot on a layer to load it. Below: output
-  effects, output options (resolution, output window, NDI).
+  effects.
 - **output window**: double-click or `F` = fullscreen, `Esc` = leave fullscreen. To choose the
   screen, move the window there first.
