@@ -270,6 +270,8 @@ pub enum SourceKind {
     Clip { path: PathBuf, transport: ClipTransport },
     /// isf generator
     Generator { path: PathBuf, params: Vec<Param> },
+    /// NDI input (live, no timeline)
+    Ndi { source: String },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -46,6 +46,8 @@ pub enum FileKind {
     Clip,
     Generator,
     Effect,
+    /// NDI source in the finder (the "path" carries the source name)
+    Ndi,
 }
 
 pub fn display_name(path: &Path) -> String {

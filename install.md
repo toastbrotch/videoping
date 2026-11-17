@@ -92,6 +92,9 @@ videoping does not ship NDI. It loads `libndi.so.6` at runtime, searched in this
    green; hover it to see which libndi was loaded. Check it on another machine with
    NDI Studio Monitor (Windows / macOS, part of the free NDI Tools) or any NDI receiver.
 
+7. NDI input: sources on the network show up in the finder under **NDI sources** (also
+   videoping's own output). Double-click one to put it into the prepare grid.
+
 If NDI can't be loaded, the output options show the error in red. When it works they show
 "NDI sending" (hover shows which libndi was loaded).
 

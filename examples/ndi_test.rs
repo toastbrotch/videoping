@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[path = "../src/ndi.rs"]
 mod ndi;
 fn main() {

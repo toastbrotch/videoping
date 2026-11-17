@@ -56,7 +56,7 @@ Useful env vars:
 | `GST_DEBUG=3` | GStreamer warnings (codec / decoding problems) |
 | `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (id-display generator over a clip with gameboy-camera), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, quits after ~7 s. Never touches the autosave or the stored ui layout. |
 | `VIDEOPING_SELFTEST_CLIP=<mp4>` | clip for the self-test (default `<dir>/testclip.mp4`) |
-| `VIDEOPING_SELFTEST_NDI=1` | self-test also sends NDI |
+| `VIDEOPING_SELFTEST_NDI=1` | self-test also sends NDI and receives its own output as NDI input (slot 17, selected) |
 
 Self-test end to end:
 
@@ -72,6 +72,7 @@ Dev examples (no ui):
 ```sh
 cargo run --example transport_test -- clip.mp4   # forward / backward / bounce / bpm against GStreamer
 cargo run --example ndi_test -- /path/to/ndi/lib  # sends 2 s of test frames as "videoping-test"
+cargo run --example ndi_loop_test -- [ndi lib dir] # NDI loopback: send, discover, receive, check pixels
 ```
 
 # architecture
@@ -86,7 +87,7 @@ src/
   gfx.rs       OpenGL helpers: Target (texture+fbo), Program, Quad, built-in shaders (blit/mix/master)
   isf.rs       ISF parser + GLSL wrapper (files on disk stay unchanged)
   video.rs     GStreamer playbin -> appsink RGBA; transport via rate seeks
-  ndi.rs       NDI sender (libndi.so loaded at runtime, own thread)
+  ndi.rs       NDI: libndi.so loaded once at runtime; sender, finder (discovery), receiver (one thread each)
 ```
 
 Frame flow (all on the ui thread, inside `App::ui`, same GL context as egui):
@@ -128,7 +129,7 @@ egui   : paints textures via register_native_glow_texture (bottom-up -> flipped 
 done: live tab with 5 resizable columns, finder (mp4 / isf generator / isf effect, search, folders),
 prepare 4x8 grid with pages, detail panel (preview, clip transport, generator params, effect stack),
 3 mixer layers, bpm tapper, master (blackout / freeze / brightness), output effects, output
-window (fullscreen), NDI output, autosave + save / load, duplicate, drag & drop.
+window (fullscreen), NDI output, NDI input (finder discovery, receive), autosave + save / load, duplicate, drag & drop.
 
-not yet: NDI input, patch-bay, midi (bhoreal, twister), videopong / online shaders, sets,
+not yet: patch-bay, midi (bhoreal, twister), videopong / online shaders, sets,
 audio, api / mcp, other tabs.

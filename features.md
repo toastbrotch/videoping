@@ -58,6 +58,10 @@ finder finds these:
 - local isf generator shader
 - local isf effect shader
 - NDI Sources
+  - discovered automatically on the network (list refreshes by itself, also local sources)
+  - click = preview, double-click / drag = new instance in the prepare grid (like a clip)
+  - an NDI instance has no clip interface; the detail shows its status: resolution @ fps, or "no signal"
+  - effects work on it like on any clip; it is received only while it is live / selected (stops 10 s later)
 - videopong clips (prio2)
 - glslop.com shaders or https://editor.isf.video/shaders? (prio2)
 - set (each from above can be added to a set) (prio2)
@@ -138,7 +142,9 @@ the prepare area uses two columns (see "layout of the tab live"):
   - each has mix-type (alpha, lumakey, inverslumakey, add)
     - only these 4 mix-types everywhere (no lighten, darken, difference etc.)
   - mix percentage
+    - shown as 0-100 % everywhere (mixer layers, effects, output effects; brightness too)
   - r, g, b channel
+    - r/g/b toggles are neutral (grey when on, no red/green/blue): colors are reserved for the layer color-code
   - active/inactive
   - see clip-mixer.gif 
   - move up/down a layer
@@ -177,6 +183,7 @@ visuals:
 
 ## global bpm tabber
 - placed in column 2, below the prepare grid (under master)
+- bpm is always an integer (tap, slider and ½x/2x round to whole bpm)
 - tap button sets the bpm
 - bpm slider: change the bpm globally by hand (e.g. slow everything down), tap and slider set the same value
 - ½x and 2x buttons: halve / double the bpm instantly

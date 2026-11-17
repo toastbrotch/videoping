@@ -4,6 +4,18 @@ use crate::state::{AnimParam, ClipTransport, LoopMode, Mix, MixType, PlayMode, S
 use egui::{pos2, vec2, Color32, Rect, Sense, Stroke, StrokeKind, Ui};
 
 pub const ACCENT: Color32 = Color32::from_rgb(230, 40, 140);
+/// "on" color of the r/g/b channel toggles (neutral, not a layer color)
+pub const CHANNEL_ON: Color32 = Color32::from_gray(200);
+
+/// 0..1 value shown and edited as integer percent 0..100.
+pub fn percent_slider(ui: &mut Ui, v: &mut f32, label: &str) -> egui::Response {
+    let mut pct = (*v * 100.0).round();
+    let r = ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).step_by(1.0).fixed_decimals(0).suffix(" %").text(label));
+    if r.changed() {
+        *v = pct / 100.0;
+    }
+    r
+}
 
 /// Small toggle button that lights up in `on_color` when active.
 pub fn toggle(ui: &mut Ui, on: &mut bool, label: &str, on_color: Color32) -> egui::Response {
@@ -218,11 +230,12 @@ pub fn mix_controls(ui: &mut Ui, mix: &mut Mix, id_salt: impl std::hash::Hash + 
                     ui.selectable_value(&mut mix.mix_type, m, m.label());
                 }
             });
-        toggle(ui, &mut mix.rgb[0], "R", Color32::from_rgb(230, 60, 60));
-        toggle(ui, &mut mix.rgb[1], "G", Color32::from_rgb(60, 200, 90));
-        toggle(ui, &mut mix.rgb[2], "B", Color32::from_rgb(70, 120, 255));
+        // neutral: colors are reserved for the layer color-code
+        toggle(ui, &mut mix.rgb[0], "R", CHANNEL_ON);
+        toggle(ui, &mut mix.rgb[1], "G", CHANNEL_ON);
+        toggle(ui, &mut mix.rgb[2], "B", CHANNEL_ON);
     });
-    ui.add(egui::Slider::new(&mut mix.amount, 0.0..=1.0).show_value(true).text("mix"));
+    percent_slider(ui, &mut mix.amount, "mix");
 }
 
 /// Paint a GL texture (bottom-up) into `rect`, keeping aspect `aspect` (letterbox).

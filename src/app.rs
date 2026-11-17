@@ -55,6 +55,9 @@ pub struct App {
     output_aspect: f32,
     /// available widths of column 3 / column 4 (last frame): both previews get the same size
     preview_avail: [f32; 2],
+    /// NDI source discovery (started once libndi is loaded)
+    ndi_finder: Option<crate::ndi::NdiFinder>,
+    ndi_finder_try: Option<Instant>,
 }
 
 fn autosave_path() -> PathBuf {
@@ -64,6 +67,7 @@ fn autosave_path() -> PathBuf {
 fn load_session(path: &Path) -> Result<Session, String> {
     let txt = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut s: Session = serde_json::from_str(&txt).map_err(|e| format!("{}: {e}", path.display()))?;
+    s.bpm = s.bpm.round().clamp(20.0, 300.0); // bpm is an integer
     // shaders may have changed on disk: match params to the current inputs
     let fix = |path: &Path, params: &mut Vec<Param>| {
         if let Ok((info, _)) = isf::parse_info(path) {
@@ -171,6 +175,8 @@ impl App {
             status_time: Instant::now(),
             output_aspect: 16.0 / 9.0,
             preview_avail: [640.0; 2],
+            ndi_finder: None,
+            ndi_finder_try: None,
         }
     }
 
@@ -191,11 +197,16 @@ impl App {
                 let (info, _) = isf::parse_info(path).ok()?;
                 SourceKind::Generator { path: path.to_path_buf(), params: isf::default_params(&info) }
             }
+            FileKind::Ndi => SourceKind::Ndi { source: path.to_string_lossy().to_string() },
             FileKind::Effect => return None,
+        };
+        let name = match kind {
+            FileKind::Ndi => path.to_string_lossy().to_string(),
+            _ => isf::display_name(path),
         };
         Some(Instance {
             id: self.s.new_id(),
-            name: isf::display_name(path),
+            name,
             source,
             effects: vec![],
             seed: self.rng.next_f32(),
@@ -272,7 +283,7 @@ impl App {
         if self.taps.len() >= 2 {
             let span = now.duration_since(self.taps[0]).as_secs_f32();
             let bpm = 60.0 * (self.taps.len() - 1) as f32 / span;
-            self.s.bpm = bpm.clamp(20.0, 300.0);
+            self.s.bpm = bpm.round().clamp(20.0, 300.0);
         }
         self.beat = self.beat.floor() + 1.0; // tap = downbeat
     }
@@ -297,6 +308,14 @@ impl App {
         r.resize(gl, w, h);
         r.set_ndi(self.s.output.ndi_enabled, &self.s.output.ndi_name, &self.s.output.ndi_lib_dir, 60);
         self.output_aspect = w as f32 / h as f32;
+
+        // NDI discovery: start as soon as libndi can be loaded (retry every 5 s)
+        if self.ndi_finder.is_none() && self.ndi_finder_try.is_none_or(|t| t.elapsed().as_secs() >= 5) {
+            self.ndi_finder_try = Some(Instant::now());
+            if let Ok(lib) = crate::ndi::lib(&self.s.output.ndi_lib_dir) {
+                self.ndi_finder = Some(crate::ndi::NdiFinder::new(lib));
+            }
+        }
 
         let mut fc = FrameCtx { dt, bpm: self.s.bpm, beat_prev, beat_now: self.beat, rng: &mut self.rng };
 
@@ -518,8 +537,30 @@ impl App {
                     }
                 });
             }
-            egui::CollapsingHeader::new("NDI sources").default_open(false).show(ui, |ui| {
-                ui.label(egui::RichText::new("not implemented yet").weak());
+            egui::CollapsingHeader::new("NDI sources").default_open(true).show(ui, |ui| match &self.ndi_finder {
+                None => {
+                    ui.label(egui::RichText::new("libndi not loaded: set \"NDI library folder\" in the output options").weak());
+                }
+                Some(f) => {
+                    let sources = f.sources();
+                    if sources.is_empty() {
+                        ui.label(egui::RichText::new("searching…").weak());
+                    }
+                    for name in sources {
+                        if !search.is_empty() && !name.to_lowercase().contains(&search) {
+                            continue;
+                        }
+                        let path = PathBuf::from(&name);
+                        let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == path);
+                        let r = ui.add(egui::Button::selectable(selected, &name)).interact(Sense::click_and_drag());
+                        r.dnd_set_drag_payload(Drag::File(path.clone(), FileKind::Ndi));
+                        if r.double_clicked() {
+                            action = Some((path, FileKind::Ndi, true));
+                        } else if r.clicked() {
+                            action = Some((path, FileKind::Ndi, false));
+                        }
+                    }
+                }
             });
         });
         if let Some((p, k, dbl)) = action {
@@ -717,6 +758,7 @@ impl App {
             ui.colored_label(Color32::RED, e.to_string());
         }
         let status = self.r.as_ref().and_then(|r| r.clip_status.get(&id).copied()).unwrap_or_default();
+        let ndi_status = self.r.as_ref().and_then(|r| r.ndi_status.get(&id).copied());
         let mut scrub = None;
         let infos = &self.infos;
         let r_ref = self.r.as_ref();
@@ -726,6 +768,21 @@ impl App {
                     ui.separator();
                     scrub = widgets::timeline(ui, transport, status.position, status.duration);
                     widgets::transport_row(ui, &mut transport.mode, &mut transport.loop_mode, &mut transport.speed, "x");
+                }
+                SourceKind::Ndi { source } => {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("NDI").strong());
+                        ui.label(source.as_str());
+                    });
+                    match ndi_status {
+                        Some(Some((w, h, fps))) => {
+                            ui.label(egui::RichText::new(format!("{w}x{h} @ {fps:.2} fps")).color(Color32::GREEN));
+                        }
+                        _ => {
+                            ui.label(egui::RichText::new("no signal").color(Color32::from_rgb(230, 160, 40)));
+                        }
+                    }
                 }
                 SourceKind::Generator { path, params } => {
                     ui.separator();
@@ -943,14 +1000,14 @@ impl App {
             }
         });
         ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut self.s.bpm, 20.0..=300.0).fixed_decimals(1).text("bpm"));
+            ui.add(egui::Slider::new(&mut self.s.bpm, 20.0..=300.0).step_by(1.0).fixed_decimals(0).text("bpm"));
         });
         ui.horizontal(|ui| {
             if ui.small_button("½x").clicked() {
-                self.s.bpm = (self.s.bpm * 0.5).max(20.0);
+                self.s.bpm = (self.s.bpm * 0.5).round().max(20.0);
             }
             if ui.small_button("2x").clicked() {
-                self.s.bpm = (self.s.bpm * 2.0).min(300.0);
+                self.s.bpm = (self.s.bpm * 2.0).round().min(300.0);
             }
         });
     }
@@ -969,7 +1026,7 @@ impl App {
                 m.freeze = !m.freeze;
             }
         });
-        ui.add(egui::Slider::new(&mut self.s.master.brightness, 0.0..=1.0).text("brightness"));
+        widgets::percent_slider(ui, &mut self.s.master.brightness, "brightness");
     }
 
     fn col_output(&mut self, ui: &mut Ui) {
@@ -1307,6 +1364,18 @@ impl App {
     fn selftest_step(&mut self, ctx: &egui::Context, gl: &glow::Context) {
         let Some(t) = self.selftest.as_mut() else { return };
         let secs = t.start.elapsed().as_secs_f32();
+        // NDI input test: receive our own NDI output as soon as it is discovered
+        if std::env::var("VIDEOPING_SELFTEST_NDI").is_ok() && !self.s.slots.iter().flatten().any(|i| matches!(i.source, SourceKind::Ndi { .. })) {
+            let own = self.ndi_finder.as_ref().and_then(|f| f.sources().into_iter().find(|s| s.ends_with("(videoping)")));
+            if let Some(src) = own {
+                eprintln!("selftest: NDI source {src:?} found after {secs:.1}s");
+                if let Some(inst) = self.new_instance_from_file(Path::new(&src), &FileKind::Ndi) {
+                    self.s.selected_instance = Some(inst.id);
+                    self.s.slots[16] = Some(inst);
+                }
+            }
+        }
+        let Some(t) = self.selftest.as_mut() else { return };
         if secs > 4.0 && !t.dumped {
             t.dumped = true;
             if let Some(r) = self.r.as_ref() {

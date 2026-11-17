@@ -3,7 +3,7 @@
 
 use crate::gfx::{reset_state, Builtins, Gl, Program, Target, UploadTex};
 use crate::isf::{self, InputKind, IsfInfo};
-use crate::ndi::{FrameMsg, NdiSender};
+use crate::ndi::{FrameMsg, NdiReceiver, NdiSender};
 use crate::state::{EffectInst, Instance, Param, ParamValue, Rng, Session, SourceKind, NUM_LAYERS};
 use crate::video::Player;
 use glow::HasContext;
@@ -72,6 +72,7 @@ impl PassState {
 
 struct InstGpu {
     player: Option<Player>,
+    ndi_recv: Option<NdiReceiver>,
     player_error: Option<String>,
     upload: UploadTex,
     src: Target,
@@ -88,6 +89,7 @@ impl InstGpu {
     fn new(gl: &Gl, w: i32, h: i32) -> InstGpu {
         InstGpu {
             player: None,
+            ndi_recv: None,
             player_error: None,
             upload: UploadTex::new(gl),
             src: Target::new(gl, w, h),
@@ -153,6 +155,10 @@ pub struct Renderer {
     pbo_idx: usize,
     pub ndi: Option<NdiSender>,
     pub ndi_error: Option<String>,
+    /// folder with libndi (from the output options), also used for NDI input
+    pub ndi_lib_dir: String,
+    /// NDI input status per instance: (w, h, fps), None = no signal
+    pub ndi_status: HashMap<u64, Option<(i32, i32, f32)>>,
     ndi_key: Option<String>,
     pub clip_status: HashMap<u64, ClipStatus>,
     pub pending_scrub: Vec<(u64, f32)>,
@@ -179,6 +185,8 @@ impl Renderer {
             pbo_idx: 0,
             ndi: None,
             ndi_error: None,
+            ndi_lib_dir: String::new(),
+            ndi_status: HashMap::new(),
             ndi_key: None,
             clip_status: HashMap::new(),
             pending_scrub: vec![],
@@ -476,6 +484,31 @@ impl Renderer {
                     }
                 }
             }
+            SourceKind::Ndi { source } => {
+                // retry once libndi got loaded (e.g. after setting the NDI library folder)
+                if g.ndi_recv.is_none() && g.player_error.is_some() && crate::ndi::loaded().is_some() {
+                    g.player_error = None;
+                }
+                if g.ndi_recv.is_none() && g.player_error.is_none() {
+                    match crate::ndi::lib(&self.ndi_lib_dir).and_then(|l| NdiReceiver::new(l, source)) {
+                        Ok(r) => g.ndi_recv = Some(r),
+                        Err(e) => g.player_error = Some(e),
+                    }
+                }
+                if let Some(rx) = g.ndi_recv.as_mut() {
+                    let up = &mut g.upload;
+                    if rx.take_frame(|f| up.upload(gl, f.w, f.h, f.stride, &f.data)).is_some() {
+                        g.has_frame = true;
+                    }
+                    self.ndi_status.insert(id, rx.status());
+                    if g.upload.w > 0 {
+                        let (tex, uw, uh) = (g.upload.tex, g.upload.w, g.upload.h);
+                        let src = std::mem::replace(&mut g.src, ph(&self.black));
+                        self.b.blit(gl, tex, uw, uh, &src, true);
+                        self.insts.get_mut(&id).unwrap().src = src;
+                    }
+                }
+            }
             SourceKind::Generator { path, params } => {
                 tick_params(params, fc);
                 let src = std::mem::replace(&mut g.src, ph(&self.black));
@@ -587,6 +620,9 @@ impl Renderer {
     }
 
     pub fn set_ndi(&mut self, enabled: bool, name: &str, lib_dir: &str, fps: i32) {
+        if self.ndi_lib_dir != lib_dir {
+            self.ndi_lib_dir = lib_dir.to_string();
+        }
         let want = enabled.then(|| format!("{name}\u{0}{lib_dir}"));
         if want == self.ndi_key {
             return;
@@ -619,10 +655,12 @@ impl Renderer {
                 g.delete(gl);
             }
             self.clip_status.remove(&id);
+            self.ndi_status.remove(&id);
         }
         for g in self.insts.values_mut() {
-            if g.player.is_some() && g.last_active.elapsed().as_secs() > 10 {
+            if g.last_active.elapsed().as_secs() > 10 {
                 g.player = None;
+                g.ndi_recv = None;
             }
         }
         let fx_alive: std::collections::HashSet<u64> = s
