@@ -60,7 +60,7 @@ finder finds these:
 - NDI Sources
   - discovered automatically on the network (list refreshes by itself, also local sources)
   - click = preview, double-click / drag = new instance in the prepare grid (like a clip)
-  - an NDI instance has no clip interface; the detail shows its status: resolution @ fps, or "no signal"
+  - an NDI instance has no clip interface; the detail shows its status: resolution @ fps, or "no signal" (normal grey text, no color: colors are reserved for the layer color-code)
   - effects work on it like on any clip; it is received only while it is live / selected (stops 10 s later)
 - videopong clips (prio2)
 - glslop.com shaders or https://editor.isf.video/shaders? (prio2)
@@ -106,6 +106,8 @@ the prepare area uses two columns (see "layout of the tab live"):
 - generic clip interface is visible, also if this clip is in the mixer
   - only for clips with a timeline (mp4), not visible on isf generators and NDI sources
   - timeline with limiters
+    - neutral grey (no green: colors are reserved for the layer color-code), white position marker
+    - limiters are wide bracket handles "[" and "]" (easy to catch, cursor changes on hover)
   - playmode if possible: forward (default), backward, jumpcut, pause 
     - jumpcut: jump to a random position (between the limiters) every N beats, synced to the global bpm
       - N is set with the same beat selector as the bpm speed mode (1, 2, 4, 8, 16), ½x/2x work on it too
@@ -144,7 +146,11 @@ the prepare area uses two columns (see "layout of the tab live"):
   - mix percentage
     - shown as 0-100 % everywhere (mixer layers, effects, output effects; brightness too)
   - r, g, b channel
-    - r/g/b toggles are neutral (grey when on, no red/green/blue): colors are reserved for the layer color-code
+    - r/g/b toggles have no red/green/blue color: the layer colors are reserved for the layer color-code
+  - mix-type and r/g/b are same-size buttons (like clip-mixer.gif), accent color when on, on one line:
+    - left: A (alpha), Lk (lumakey), iLk (inv lumakey), Ad (add) — no dropdown
+    - right: "Ch" R G B, with a margin to the right edge so it stays away from the × of effects / layers
+    - below: mix slider (0-100 %)
   - active/inactive
   - see clip-mixer.gif 
   - move up/down a layer
@@ -227,7 +233,7 @@ visuals:
 | 2-5 | select instance in the prepare lane = load it into the selected mixer-layer (4x8 = 32 instances) |
 | 6-8 | activate/deactivate effects of the clip in mixer-layer 1 / 2 / 3 (max 8 effects per clip) |
 
-- LED colors per mixer-layer (same colors as the live-marking in the ui), e.g. layer 1 = red, layer 2 = green, layer 3 = blue
+- LED colors per mixer-layer (same colors as the live-marking in the ui), layer 1 = #1B6898 (blue), layer 2 = #388E3C (green), layer 3 = #C8640A (orange)
   - column 1: select/activate pads in the color of their layer
   - columns 2-5: instance pad lights up in the color of the layer it is live in, dim/off when not live
   - columns 6-8: effect pads in the color of their layer, bright = active, dim = inactive, off = no effect

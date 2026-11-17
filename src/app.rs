@@ -139,6 +139,9 @@ impl App {
             start: Instant::now(),
             shot: false,
             dumped: false,
+            timeline: None,
+            drag_step: 0,
+            in_before: None,
         });
         let (s, status) = if let Some(t) = &selftest {
             (selftest_session(t), "selftest".to_string())
@@ -766,8 +769,12 @@ impl App {
             match &mut inst.source {
                 SourceKind::Clip { transport, .. } => {
                     ui.separator();
+                    let tl_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 22.0));
                     scrub = widgets::timeline(ui, transport, status.position, status.duration);
                     widgets::transport_row(ui, &mut transport.mode, &mut transport.loop_mode, &mut transport.speed, "x");
+                    if let Some(t) = self.selftest.as_mut() {
+                        t.timeline = Some(tl_rect);
+                    }
                 }
                 SourceKind::Ndi { source } => {
                     ui.separator();
@@ -777,10 +784,10 @@ impl App {
                     });
                     match ndi_status {
                         Some(Some((w, h, fps))) => {
-                            ui.label(egui::RichText::new(format!("{w}x{h} @ {fps:.2} fps")).color(Color32::GREEN));
+                            ui.label(format!("{w}x{h} @ {fps:.2} fps"));
                         }
                         _ => {
-                            ui.label(egui::RichText::new("no signal").color(Color32::from_rgb(230, 160, 40)));
+                            ui.label("no signal");
                         }
                     }
                 }
@@ -1294,6 +1301,61 @@ impl eframe::App for App {
     }
 
     /// the self-test must not touch the stored ui layout
+    /// self-test: simulated mouse drag of the in-limiter "[" of the prepare-detail timeline
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
+            SourceKind::Clip { transport, .. } => Some(transport.in_pt),
+            _ => None,
+        });
+        let pending = self.r.as_ref().map(|r| r.pending_scrub.len()).unwrap_or(0);
+        let Some(t) = self.selftest.as_mut() else { return };
+        let Some(tl) = t.timeline else { return };
+        if t.start.elapsed().as_secs_f32() < 2.0 || t.drag_step > 12 {
+            return;
+        }
+        let in_pt = in_pt.unwrap_or(0.0);
+        let track = tl.shrink2(vec2(2.0, 0.0));
+        // press 6 px inside the "[" handle, then move 80 px right in 10 steps, release
+        let x0 = track.left() + in_pt * track.width() + 6.0;
+        let y = tl.center().y;
+        let ev = &mut raw.events;
+        let pos = |x: f32| egui::pos2(x, y);
+        match t.drag_step {
+            0 => {
+                t.in_before = Some(in_pt);
+                ev.push(egui::Event::PointerMoved(pos(x0)));
+            }
+            1 => ev.push(egui::Event::PointerButton {
+                pos: pos(x0),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }),
+            2..=11 => {
+                let start = t.in_before.unwrap_or(0.0);
+                let x = track.left() + start * track.width() + 6.0 + 8.0 * (t.drag_step - 1) as f32;
+                ev.push(egui::Event::PointerMoved(pos(x)));
+            }
+            _ => {
+                let start = t.in_before.unwrap_or(0.0);
+                let x = track.left() + start * track.width() + 6.0 + 80.0;
+                ev.push(egui::Event::PointerButton {
+                    pos: pos(x),
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                });
+                eprintln!(
+                    "selftest drag: in_pt {:.3} -> {:.3} (expected +{:.3}), scrubs queued: {pending}",
+                    start,
+                    in_pt,
+                    80.0 / track.width()
+                );
+            }
+        }
+        t.drag_step += 1;
+    }
+
     fn persist_egui_memory(&self) -> bool {
         self.selftest.is_none()
     }
@@ -1316,6 +1378,10 @@ struct SelfTest {
     start: Instant,
     shot: bool,
     dumped: bool,
+    /// rect of the prepare-detail timeline (for the simulated limiter drag)
+    timeline: Option<Rect>,
+    drag_step: u32,
+    in_before: Option<f32>,
 }
 
 fn selftest_session(t: &SelfTest) -> Session {
@@ -1340,7 +1406,7 @@ fn selftest_session(t: &SelfTest) -> Session {
     s.slots[8] = Some(Instance {
         id: clip_id,
         name: "testclip".into(),
-        source: SourceKind::Clip { path: clip, transport: ClipTransport::default() },
+        source: SourceKind::Clip { path: clip, transport: ClipTransport { in_pt: 0.2, out_pt: 0.85, ..Default::default() } },
         effects: vec![EffectInst {
             uid: fx_uid,
             path: fx_path,

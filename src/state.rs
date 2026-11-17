@@ -10,7 +10,8 @@ pub const NUM_LAYERS: usize = 3;
 pub const MAX_EFFECTS: usize = 8;
 
 /// Layer colors (ui live-marking and later bhoreal LEDs).
-pub const LAYER_COLORS: [[u8; 3]; NUM_LAYERS] = [[230, 60, 60], [60, 200, 90], [70, 120, 255]];
+/// L1 #1B6898 (blue), L2 #388E3C (green), L3 #C8640A (orange)
+pub const LAYER_COLORS: [[u8; 3]; NUM_LAYERS] = [[0x1B, 0x68, 0x98], [0x38, 0x8E, 0x3C], [0xC8, 0x64, 0x0A]];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MixType {
@@ -29,6 +30,15 @@ impl MixType {
             MixType::LumaKey => "lumakey",
             MixType::InvLumaKey => "inv lumakey",
             MixType::Add => "add",
+        }
+    }
+    /// short button label (like resolume 2: A, Lk, iLk, Ad)
+    pub fn short(self) -> &'static str {
+        match self {
+            MixType::Alpha => "A",
+            MixType::LumaKey => "Lk",
+            MixType::InvLumaKey => "iLk",
+            MixType::Add => "Ad",
         }
     }
     pub fn shader_id(self) -> i32 {
