@@ -215,7 +215,7 @@ Media (mp4, isf) is referenced by path, never copied.
 - **finder** (column 1): click = preview, double-click = add to the first free prepare slot
   (effects: add to the selected instance), drag onto a slot / effect stack.
 - **prepare grid** (column 2): 4x8 grid. Click = select (detail in column 3), double-click =
-  load into the selected mixer-layer, drag = move, × = delete (also removes it from the mixer).
+  load into the selected mixer-layer, drag = move, × = delete (not while it is live in the mixer). Dropping a clip from the finder onto an occupied, non-live slot replaces it.
   Below the grid: **master** (BLACKOUT, FREEZE, brightness), **bpm** (TAP, slider, ½x / 2x)
   the patch-bay (not implemented yet) and the **output options** (resolution, output window, NDI).
 - **prepare detail** (column 3): preview on top (stays visible), below it clip controls and
@@ -223,5 +223,7 @@ Media (mp4, isf) is referenced by path, never copied.
 - **mixer + output** (column 4): main output preview on top (stays visible). Mixer: click a
   layer = select it + focus its instance; drop a slot on a layer to load it. Below: output
   effects.
+- **top bar**: **new** (clears everything after asking; keeps finder folders and output options),
+  **save** / **load** to the path in the text field.
 - **output window**: double-click or `F` = fullscreen, `Esc` = leave fullscreen. To choose the
   screen, move the window there first.

@@ -456,17 +456,23 @@ impl Session {
     }
 
     /// x on a slot: removes the instance, also from the mixer
-    pub fn delete_slot(&mut self, slot: usize) {
+    /// Is the instance in this slot loaded in a mixer-layer?
+    pub fn slot_is_live(&self, slot: usize) -> bool {
+        self.slots.get(slot).and_then(|s| s.as_ref()).is_some_and(|i| self.live_layer(i.id).is_some())
+    }
+
+    /// x on a slot: removes the instance. Not possible while it is live in the mixer
+    /// (returns false then).
+    pub fn delete_slot(&mut self, slot: usize) -> bool {
+        if slot >= self.slots.len() || self.slot_is_live(slot) {
+            return false;
+        }
         if let Some(inst) = self.slots[slot].take() {
-            for l in &mut self.layers {
-                if l.instance == Some(inst.id) {
-                    l.instance = None;
-                }
-            }
             if self.selected_instance == Some(inst.id) {
                 self.selected_instance = None;
             }
         }
+        true
     }
 
     pub fn duplicate_slot(&mut self, slot: usize, rng: &mut Rng) -> Option<usize> {
@@ -542,13 +548,16 @@ mod tests {
     }
 
     #[test]
-    fn delete_live_instance_empties_layer() {
+    fn live_instance_cannot_be_deleted() {
         let mut s = Session::default();
         let a = inst(&mut s, 3);
         s.load_into_selected_layer(a);
-        s.delete_slot(3);
+        assert!(!s.delete_slot(3));
+        assert!(s.slots[3].is_some());
+        assert_eq!(s.layers[0].instance, Some(a));
+        s.layers[0].instance = None; // unloaded -> can be deleted
+        assert!(s.delete_slot(3));
         assert!(s.slots[3].is_none());
-        assert_eq!(s.layers[0].instance, None);
     }
 
     #[test]

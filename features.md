@@ -9,6 +9,7 @@ videoping is a live vjing application, 5 columns, all column-borders are moveabl
   - chosen from the hue gap furthest away from the layer colors (#1B6898 blue, #388E3C green, #C8640A orange), same calm saturation
 - all buttons have the same size as the R G B buttons (min 30x18, text 12), corners only slightly rounded (2 px)
 - on/off of effects and of mixer-layers is a big checkbox (18x18): effects in the accent color, layers in their layer color
+- transport rows: a visible gap (10 px) between the groups: play directions | loop / once / bounce | bpm + speed + ½x 2x
 - mix-type + "Ch R G B" stay on one line when there is room, otherwise "Ch R G B" wraps to its own line (right aligned)
 
 # tabs
@@ -50,6 +51,9 @@ everything below belongs to the tab "live".
 - autosave: the current state is saved continuously, on restart (or after a crash) everything is back
 - save / load buttons: save the whole state to a file / load it from a file
   - placement (proposal): small buttons in the top bar next to the tabs, so they are available from every tab
+- new button (next to save / load): clears everything after a confirmation dialog ("clear everything" / "cancel", Esc = cancel)
+  - cleared: prepare grid, mixer, effects, output effects, bpm, master
+  - kept: finder folders and output options (resolution, frame rate, screen, NDI, gpu) — that is setup, not content
 - media (mp4, isf shaders) are referenced by path, not copied into the file
 
 # column 1
@@ -100,10 +104,17 @@ the prepare area uses two columns (see "layout of the tab live"):
   - live slot: border in the color of the mixer-layer it plays in (same as bhoreal LED)
   - thumbnails are static, only live or selected slots play (performance)
   - click = select (shows detail in column 3), double-click / bhoreal pad = load into selected mixer-layer
+  - click on an empty slot = deselect: the prepare detail (column 3) becomes empty
+    - the column layout does not change: column 3 keeps its width and shows an empty (black) preview of the same size
   - more than 32 instances: pages of 32 slots, the bhoreal follows the page
   - move an instance to another slot: drag & drop
   - delete an instance: small x on the slot
-    - also when it is live: the instance is removed and its mixer-layer becomes empty
+    - not possible while it is live in the mixer: the x is not shown (unload it from the layer first)
+  - drag a new clip / generator / NDI source from the finder onto a slot:
+    - empty slot: new instance
+    - occupied slot, not live: the old instance is replaced by the new one
+    - live slot: not possible (no drop highlight, nothing happens)
+  - dropping an effect onto an occupied slot adds it to that instance (also when live)
 - column 3: detail of the selected instance
   - prepare preview (on top)
   - generic clip interface (below)
@@ -120,6 +131,7 @@ the prepare area uses two columns (see "layout of the tab live"):
     - jumpcut: jump to a random position (between the limiters) every N beats, synced to the global bpm
       - N is set with the same beat selector as the bpm speed mode (1, 2, 4, 8, 16), ½x/2x work on it too
   - loop, once, bounce
+    - once stops at the end; switching to loop then restarts from the start, switching to bounce turns around
   - speed, two modes (toggle):
     - free: speed slider
     - bpm: set how many beats the part between the limiters lasts (e.g. 1, 2, 4, 8, 16), speed adapts to the global bpm

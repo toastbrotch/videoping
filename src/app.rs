@@ -55,6 +55,8 @@ pub struct App {
     output_aspect: f32,
     /// available widths of column 3 / column 4 (last frame): both previews get the same size
     preview_avail: [f32; 2],
+    /// "new" was clicked: confirmation dialog is open
+    confirm_new: bool,
     /// next due time of a video frame (output frame rate)
     next_video: Option<Instant>,
     /// rendered video frames (self-test statistics)
@@ -155,6 +157,8 @@ impl App {
             in_before: None,
             l2_mix: None,
             closing: false,
+            empty_slot: None,
+            clear_btn: None,
             at2s: None,
             ui_frames: 0,
         });
@@ -195,6 +199,7 @@ impl App {
             preview_avail: [640.0; 2],
             ndi_finder: None,
             ndi_finder_try: None,
+            confirm_new: false,
             next_video: None,
             video_frames: 0,
             gpu_name: String::new(),
@@ -460,6 +465,62 @@ impl App {
 
     // --------------------------------------------------------------------- ui
 
+    /// Replace the whole session (load / new): drops all instance gpu state and the preview.
+    fn replace_session(&mut self, s: Session, gl: &glow::Context) {
+        self.s = s;
+        if let Some(r) = self.r.as_mut() {
+            let (w, h) = r.size();
+            r.resize(gl, w + 1, h); // drops all instance gpu state
+            r.resize(gl, w, h);
+        }
+        self.preview = None;
+        self.preview_key = None;
+    }
+
+    /// "new": clear all content, keep the setup (finder folders, output options).
+    fn new_session(&mut self, gl: &glow::Context) {
+        let mut s = Session::default();
+        s.finder_roots = self.s.finder_roots.clone();
+        s.output = self.s.output.clone();
+        self.replace_session(s, gl);
+        self.set_status("new session");
+    }
+
+    /// Confirmation dialog for "new".
+    fn confirm_new_dialog(&mut self, ctx: &egui::Context, gl: &glow::Context) {
+        if !self.confirm_new {
+            return;
+        }
+        let mut clear = false;
+        let mut cancel = false;
+        let resp = egui::Modal::new(egui::Id::unique("confirm_new")).show(ctx, |ui| {
+            ui.set_width(320.0);
+            ui.label(egui::RichText::new("start a new session?").strong());
+            ui.add_space(4.0);
+            ui.label("clears the prepare grid, mixer, effects, output effects, bpm and master.");
+            ui.label(egui::RichText::new("kept: finder folders and output options. unsaved changes are lost.").weak());
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let r = widgets::choice(ui, true, "clear everything");
+                if let Some(t) = self.selftest.as_mut() {
+                    t.clear_btn = Some(r.rect.center());
+                }
+                if r.clicked() {
+                    clear = true;
+                }
+                if widgets::btn(ui, "cancel").clicked() {
+                    cancel = true;
+                }
+            });
+        });
+        if clear {
+            self.new_session(gl);
+            self.confirm_new = false;
+        } else if cancel || resp.should_close() {
+            self.confirm_new = false;
+        }
+    }
+
     fn top_bar(&mut self, ui: &mut Ui, gl: &glow::Context) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("videoping").strong().color(ACCENT));
@@ -474,14 +535,7 @@ impl App {
                     let p = PathBuf::from(self.file_path.trim());
                     match load_session(&p) {
                         Ok(s) => {
-                            self.s = s;
-                            if let Some(r) = self.r.as_mut() {
-                                let (w, h) = r.size();
-                                r.resize(gl, w + 1, h); // drops all instance gpu state
-                                r.resize(gl, w, h);
-                            }
-                            self.preview = None;
-                            self.preview_key = None;
+                            self.replace_session(s, gl);
                             self.set_status(format!("loaded {}", p.display()));
                         }
                         Err(e) => self.set_status(e),
@@ -493,6 +547,9 @@ impl App {
                         Ok(_) => self.set_status(format!("saved {}", p.display())),
                         Err(e) => self.set_status(e),
                     }
+                }
+                if widgets::btn(ui, "new").on_hover_text("clear everything (asks first)").clicked() {
+                    self.confirm_new = true;
                 }
                 ui.add(egui::TextEdit::singleline(&mut self.file_path).desired_width(260.0));
                 if self.status_time.elapsed().as_secs() < 8 {
@@ -655,6 +712,7 @@ impl App {
         let base = self.s.page * SLOTS_PER_PAGE;
         let mut ev_drop: Option<(usize, Drag)> = None;
         let mut ev_click = None;
+        let mut ev_click_empty = false;
         let mut ev_dbl = None;
         let mut ev_delete = None;
         for row in 0..GRID_ROWS {
@@ -697,8 +755,8 @@ impl App {
                     } else if resp.clicked() {
                         ev_click = Some(id);
                     }
-                    // x to delete (on hover)
-                    if resp.hovered() || ui.rect_contains_pointer(rect) {
+                    // x to delete (on hover); not for instances that are live in the mixer
+                    if live.is_none() && (resp.hovered() || ui.rect_contains_pointer(rect)) {
                         let xr = Rect::from_min_size(rect.right_top() + vec2(-16.0, rect.height() - 16.0), vec2(16.0, 16.0));
                         let xresp = ui.interact(xr, ui.scope_id().with(("slotx", slot)), Sense::click());
                         let c = if xresp.hovered() { Color32::RED } else { Color32::GRAY };
@@ -709,10 +767,22 @@ impl App {
                     }
                 } else {
                     widgets::outline(ui, rect, 1.0, ui.visuals().widgets.noninteractive.bg_stroke.color);
+                    // click on an empty slot: nothing selected -> empty prepare detail
+                    if resp.clicked() {
+                        ev_click_empty = true;
+                    }
+                    if slot == 24 {
+                        if let Some(t) = self.selftest.as_mut() {
+                            t.empty_slot = Some(rect.center());
+                        }
+                    }
                 }
                 if let Some(p) = resp.dnd_hover_payload::<Drag>() {
-                    let _ = p;
-                    widgets::outline(ui, rect, 2.0, ACCENT);
+                    // a new clip / generator / NDI source can't be dropped onto a live slot
+                    let blocked = matches!(&*p, Drag::File(_, k) if *k != FileKind::Effect) && self.s.slot_is_live(slot);
+                    if !blocked {
+                        widgets::outline(ui, rect, 2.0, ACCENT);
+                    }
                 }
                 if let Some(p) = resp.dnd_release_payload::<Drag>() {
                     ev_drop = Some((slot, (*p).clone()));
@@ -721,13 +791,17 @@ impl App {
         }
         if let Some(id) = ev_click {
             self.s.selected_instance = Some(id);
+        } else if ev_click_empty {
+            self.s.selected_instance = None;
         }
         if let Some(id) = ev_dbl {
             self.s.selected_instance = Some(id);
             self.s.load_into_selected_layer(id);
         }
         if let Some(slot) = ev_delete {
-            self.s.delete_slot(slot);
+            if !self.s.delete_slot(slot) {
+                self.set_status("live in the mixer: unload it from the layer first");
+            }
         }
         if let Some((slot, d)) = ev_drop {
             match d {
@@ -739,7 +813,11 @@ impl App {
                     }
                 }
                 Drag::File(path, kind) => {
-                    if self.s.slots.get(slot).is_some_and(|s| s.is_none()) {
+                    // empty slot: new instance; occupied but not live: replaced; live: not possible
+                    if self.s.slot_is_live(slot) {
+                        self.set_status("live in the mixer: can't replace it");
+                    } else if slot < self.s.slots.len() {
+                        self.s.delete_slot(slot);
                         self.add_file_to_slot(&path, &kind, Some(slot));
                     }
                 }
@@ -752,6 +830,10 @@ impl App {
     /// Returns the instance whose body should be shown below.
     fn prepare_detail_header(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) -> Option<u64> {
         let Some(id) = self.s.selected_instance.filter(|id| self.s.find(*id).is_some()) else {
+            // same empty preview area as with an instance: the layout stays the same
+            let w = self.preview_width(ui, 0);
+            let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
+            paint_tex(ui, rect, None, self.output_aspect);
             ui.label(egui::RichText::new("select an instance in the grid").weak());
             return None;
         };
@@ -1416,6 +1498,8 @@ impl eframe::App for App {
         // prepare detail: ~30% of the window by default (10% narrower than the old layout)
         let detail_w = (ctx.content_rect().width() * 0.30).clamp(320.0, 900.0);
         egui::Panel::left("detail_col").resizable(true).default_size(detail_w).size_range(260.0..=1000.0).show(ui, |ui| {
+            // always claim the full width: an empty detail must not shrink the column
+            ui.set_min_width(ui.available_width());
             // preview stays on top, the rest scrolls below it
             if let Some(id) = self.prepare_detail_header(ui, frame) {
                 ui.separator();
@@ -1437,6 +1521,7 @@ impl eframe::App for App {
             });
         });
 
+        self.confirm_new_dialog(&ctx, &gl);
         self.output_window(&ctx, frame);
         if self.selftest.is_some() {
             self.selftest_step(&ctx, &gl);
@@ -1448,16 +1533,74 @@ impl eframe::App for App {
 
     /// the self-test must not touch the stored ui layout
     /// self-test: simulated mouse drag of the in-limiter "[" of the prepare-detail timeline
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
             SourceKind::Clip { transport, .. } => Some(transport.in_pt),
             _ => None,
         });
         let pending = self.r.as_ref().map(|r| r.pending_scrub.len()).unwrap_or(0);
         let l2 = (self.s.layers[1].mix.mix_type, self.s.selected_layer);
+        let selected = self.s.selected_instance;
         let Some(t) = self.selftest.as_mut() else { return };
+        // after the screenshot: click an empty slot -> nothing selected
+        if t.drag_step >= 21 {
+            if t.start.elapsed().as_secs_f32() < 5.6 || t.drag_step > 26 {
+                return;
+            }
+            let btn = |p: egui::Pos2, pressed| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+            match (t.drag_step, t.clear_btn) {
+                (21, _) => self.confirm_new = true,
+                (22, _) => {
+                    let dir = t.dir.clone();
+                    ctx.request_screenshot(move |img| {
+                        let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+                        let _ = std::fs::write(dir.join(format!("ui-new_{}x{}.rgba", img.size[0], img.size[1])), bytes);
+                    });
+                }
+                (23, Some(p)) => raw.events.push(egui::Event::PointerMoved(p)),
+                (24, Some(p)) => raw.events.push(btn(p, true)),
+                (25, Some(p)) => raw.events.push(btn(p, false)),
+                (26, _) => eprintln!(
+                    "selftest new: instances = {}, layers loaded = {}, dialog open = {}, finder folders kept = {}, fps kept = {}",
+                    self.s.slots.iter().flatten().count(),
+                    self.s.layers.iter().filter(|l| l.instance.is_some()).count(),
+                    self.confirm_new,
+                    !self.s.finder_roots.is_empty(),
+                    self.s.output.fps
+                ),
+                _ => {}
+            }
+            if let Some(t) = self.selftest.as_mut() {
+                t.drag_step += 1;
+            }
+            return;
+        }
+        if t.drag_step >= 17 {
+            if t.start.elapsed().as_secs_f32() < 5.0 || t.drag_step > 20 {
+                return;
+            }
+            if let Some(p) = t.empty_slot {
+                let btn = |pressed| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+                match t.drag_step {
+                    17 => raw.events.push(egui::Event::PointerMoved(p)),
+                    18 => raw.events.push(btn(true)),
+                    19 => raw.events.push(btn(false)),
+                    _ => {
+                        eprintln!("selftest empty slot click: selected instance = {selected:?} (expected None)");
+                        // second screenshot: layout with an empty prepare detail
+                        let dir = t.dir.clone();
+                        ctx.request_screenshot(move |img| {
+                            let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+                            let _ = std::fs::write(dir.join(format!("ui-empty_{}x{}.rgba", img.size[0], img.size[1])), bytes);
+                        });
+                    }
+                }
+            }
+            t.drag_step += 1;
+            return;
+        }
         let Some(tl) = t.timeline else { return };
-        if t.start.elapsed().as_secs_f32() < 2.0 || t.drag_step > 16 {
+        if t.start.elapsed().as_secs_f32() < 2.0 {
             return;
         }
         // after the drag: click "Lk" (2nd mix button) of mixer layer L2
@@ -1552,6 +1695,10 @@ struct SelfTest {
     /// top-left of L2's mix buttons (for the simulated click on "Lk")
     l2_mix: Option<egui::Pos2>,
     closing: bool,
+    /// center of an empty prepare slot (simulated click -> deselect)
+    empty_slot: Option<egui::Pos2>,
+    /// center of "clear everything" in the "new" dialog
+    clear_btn: Option<egui::Pos2>,
     /// (video frames, ui frames) at t = 2 s, ui frame counter
     at2s: Option<(u64, u64)>,
     ui_frames: u64,

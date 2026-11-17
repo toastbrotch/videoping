@@ -42,6 +42,7 @@ pub struct Player {
     bounce_dir: f64,
     held: bool,
     last_mode: Option<PlayMode>,
+    last_loop: Option<LoopMode>,
     pub error: Option<String>,
     eos: bool,
 }
@@ -91,6 +92,7 @@ impl Player {
             bounce_dir: 1.0,
             held: false,
             last_mode: None,
+            last_loop: None,
             error: None,
             eos: false,
         })
@@ -181,6 +183,14 @@ impl Player {
             self.held = false;
             self.bounce_dir = 1.0;
             self.last_mode = Some(t.mode);
+        }
+        // stopped at the end in "once" and then switched to loop / bounce: play again
+        // (loop restarts from the start, bounce turns around at the end)
+        if self.last_loop != Some(t.loop_mode) {
+            if t.loop_mode != LoopMode::Once {
+                self.held = false;
+            }
+            self.last_loop = Some(t.loop_mode);
         }
 
         if t.mode == PlayMode::Pause || self.held {

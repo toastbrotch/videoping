@@ -200,6 +200,9 @@ pub fn range_slider(ui: &mut Ui, a: &mut AnimParam, min: f32, max: f32, integer:
 }
 
 /// Play mode, loop mode, speed (free/bpm) and ½x/2x in one compact row.
+/// Gap between the button groups of a transport row (play directions | loop modes | speed).
+const GROUP_GAP: f32 = 10.0;
+
 pub fn transport_row(ui: &mut Ui, mode: &mut PlayMode, loop_mode: &mut LoopMode, speed: &mut Speed, free_label: &str) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -208,13 +211,13 @@ pub fn transport_row(ui: &mut Ui, mode: &mut PlayMode, loop_mode: &mut LoopMode,
                 *mode = m;
             }
         }
-        ui.add_space(4.0);
+        ui.add_space(GROUP_GAP);
         for l in LoopMode::ALL {
             if choice(ui, *loop_mode == l, l.label()).clicked() {
                 *loop_mode = l;
             }
         }
-        ui.add_space(4.0);
+        ui.add_space(GROUP_GAP);
         speed_widget(ui, speed, free_label);
     });
 }

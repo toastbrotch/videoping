@@ -31,4 +31,28 @@ fn main() {
     run("bounce2x", &clip, &t, 4.0);
     t.loop_mode = LoopMode::Loop; t.speed.bpm_mode = true; t.speed.beats = 4.0; // 2 s for the 2 s range -> rate 1.0
     run("bpm4beats", &clip, &t, 4.0);
+    once_then(&clip, LoopMode::Loop);
+    once_then(&clip, LoopMode::Bounce);
+}
+
+/// play "once" to the end (stops), then switch to `next`: playback must continue
+fn once_then(clip: &str, next: LoopMode) {
+    let mut p = video::Player::new(std::path::Path::new(clip)).unwrap();
+    let mut rng = Rng::new();
+    let mut t = ClipTransport { in_pt: 0.5, out_pt: 0.75, loop_mode: LoopMode::Once, ..Default::default() };
+    t.speed.free = 2.0;
+    let tick = |p: &mut video::Player, t: &ClipTransport, secs: f32, rng: &mut Rng| {
+        let s = std::time::Instant::now();
+        while s.elapsed().as_secs_f32() < secs {
+            p.update(t, 120.0, false, rng);
+            p.take_frame(|_| ());
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+        p.position
+    };
+    let a = tick(&mut p, &t, 2.5, &mut rng); // range 4..6 s at 2x -> done after ~1 s, then held
+    let b = tick(&mut p, &t, 0.5, &mut rng);
+    t.loop_mode = next;
+    let c = tick(&mut p, &t, 0.6, &mut rng);
+    println!("once->{:<6} held at {a:.2}/{b:.2} (should stay ~6.0), after switch {c:.2} (should have moved)", next.label());
 }
