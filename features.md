@@ -102,6 +102,7 @@ the prepare area uses two columns (see "layout of the tab live"):
 - column 2: 4x8 slot grid (4 wide, 8 high) = mirrors bhoreal columns 2-5 1:1
   - each slot: thumbnail + name, empty slots are drop targets for the finder
   - live slot: border in the color of the mixer-layer it plays in (same as bhoreal LED)
+  - borders: live = layer color, selected (not live) = white, otherwise the same thin grey border as an empty slot
   - thumbnails are static, only live or selected slots play (performance)
   - click = select (shows detail in column 3), double-click / bhoreal pad = load into selected mixer-layer
   - click on an empty slot = deselect: the prepare detail (column 3) becomes empty
@@ -227,6 +228,8 @@ visuals:
 - global blackout button
 - global freeze button
 - global brightness slider (0-100%) next to them
+  - during blackout the slider shows 0 %; moving it up from 0 ends the blackout and sets the brightness -> fade in from black
+  - ending the blackout with the button restores the brightness from before
 - all three act at the very end (after the output effects), for NDI and screen output
 
 ## output effects (layering top-down)

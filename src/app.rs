@@ -159,6 +159,7 @@ impl App {
             closing: false,
             empty_slot: None,
             clear_btn: None,
+            brightness_slider: None,
             at2s: None,
             ui_frames: 0,
         });
@@ -748,6 +749,9 @@ impl App {
                         ui.painter().text(rect.right_top() + vec2(-4.0, 2.0), egui::Align2::RIGHT_TOP, format!("L{}", l + 1), egui::FontId::monospace(11.0), layer_color(l));
                     } else if selected {
                         widgets::outline(ui, rect, 1.5, Color32::WHITE);
+                    } else {
+                        // loaded but not live / not selected: same thin border as an empty slot
+                        widgets::outline(ui, rect, 1.0, ui.visuals().widgets.noninteractive.bg_stroke.color);
                     }
                     resp.dnd_set_drag_payload(Drag::Slot(slot));
                     if resp.double_clicked() {
@@ -1164,7 +1168,24 @@ impl App {
                 m.freeze = !m.freeze;
             }
         });
-        widgets::percent_slider(ui, &mut self.s.master.brightness, "brightness");
+        // during blackout the slider shows 0 %; pulling it up ends the blackout -> fade in from black
+        let m = &mut self.s.master;
+        let mut v = if m.blackout { 0.0 } else { m.brightness };
+        let r = widgets::percent_slider(ui, &mut v, "brightness");
+        if let Some(t) = self.selftest.as_mut() {
+            t.brightness_slider = Some(r.rect);
+        }
+        let m = &mut self.s.master;
+        if r.changed() {
+            if m.blackout {
+                if v > 0.0 {
+                    m.blackout = false;
+                    m.brightness = v;
+                }
+            } else {
+                m.brightness = v;
+            }
+        }
     }
 
     fn col_output(&mut self, ui: &mut Ui) {
@@ -1543,6 +1564,32 @@ impl eframe::App for App {
         let selected = self.s.selected_instance;
         let Some(t) = self.selftest.as_mut() else { return };
         // after the screenshot: click an empty slot -> nothing selected
+        // after "new": blackout on, click the brightness slider at ~40 % -> blackout off, fade in
+        if t.drag_step >= 27 {
+            if t.drag_step > 31 {
+                return;
+            }
+            let rail = ctx.global_style().spacing.slider_width;
+            if let Some(r) = t.brightness_slider {
+                let p = egui::pos2(r.left() + rail * 0.4, r.center().y);
+                let btn = |pressed| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+                match t.drag_step {
+                    27 => self.s.master.blackout = true,
+                    28 => raw.events.push(egui::Event::PointerMoved(p)),
+                    29 => raw.events.push(btn(true)),
+                    30 => raw.events.push(btn(false)),
+                    _ => eprintln!(
+                        "selftest fade in: blackout = {} (expected false), brightness = {:.0} % (expected ~40)",
+                        self.s.master.blackout,
+                        self.s.master.brightness * 100.0
+                    ),
+                }
+            }
+            if let Some(t) = self.selftest.as_mut() {
+                t.drag_step += 1;
+            }
+            return;
+        }
         if t.drag_step >= 21 {
             if t.start.elapsed().as_secs_f32() < 5.6 || t.drag_step > 26 {
                 return;
@@ -1699,6 +1746,8 @@ struct SelfTest {
     empty_slot: Option<egui::Pos2>,
     /// center of "clear everything" in the "new" dialog
     clear_btn: Option<egui::Pos2>,
+    /// rect of the brightness slider (blackout -> fade in test)
+    brightness_slider: Option<Rect>,
     /// (video frames, ui frames) at t = 2 s, ui frame counter
     at2s: Option<(u64, u64)>,
     ui_frames: u64,
