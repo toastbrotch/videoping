@@ -101,6 +101,8 @@ the prepare area uses two columns (see "layout of the tab live"):
 
 - column 2: 4x8 slot grid (4 wide, 8 high) = mirrors bhoreal columns 2-5 1:1
   - each slot: thumbnail + name, empty slots are drop targets for the finder
+  - type badge top left on the thumbnail (neutral grey on dark, colors belong to the layers):
+    ▶ clip (mp4), ∿ generator (isf), NDI (NDI source); the live marker "L1".."L3" sits top right
   - live slot: border in the color of the mixer-layer it plays in (same as bhoreal LED)
   - borders: live = layer color, selected (not live) = white, otherwise the same thin grey border as an empty slot
   - thumbnails are static, only live or selected slots play (performance)

@@ -730,11 +730,20 @@ impl App {
                 if let Some(inst) = inst {
                     let id = inst.id;
                     let name = inst.name.clone();
+                    let badge = source_badge(&inst.source);
                     let live = self.s.live_layer(id);
                     let selected = self.s.selected_instance == Some(id);
                     let tex = self.r.as_ref().and_then(|r| if live.is_some() || selected { r.output_of(id) } else { r.thumb(id) });
                     let tid = self.tex_id(frame, tex);
                     paint_tex(ui, thumb_rect, tid, self.output_aspect);
+                    // type badge top left: ▶ clip, ∿ generator, NDI (neutral grey: colors belong to the layers)
+                    {
+                        let font = egui::FontId::proportional(11.0);
+                        let galley = ui.painter().layout_no_wrap(badge.to_string(), font, Color32::from_gray(210));
+                        let br = Rect::from_min_size(thumb_rect.left_top() + vec2(2.0, 2.0), galley.size() + vec2(6.0, 2.0));
+                        ui.painter().rect_filled(br, 2.0, Color32::from_black_alpha(170));
+                        ui.painter().galley(br.min + vec2(3.0, 1.0), galley, Color32::from_gray(210));
+                    }
                     if let Some(err) = self.r.as_ref().and_then(|r| r.player_error(id)) {
                         ui.painter().text(thumb_rect.center(), egui::Align2::CENTER_CENTER, "error", egui::FontId::proportional(11.0), Color32::RED);
                         resp.clone().on_hover_text(err.to_string());
@@ -1463,6 +1472,15 @@ fn param_label(ui: &mut Ui, label: &str) {
         ui.set_width(PARAM_LABEL_W);
         ui.add(egui::Label::new(egui::RichText::new(label).size(widgets::BTN_TEXT)).wrap()).on_hover_text(label);
     });
+}
+
+/// Type badge of a prepare slot.
+fn source_badge(src: &SourceKind) -> &'static str {
+    match src {
+        SourceKind::Clip { .. } => "▶",
+        SourceKind::Generator { .. } => "∿",
+        SourceKind::Ndi { .. } => "NDI",
+    }
 }
 
 /// Connected screens (DRM connectors with status "connected"), e.g. ["eDP-1", "HDMI-A-1"].
