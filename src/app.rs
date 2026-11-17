@@ -1,0 +1,1263 @@
+//! The "live" tab: 4 columns (finder | prepare | mixer | output) + top bar.
+
+use crate::isf::{self, FileKind, InputKind, IsfInfo};
+use crate::render::{FrameCtx, Renderer, PREVIEW_ID};
+use crate::state::*;
+use crate::widgets::{self, layer_color, paint_tex, ACCENT};
+use egui::{vec2, Color32, Rect, Sense, Ui};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+/// Drag & drop payloads.
+#[derive(Clone, Debug)]
+enum Drag {
+    File(PathBuf, FileKind),
+    Slot(usize),
+    Effect(Owner, usize),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Owner {
+    Instance(u64),
+    Output,
+}
+
+struct FinderEntry {
+    path: PathBuf,
+    name: String,
+    kind: FileKind,
+}
+
+pub struct App {
+    selftest: Option<SelfTest>,
+    s: Session,
+    r: Option<Renderer>,
+    rng: Rng,
+    last: Instant,
+    beat: f64,
+    taps: Vec<Instant>,
+    finder: Vec<FinderEntry>,
+    finder_search: String,
+    finder_sel: Option<(PathBuf, FileKind)>,
+    finder_new_root: String,
+    preview: Option<Instance>,
+    preview_key: Option<(PathBuf, Option<u64>)>,
+    tex_ids: HashMap<glow::Texture, egui::TextureId>,
+    infos: HashMap<PathBuf, IsfInfo>,
+    autosave_path: PathBuf,
+    last_saved: String,
+    last_autosave: Instant,
+    last_gc: Instant,
+    file_path: String,
+    status: String,
+    status_time: Instant,
+    output_aspect: f32,
+}
+
+fn autosave_path() -> PathBuf {
+    dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("videoping").join("autosave.json")
+}
+
+fn load_session(path: &Path) -> Result<Session, String> {
+    let txt = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut s: Session = serde_json::from_str(&txt).map_err(|e| format!("{}: {e}", path.display()))?;
+    // shaders may have changed on disk: match params to the current inputs
+    let fix = |path: &Path, params: &mut Vec<Param>| {
+        if let Ok((info, _)) = isf::parse_info(path) {
+            isf::reconcile_params(&info, params);
+        }
+    };
+    for inst in s.slots.iter_mut().flatten() {
+        if let SourceKind::Generator { path, params } = &mut inst.source {
+            fix(path, params);
+        }
+        for fx in &mut inst.effects {
+            fix(&fx.path, &mut fx.params);
+        }
+    }
+    for fx in &mut s.output_effects {
+        fix(&fx.path, &mut fx.params);
+    }
+    if s.slots.len() < SLOTS_PER_PAGE {
+        s.slots.resize(SLOTS_PER_PAGE, None);
+    }
+    Ok(s)
+}
+
+fn save_session(s: &Session, path: &Path) -> Result<String, String> {
+    let txt = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &txt).map_err(|e| format!("{}: {e}", path.display()))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(txt)
+}
+
+fn scan(roots: &[PathBuf]) -> Vec<FinderEntry> {
+    fn walk(dir: &Path, depth: usize, out: &mut Vec<FinderEntry>) {
+        if depth > 5 {
+            return;
+        }
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut entries: Vec<_> = rd.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "target" || name == "node_modules" {
+                continue;
+            }
+            if p.is_dir() {
+                walk(&p, depth + 1, out);
+            } else if let Some(kind) = isf::classify(&p) {
+                out.push(FinderEntry { name: isf::display_name(&p), path: p, kind });
+            }
+        }
+    }
+    let mut out = vec![];
+    for r in roots {
+        walk(r, 0, &mut out);
+    }
+    out
+}
+
+impl App {
+    pub fn new(cc: &eframe::CreationContext) -> App {
+        style(&cc.egui_ctx);
+        let ap = autosave_path();
+        let selftest = std::env::var("VIDEOPING_SELFTEST").ok().map(|dir| SelfTest {
+            dir: PathBuf::from(dir),
+            start: Instant::now(),
+            shot: false,
+            dumped: false,
+        });
+        let (s, status) = if let Some(t) = &selftest {
+            (selftest_session(t), "selftest".to_string())
+        } else {
+            match load_session(&ap) {
+                Ok(s) => (s, format!("restored {}", ap.display())),
+                Err(_) => (Session::default(), "new session".to_string()),
+            }
+        };
+        let finder = scan(&s.finder_roots);
+        let default_file = dirs::home_dir().unwrap_or_default().join("videoping-session.json");
+        App {
+            selftest,
+            s,
+            r: None,
+            rng: Rng::new(),
+            last: Instant::now(),
+            beat: 0.0,
+            taps: vec![],
+            finder,
+            finder_search: String::new(),
+            finder_sel: None,
+            finder_new_root: String::new(),
+            preview: None,
+            preview_key: None,
+            tex_ids: HashMap::new(),
+            infos: HashMap::new(),
+            autosave_path: ap,
+            last_saved: String::new(),
+            last_autosave: Instant::now(),
+            last_gc: Instant::now(),
+            file_path: default_file.display().to_string(),
+            status,
+            status_time: Instant::now(),
+            output_aspect: 16.0 / 9.0,
+        }
+    }
+
+    fn set_status(&mut self, msg: impl Into<String>) {
+        self.status = msg.into();
+        self.status_time = Instant::now();
+    }
+
+    fn tex_id(&mut self, frame: &mut eframe::Frame, tex: Option<glow::Texture>) -> Option<egui::TextureId> {
+        let tex = tex?;
+        Some(*self.tex_ids.entry(tex).or_insert_with(|| frame.register_native_glow_texture(tex)))
+    }
+
+    fn new_instance_from_file(&mut self, path: &Path, kind: &FileKind) -> Option<Instance> {
+        let source = match kind {
+            FileKind::Clip => SourceKind::Clip { path: path.to_path_buf(), transport: ClipTransport::default() },
+            FileKind::Generator => {
+                let (info, _) = isf::parse_info(path).ok()?;
+                SourceKind::Generator { path: path.to_path_buf(), params: isf::default_params(&info) }
+            }
+            FileKind::Effect => return None,
+        };
+        Some(Instance {
+            id: self.s.new_id(),
+            name: isf::display_name(path),
+            source,
+            effects: vec![],
+            seed: self.rng.next_f32(),
+        })
+    }
+
+    fn new_effect(&mut self, path: &Path) -> Option<EffectInst> {
+        let (info, _) = isf::parse_info(path).ok()?;
+        Some(EffectInst {
+            uid: self.s.new_id(),
+            path: path.to_path_buf(),
+            active: true,
+            mix: Mix::default(),
+            params: isf::default_params(&info),
+            seed: self.rng.next_f32(),
+            open: false,
+        })
+    }
+
+    fn add_effect(&mut self, owner: Owner, path: &Path) {
+        let Some(fx) = self.new_effect(path) else { return };
+        match owner {
+            Owner::Instance(id) => {
+                if let Some(inst) = self.s.find_mut(id) {
+                    if inst.effects.len() < MAX_EFFECTS {
+                        inst.effects.push(fx);
+                    } else {
+                        self.set_status(format!("max {MAX_EFFECTS} effects per clip"));
+                    }
+                }
+            }
+            Owner::Output => self.s.output_effects.push(fx),
+        }
+    }
+
+    fn effects_mut(&mut self, owner: Owner) -> Option<&mut Vec<EffectInst>> {
+        match owner {
+            Owner::Instance(id) => self.s.find_mut(id).map(|i| &mut i.effects),
+            Owner::Output => Some(&mut self.s.output_effects),
+        }
+    }
+
+    /// double-click in finder / drop on empty slot
+    fn add_file_to_slot(&mut self, path: &Path, kind: &FileKind, slot: Option<usize>) {
+        if *kind == FileKind::Effect {
+            if let Some(id) = self.s.selected_instance {
+                self.add_effect(Owner::Instance(id), path);
+            } else {
+                self.set_status("select an instance in prepare first (effects go onto a clip)");
+            }
+            return;
+        }
+        if let Some(inst) = self.new_instance_from_file(path, kind) {
+            let slot = match slot {
+                Some(s) if s < self.s.slots.len() && self.s.slots[s].is_none() => s,
+                _ => self.s.first_free_slot(),
+            };
+            let id = inst.id;
+            self.s.slots[slot] = Some(inst);
+            self.s.selected_instance = Some(id);
+            self.s.page = slot / SLOTS_PER_PAGE;
+        }
+    }
+
+    fn tap(&mut self) {
+        let now = Instant::now();
+        if self.taps.last().is_some_and(|t| now.duration_since(*t).as_secs_f32() > 2.0) {
+            self.taps.clear();
+        }
+        self.taps.push(now);
+        if self.taps.len() > 5 {
+            self.taps.remove(0);
+        }
+        if self.taps.len() >= 2 {
+            let span = now.duration_since(self.taps[0]).as_secs_f32();
+            let bpm = 60.0 * (self.taps.len() - 1) as f32 / span;
+            self.s.bpm = bpm.clamp(20.0, 300.0);
+        }
+        self.beat = self.beat.floor() + 1.0; // tap = downbeat
+    }
+
+    // ------------------------------------------------------------------ frame
+
+    fn render(&mut self, gl: &std::sync::Arc<glow::Context>) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.last).as_secs_f32().min(0.1);
+        self.last = now;
+        let beat_prev = self.beat;
+        self.beat += dt as f64 * self.s.bpm as f64 / 60.0;
+
+        let (w, h) = (self.s.output.width as i32, self.s.output.height as i32);
+        if self.r.is_none() {
+            use glow::HasContext;
+            let (vendor, renderer) = unsafe { (gl.get_parameter_string(glow::VENDOR), gl.get_parameter_string(glow::RENDERER)) };
+            eprintln!("gpu: {renderer} ({vendor})");
+            self.set_status(format!("gpu: {renderer}"));
+        }
+        let r = self.r.get_or_insert_with(|| Renderer::new(gl, w, h));
+        r.resize(gl, w, h);
+        r.set_ndi(self.s.output.ndi_enabled, &self.s.output.ndi_name, 60);
+        self.output_aspect = w as f32 / h as f32;
+
+        let mut fc = FrameCtx { dt, bpm: self.s.bpm, beat_prev, beat_now: self.beat, rng: &mut self.rng };
+
+        // active instances: live in a layer, selected; plus instances still without thumbnail
+        let mut active: Vec<u64> = self.s.layers.iter().filter_map(|l| l.instance).collect();
+        if let Some(sel) = self.s.selected_instance {
+            if !active.contains(&sel) {
+                active.push(sel);
+            }
+        }
+        let mut thumbs_needed = 0;
+        for inst in self.s.slots.iter().flatten() {
+            if !active.contains(&inst.id) && r.thumb(inst.id).is_none() && thumbs_needed < 2 && r.player_error(inst.id).is_none() {
+                active.push(inst.id);
+                thumbs_needed += 1;
+            }
+        }
+        let mut layer_tex = [None; NUM_LAYERS];
+        for id in active {
+            if let Some(inst) = self.s.slots.iter_mut().flatten().find(|i| i.id == id) {
+                let tex = r.render_instance(gl, inst, &mut fc);
+                for (li, l) in self.s.layers.iter().enumerate() {
+                    if l.instance == Some(id) {
+                        layer_tex[li] = tex;
+                    }
+                }
+            }
+        }
+        if let Some(p) = self.preview.as_mut() {
+            r.render_instance(gl, p, &mut fc);
+        }
+        r.render_output(gl, &mut self.s, layer_tex, &mut fc);
+
+        if self.last_gc.elapsed().as_secs() >= 2 {
+            self.last_gc = Instant::now();
+            r.gc(gl, &self.s);
+        }
+
+        // shader infos for the ui (labels, ranges)
+        let mut paths: Vec<PathBuf> = vec![];
+        for inst in self.s.slots.iter().flatten() {
+            if let SourceKind::Generator { path, .. } = &inst.source {
+                paths.push(path.clone());
+            }
+            paths.extend(inst.effects.iter().map(|e| e.path.clone()));
+        }
+        paths.extend(self.s.output_effects.iter().map(|e| e.path.clone()));
+        if let Some(Instance { source: SourceKind::Generator { path, .. }, .. }) = &self.preview {
+            paths.push(path.clone());
+        }
+        for p in paths {
+            if let Some(info) = r.shader_info(gl, &p) {
+                self.infos.insert(p, info.clone());
+            }
+        }
+    }
+
+    fn update_preview(&mut self, gl: &glow::Context) {
+        let key = self.finder_sel.as_ref().map(|(p, k)| (p.clone(), if *k == FileKind::Effect { self.s.selected_instance } else { None }));
+        if key == self.preview_key {
+            return;
+        }
+        self.preview_key = key;
+        if let Some(r) = self.r.as_mut() {
+            r.drop_instance(gl, PREVIEW_ID);
+        }
+        self.preview = None;
+        let Some((path, kind)) = self.finder_sel.clone() else { return };
+        let inst = match kind {
+            FileKind::Effect => {
+                // preview an effect on the selected instance
+                let base = self.s.selected_instance.and_then(|id| self.s.find(id)).cloned();
+                let fx = self.new_effect(&path);
+                match (base, fx) {
+                    (Some(mut b), Some(fx)) => {
+                        b.effects.push(fx);
+                        Some(b)
+                    }
+                    _ => None,
+                }
+            }
+            k => self.new_instance_from_file(&path, &k),
+        };
+        self.preview = inst.map(|mut i| {
+            i.id = PREVIEW_ID;
+            i
+        });
+    }
+
+    fn autosave(&mut self) {
+        if self.last_autosave.elapsed().as_secs() < 2 {
+            return;
+        }
+        self.last_autosave = Instant::now();
+        if let Ok(txt) = serde_json::to_string(&self.s) {
+            if txt != self.last_saved {
+                match save_session(&self.s, &self.autosave_path) {
+                    Ok(_) => self.last_saved = txt,
+                    Err(e) => self.set_status(format!("autosave failed: {e}")),
+                }
+            }
+        }
+    }
+
+    // --------------------------------------------------------------------- ui
+
+    fn top_bar(&mut self, ui: &mut Ui, gl: &glow::Context) {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("videoping").strong().color(ACCENT));
+            ui.separator();
+            let _ = widgets::choice(ui, true, "live");
+            ui.add_enabled(false, egui::Button::new("mapping").small());
+            ui.add_enabled(false, egui::Button::new("shader editor").small());
+            ui.add_enabled(false, egui::Button::new("midi mapping").small());
+            ui.add_enabled(false, egui::Button::new("sequencer").small());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("load").clicked() {
+                    let p = PathBuf::from(self.file_path.trim());
+                    match load_session(&p) {
+                        Ok(s) => {
+                            self.s = s;
+                            if let Some(r) = self.r.as_mut() {
+                                let (w, h) = r.size();
+                                r.resize(gl, w + 1, h); // drops all instance gpu state
+                                r.resize(gl, w, h);
+                            }
+                            self.preview = None;
+                            self.preview_key = None;
+                            self.set_status(format!("loaded {}", p.display()));
+                        }
+                        Err(e) => self.set_status(e),
+                    }
+                }
+                if ui.small_button("save").clicked() {
+                    let p = PathBuf::from(self.file_path.trim());
+                    match save_session(&self.s, &p) {
+                        Ok(_) => self.set_status(format!("saved {}", p.display())),
+                        Err(e) => self.set_status(e),
+                    }
+                }
+                ui.add(egui::TextEdit::singleline(&mut self.file_path).desired_width(260.0));
+                if self.status_time.elapsed().as_secs() < 8 {
+                    ui.label(egui::RichText::new(&self.status).weak());
+                }
+            });
+        });
+    }
+
+    fn col_finder(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        // finder preview
+        let w = ui.available_width();
+        let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
+        let tex = self.r.as_ref().and_then(|r| r.output_of(PREVIEW_ID));
+        let id = self.tex_id(frame, tex);
+        paint_tex(ui, rect, id, self.output_aspect);
+        if self.preview.is_none() {
+            let msg = match &self.finder_sel {
+                Some((_, FileKind::Effect)) => "select an instance in prepare to preview this effect",
+                _ => "click something in the finder",
+            };
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(11.0), Color32::GRAY);
+        }
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search").desired_width(ui.available_width() - 28.0));
+            if ui.small_button("↻").on_hover_text("rescan folders").clicked() {
+                self.finder = scan(&self.s.finder_roots);
+            }
+        });
+        egui::CollapsingHeader::new("folders").default_open(false).show(ui, |ui| {
+            let mut remove = None;
+            for (i, r) in self.s.finder_roots.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    if ui.small_button("×").clicked() {
+                        remove = Some(i);
+                    }
+                    ui.label(r.display().to_string());
+                });
+            }
+            if let Some(i) = remove {
+                self.s.finder_roots.remove(i);
+                self.finder = scan(&self.s.finder_roots);
+            }
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut self.finder_new_root).hint_text("/path/to/folder").desired_width(ui.available_width() - 40.0));
+                if ui.small_button("add").clicked() {
+                    let p = PathBuf::from(self.finder_new_root.trim());
+                    if p.is_dir() {
+                        self.s.finder_roots.push(p);
+                        self.finder_new_root.clear();
+                        self.finder = scan(&self.s.finder_roots);
+                    } else {
+                        self.set_status("not a folder");
+                    }
+                }
+            });
+        });
+        ui.separator();
+        let search = self.finder_search.to_lowercase();
+        let mut action: Option<(PathBuf, FileKind, bool)> = None; // (path, kind, double-click)
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            for (title, kind) in [("clips", FileKind::Clip), ("generators", FileKind::Generator), ("effects", FileKind::Effect)] {
+                egui::CollapsingHeader::new(title).default_open(true).show(ui, |ui| {
+                    for e in self.finder.iter().filter(|e| e.kind == kind) {
+                        if !search.is_empty() && !e.name.to_lowercase().contains(&search) {
+                            continue;
+                        }
+                        let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == e.path);
+                        let r = ui
+                            .add(egui::Button::selectable(selected, &e.name))
+                            .interact(Sense::click_and_drag())
+                            .on_hover_text(e.path.display().to_string());
+                        r.dnd_set_drag_payload(Drag::File(e.path.clone(), e.kind.clone()));
+                        if r.double_clicked() {
+                            action = Some((e.path.clone(), e.kind.clone(), true));
+                        } else if r.clicked() {
+                            action = Some((e.path.clone(), e.kind.clone(), false));
+                        }
+                    }
+                });
+            }
+            egui::CollapsingHeader::new("NDI sources").default_open(false).show(ui, |ui| {
+                ui.label(egui::RichText::new("not implemented yet").weak());
+            });
+        });
+        if let Some((p, k, dbl)) = action {
+            self.finder_sel = Some((p.clone(), k.clone()));
+            if dbl {
+                self.add_file_to_slot(&p, &k, None);
+            }
+        }
+    }
+
+    fn col_prepare(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        egui::Panel::left("prepare_grid").resizable(true).default_size(420.0).size_range(240.0..=900.0).show(ui, |ui| {
+            self.prepare_grid(ui, frame);
+        });
+        egui::CentralPanel::default().show(ui, |ui| {
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                self.prepare_detail(ui, frame);
+            });
+        });
+    }
+
+    fn prepare_grid(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        let pages = self.s.pages();
+        ui.horizontal(|ui| {
+            ui.label("prepare");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("+").on_hover_text("add page").clicked() {
+                    self.s.slots.extend(std::iter::repeat_n(None, SLOTS_PER_PAGE));
+                    self.s.page = self.s.pages() - 1;
+                }
+                if ui.small_button("▶").clicked() && self.s.page + 1 < pages {
+                    self.s.page += 1;
+                }
+                ui.label(format!("page {}/{}", self.s.page + 1, pages));
+                if ui.small_button("◀").clicked() && self.s.page > 0 {
+                    self.s.page -= 1;
+                }
+            });
+        });
+        let gap = 4.0;
+        let cell_w = ((ui.available_width() - gap * (GRID_COLS as f32 - 1.0)) / GRID_COLS as f32).max(40.0);
+        let thumb_h = cell_w * 9.0 / 16.0;
+        let cell_h = thumb_h + 14.0;
+        let origin = ui.cursor().min;
+        let (_, _) = ui.allocate_exact_size(vec2(ui.available_width(), (cell_h + gap) * GRID_ROWS as f32), Sense::hover());
+        let base = self.s.page * SLOTS_PER_PAGE;
+        let mut ev_drop: Option<(usize, Drag)> = None;
+        let mut ev_click = None;
+        let mut ev_dbl = None;
+        let mut ev_delete = None;
+        for row in 0..GRID_ROWS {
+            for col in 0..GRID_COLS {
+                // index runs top-down per column, like the bhoreal columns 2-5
+                let slot = base + col * GRID_ROWS + row;
+                let rect = Rect::from_min_size(origin + vec2(col as f32 * (cell_w + gap), row as f32 * (cell_h + gap)), vec2(cell_w, cell_h));
+                let resp = ui.interact(rect, ui.scope_id().with(("slot", slot)), Sense::click_and_drag());
+                let inst = self.s.slots.get(slot).and_then(|s| s.as_ref());
+                let thumb_rect = Rect::from_min_size(rect.min, vec2(cell_w, thumb_h));
+                ui.painter().rect_filled(rect, 3.0, ui.visuals().extreme_bg_color);
+                if let Some(inst) = inst {
+                    let id = inst.id;
+                    let name = inst.name.clone();
+                    let live = self.s.live_layer(id);
+                    let selected = self.s.selected_instance == Some(id);
+                    let tex = self.r.as_ref().and_then(|r| if live.is_some() || selected { r.output_of(id) } else { r.thumb(id) });
+                    let tid = self.tex_id(frame, tex);
+                    paint_tex(ui, thumb_rect, tid, self.output_aspect);
+                    if let Some(err) = self.r.as_ref().and_then(|r| r.player_error(id)) {
+                        ui.painter().text(thumb_rect.center(), egui::Align2::CENTER_CENTER, "error", egui::FontId::proportional(11.0), Color32::RED);
+                        resp.clone().on_hover_text(err.to_string());
+                    }
+                    ui.painter().text(
+                        rect.left_bottom() + vec2(3.0, -2.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        truncate(&name, (cell_w / 6.5) as usize),
+                        egui::FontId::proportional(11.0),
+                        ui.visuals().text_color(),
+                    );
+                    if let Some(l) = live {
+                        widgets::outline(ui, rect, 3.0, layer_color(l));
+                        ui.painter().text(rect.right_top() + vec2(-4.0, 2.0), egui::Align2::RIGHT_TOP, format!("L{}", l + 1), egui::FontId::monospace(11.0), layer_color(l));
+                    } else if selected {
+                        widgets::outline(ui, rect, 1.5, Color32::WHITE);
+                    }
+                    resp.dnd_set_drag_payload(Drag::Slot(slot));
+                    if resp.double_clicked() {
+                        ev_dbl = Some(id);
+                    } else if resp.clicked() {
+                        ev_click = Some(id);
+                    }
+                    // x to delete (on hover)
+                    if resp.hovered() || ui.rect_contains_pointer(rect) {
+                        let xr = Rect::from_min_size(rect.right_top() + vec2(-16.0, rect.height() - 16.0), vec2(16.0, 16.0));
+                        let xresp = ui.interact(xr, ui.scope_id().with(("slotx", slot)), Sense::click());
+                        let c = if xresp.hovered() { Color32::RED } else { Color32::GRAY };
+                        ui.painter().text(xr.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(14.0), c);
+                        if xresp.clicked() {
+                            ev_delete = Some(slot);
+                        }
+                    }
+                } else {
+                    widgets::outline(ui, rect, 1.0, ui.visuals().widgets.noninteractive.bg_stroke.color);
+                }
+                if let Some(p) = resp.dnd_hover_payload::<Drag>() {
+                    let _ = p;
+                    widgets::outline(ui, rect, 2.0, ACCENT);
+                }
+                if let Some(p) = resp.dnd_release_payload::<Drag>() {
+                    ev_drop = Some((slot, (*p).clone()));
+                }
+            }
+        }
+        if let Some(id) = ev_click {
+            self.s.selected_instance = Some(id);
+        }
+        if let Some(id) = ev_dbl {
+            self.s.selected_instance = Some(id);
+            self.s.load_into_selected_layer(id);
+        }
+        if let Some(slot) = ev_delete {
+            self.s.delete_slot(slot);
+        }
+        if let Some((slot, d)) = ev_drop {
+            match d {
+                Drag::Slot(from) => self.s.swap_slots(from, slot),
+                Drag::File(path, FileKind::Effect) => {
+                    if let Some(id) = self.s.slots.get(slot).and_then(|s| s.as_ref()).map(|i| i.id) {
+                        self.add_effect(Owner::Instance(id), &path);
+                        self.s.selected_instance = Some(id);
+                    }
+                }
+                Drag::File(path, kind) => {
+                    if self.s.slots.get(slot).is_some_and(|s| s.is_none()) {
+                        self.add_file_to_slot(&path, &kind, Some(slot));
+                    }
+                }
+                Drag::Effect(..) => {}
+            }
+        }
+    }
+
+    fn prepare_detail(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        let Some(id) = self.s.selected_instance.filter(|id| self.s.find(*id).is_some()) else {
+            ui.label(egui::RichText::new("select an instance in the grid").weak());
+            return;
+        };
+        // prepare preview
+        let w = ui.available_width().min(640.0);
+        let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
+        let tex = self.r.as_ref().and_then(|r| r.output_of(id));
+        let tid = self.tex_id(frame, tex);
+        paint_tex(ui, rect, tid, self.output_aspect);
+        let live = self.s.live_layer(id);
+        if let Some(l) = live {
+            widgets::outline(ui, rect, 3.0, layer_color(l));
+        }
+        let mut dup = false;
+        ui.horizontal(|ui| {
+            let inst = self.s.find(id).unwrap();
+            ui.label(egui::RichText::new(&inst.name).strong());
+            if let Some(l) = live {
+                ui.label(egui::RichText::new(format!("live in L{}", l + 1)).color(layer_color(l)));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("duplicate").clicked() {
+                    dup = true;
+                }
+            });
+        });
+        if dup {
+            if let Some(slot) = self.s.slot_of(id) {
+                if let Some(ns) = self.s.duplicate_slot(slot, &mut self.rng) {
+                    self.s.selected_instance = self.s.slots[ns].as_ref().map(|i| i.id);
+                    self.s.page = ns / SLOTS_PER_PAGE;
+                }
+            }
+            return;
+        }
+        if let Some(e) = self.r.as_ref().and_then(|r| r.player_error(id)) {
+            ui.colored_label(Color32::RED, e.to_string());
+        }
+        let status = self.r.as_ref().and_then(|r| r.clip_status.get(&id).copied()).unwrap_or_default();
+        let mut scrub = None;
+        let infos = &self.infos;
+        let r_ref = self.r.as_ref();
+        if let Some(inst) = self.s.find_mut(id) {
+            match &mut inst.source {
+                SourceKind::Clip { transport, .. } => {
+                    ui.separator();
+                    scrub = widgets::timeline(ui, transport, status.position, status.duration);
+                    widgets::transport_row(ui, &mut transport.mode, &mut transport.loop_mode, &mut transport.speed, "x");
+                }
+                SourceKind::Generator { path, params } => {
+                    ui.separator();
+                    if let Some(err) = r_ref.and_then(|r| r.shader_error(path)) {
+                        ui.colored_label(Color32::RED, err);
+                    }
+                    if let Some(info) = infos.get(path) {
+                        params_ui(ui, info, params, ("gen", id));
+                    }
+                }
+            }
+        }
+        if let Some(n) = scrub {
+            if let Some(r) = self.r.as_mut() {
+                r.pending_scrub.push((id, n));
+            }
+        }
+        ui.separator();
+        self.effect_stack(ui, Owner::Instance(id));
+    }
+
+    /// Effect stack (prepare detail and output effects).
+    fn effect_stack(&mut self, ui: &mut Ui, owner: Owner) {
+        let mut ev_move: Option<(usize, usize)> = None;
+        let mut ev_remove = None;
+        let mut ev_add: Option<PathBuf> = None;
+        let infos = self.infos.clone();
+        let shader_errors: Vec<Option<String>> = {
+            let paths: Vec<PathBuf> = self.effects_mut(owner).map(|v| v.iter().map(|e| e.path.clone()).collect()).unwrap_or_default();
+            paths.iter().map(|p| self.r.as_ref().and_then(|r| r.shader_error(p)).map(|s| s.to_string())).collect()
+        };
+        let count = self.effects_mut(owner).map(|v| v.len()).unwrap_or(0);
+        let header = match owner {
+            Owner::Instance(_) => format!("effects ({count}/{MAX_EFFECTS})"),
+            Owner::Output => format!("output effects ({count})"),
+        };
+        let Some(effects) = self.effects_mut(owner) else { return };
+        let frame_resp = egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(header).weak());
+            for (i, fx) in effects.iter_mut().enumerate() {
+                let row = ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let handle = ui.add(egui::Label::new("≡").sense(Sense::drag())).on_hover_text("drag to reorder");
+                    handle.dnd_set_drag_payload(Drag::Effect(owner, i));
+                    ui.checkbox(&mut fx.active, "");
+                    let arrow = if fx.open { "▾" } else { "▸" };
+                    let name = isf::display_name(&fx.path);
+                    if ui.add(egui::Button::new(format!("{arrow} {name}")).frame(false)).clicked() {
+                        fx.open = !fx.open;
+                    }
+                    if let Some(Some(e)) = shader_errors.get(i) {
+                        ui.colored_label(Color32::RED, "⚠").on_hover_text(e);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("×").clicked() {
+                            ev_remove = Some(i);
+                        }
+                    });
+                });
+                if let Some(p) = row.response.dnd_release_payload::<Drag>() {
+                    match &*p {
+                        Drag::Effect(o, from) if *o == owner => ev_move = Some((*from, i)),
+                        Drag::File(path, FileKind::Effect) => ev_add = Some(path.clone()),
+                        _ => {}
+                    }
+                }
+                if row.response.dnd_hover_payload::<Drag>().is_some() {
+                    widgets::outline(ui, row.response.rect, 1.5, ACCENT);
+                }
+                if fx.open {
+                    ui.indent(("fx", fx.uid), |ui| {
+                        widgets::mix_controls(ui, &mut fx.mix, ("fxmix", fx.uid));
+                        if let Some(info) = infos.get(&fx.path) {
+                            params_ui(ui, info, &mut fx.params, ("fxp", fx.uid));
+                        }
+                    });
+                }
+            }
+            if effects.is_empty() {
+                ui.label(egui::RichText::new("drop effects here").weak());
+            }
+        });
+        let resp = frame_resp.response;
+        if resp.dnd_hover_payload::<Drag>().is_some_and(|p| matches!(&*p, Drag::File(_, FileKind::Effect))) {
+            widgets::outline(ui, resp.rect, 2.0, ACCENT);
+        }
+        if let Some(p) = resp.dnd_release_payload::<Drag>() {
+            if let Drag::File(path, FileKind::Effect) = &*p {
+                ev_add = Some(path.clone());
+            }
+        }
+        if let Some(effects) = self.effects_mut(owner) {
+            if let Some(i) = ev_remove {
+                effects.remove(i);
+            } else if let Some((from, to)) = ev_move {
+                if from < effects.len() && to < effects.len() && from != to {
+                    let fx = effects.remove(from);
+                    effects.insert(to, fx);
+                }
+            }
+        }
+        if let Some(p) = ev_add {
+            self.add_effect(owner, &p);
+        }
+    }
+
+    fn col_mixer(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        ui.label("mixer");
+        let mut ev_move: Option<(usize, usize)> = None;
+        for li in 0..NUM_LAYERS {
+            let color = layer_color(li);
+            let selected = self.s.selected_layer == li;
+            let resp = egui::Frame::group(ui.style())
+                .stroke(egui::Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { color } else { color.gamma_multiply(0.3) }))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        ui.label(egui::RichText::new(format!("L{}", li + 1)).strong().color(color));
+                        let mut active = self.s.layers[li].active;
+                        widgets::toggle(ui, &mut active, "on", color);
+                        self.s.layers[li].active = active;
+                        if ui.small_button("↑").clicked() && li > 0 {
+                            ev_move = Some((li, li - 1));
+                        }
+                        if ui.small_button("↓").clicked() && li + 1 < NUM_LAYERS {
+                            ev_move = Some((li, li + 1));
+                        }
+                        let name = self.s.layers[li].instance.and_then(|id| self.s.find(id)).map(|i| i.name.clone()).unwrap_or_else(|| "empty".into());
+                        ui.label(truncate(&name, 22));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if self.s.layers[li].instance.is_some() && ui.small_button("×").on_hover_text("unload").clicked() {
+                                self.s.layers[li].instance = None;
+                            }
+                        });
+                    });
+                    ui.horizontal(|ui| {
+                        let pw = 96.0;
+                        let (rect, _) = ui.allocate_exact_size(vec2(pw, pw / self.output_aspect), Sense::hover());
+                        let tex = self.s.layers[li].instance.and_then(|id| self.r.as_ref().and_then(|r| r.output_of(id)));
+                        let tid = self.tex_id(frame, tex);
+                        paint_tex(ui, rect, tid, self.output_aspect);
+                        ui.vertical(|ui| {
+                            widgets::mix_controls(ui, &mut self.s.layers[li].mix, ("layermix", li));
+                        });
+                    });
+                    // clip basics (only for clips with a timeline)
+                    if let Some(id) = self.s.layers[li].instance {
+                        let status = self.r.as_ref().and_then(|r| r.clip_status.get(&id).copied()).unwrap_or_default();
+                        let mut scrub = None;
+                        if let Some(inst) = self.s.find_mut(id) {
+                            if let SourceKind::Clip { transport, .. } = &mut inst.source {
+                                scrub = widgets::timeline(ui, transport, status.position, status.duration);
+                                widgets::transport_row(ui, &mut transport.mode, &mut transport.loop_mode, &mut transport.speed, "x");
+                            }
+                        }
+                        if let (Some(n), Some(r)) = (scrub, self.r.as_mut()) {
+                            r.pending_scrub.push((id, n));
+                        }
+                    }
+                });
+            // click on a layer: select it + focus its instance in prepare
+            let r = ui.interact(resp.response.rect, ui.scope_id().with(("layer", li)), Sense::click());
+            if r.clicked() {
+                self.s.selected_layer = li;
+                if let Some(id) = self.s.layers[li].instance {
+                    self.s.selected_instance = Some(id);
+                    if let Some(slot) = self.s.slot_of(id) {
+                        self.s.page = slot / SLOTS_PER_PAGE;
+                    }
+                }
+            }
+            // drop a slot onto a layer = load it there
+            if let Some(p) = r.dnd_release_payload::<Drag>() {
+                if let Drag::Slot(slot) = &*p {
+                    if let Some(id) = self.s.slots.get(*slot).and_then(|s| s.as_ref()).map(|i| i.id) {
+                        self.s.selected_layer = li;
+                        self.s.load_into_selected_layer(id);
+                    }
+                }
+            }
+        }
+        if let Some((a, b)) = ev_move {
+            self.s.layers.swap(a, b);
+            if self.s.selected_layer == a {
+                self.s.selected_layer = b;
+            } else if self.s.selected_layer == b {
+                self.s.selected_layer = a;
+            }
+        }
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.label("bpm");
+        ui.horizontal(|ui| {
+            if ui.add(egui::Button::new(egui::RichText::new("TAP").strong()).min_size(vec2(56.0, 28.0))).clicked() {
+                self.tap();
+            }
+            let beat_in_bar = (self.beat.rem_euclid(4.0)).floor() as usize;
+            let frac = self.beat.fract() as f32;
+            for i in 0..4 {
+                let (rect, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+                let on = i == beat_in_bar;
+                let c = if on { ACCENT.gamma_multiply(1.0 - frac * 0.7) } else { Color32::from_gray(50) };
+                ui.painter().circle_filled(rect.center(), 5.0, c);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.add(egui::Slider::new(&mut self.s.bpm, 20.0..=300.0).fixed_decimals(1).text("bpm"));
+        });
+        ui.horizontal(|ui| {
+            if ui.small_button("½x").clicked() {
+                self.s.bpm = (self.s.bpm * 0.5).max(20.0);
+            }
+            if ui.small_button("2x").clicked() {
+                self.s.bpm = (self.s.bpm * 2.0).min(300.0);
+            }
+        });
+        ui.add_space(8.0);
+        ui.separator();
+        ui.label(egui::RichText::new("patch-bay: not implemented yet").weak());
+    }
+
+    fn col_output(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        // master
+        ui.label("master");
+        ui.horizontal(|ui| {
+            let m = &mut self.s.master;
+            let bo = if m.blackout { Color32::from_rgb(200, 30, 30) } else { ui.visuals().widgets.inactive.weak_bg_fill };
+            if ui.add(egui::Button::new(egui::RichText::new("BLACKOUT").strong()).fill(bo).min_size(vec2(84.0, 28.0))).clicked() {
+                m.blackout = !m.blackout;
+            }
+            let fz = if m.freeze { Color32::from_rgb(40, 120, 220) } else { ui.visuals().widgets.inactive.weak_bg_fill };
+            if ui.add(egui::Button::new(egui::RichText::new("FREEZE").strong()).fill(fz).min_size(vec2(70.0, 28.0))).clicked() {
+                m.freeze = !m.freeze;
+            }
+        });
+        ui.add(egui::Slider::new(&mut self.s.master.brightness, 0.0..=1.0).text("brightness"));
+        ui.separator();
+        egui::ScrollArea::vertical().id_salt("outfx").max_height(ui.available_height() * 0.5).show(ui, |ui| {
+            self.effect_stack(ui, Owner::Output);
+        });
+        egui::CollapsingHeader::new("output options").default_open(false).show(ui, |ui| {
+            let o = &mut self.s.output;
+            let res = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
+            egui::ComboBox::from_label("resolution").selected_text(format!("{}x{}", o.width, o.height)).show_ui(ui, |ui| {
+                for (w, h) in res {
+                    if ui.selectable_label(o.width == w && o.height == h, format!("{w}x{h}")).clicked() {
+                        o.width = w;
+                        o.height = h;
+                    }
+                }
+            });
+            ui.checkbox(&mut o.window_open, "output window");
+            ui.add_enabled(o.window_open, egui::Checkbox::new(&mut o.fullscreen, "fullscreen (F in output window)"));
+            ui.label(egui::RichText::new("screen: move the output window to the screen, then fullscreen").weak());
+            ui.checkbox(&mut o.ndi_enabled, "NDI output");
+            ui.horizontal(|ui| {
+                ui.label("ndi name");
+                ui.add(egui::TextEdit::singleline(&mut o.ndi_name).desired_width(140.0));
+            });
+            if let Some(e) = self.r.as_ref().and_then(|r| r.ndi_error.as_ref()) {
+                ui.colored_label(Color32::RED, e);
+            } else if self.r.as_ref().is_some_and(|r| r.ndi.is_some()) {
+                ui.label(egui::RichText::new("NDI sending").color(Color32::GREEN));
+            }
+        });
+        ui.separator();
+        // output preview (bottom)
+        let w = ui.available_width();
+        let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
+        let tex = self.r.as_ref().map(|r| r.out.tex);
+        let tid = self.tex_id(frame, tex);
+        paint_tex(ui, rect, tid, self.output_aspect);
+        if self.s.master.blackout || self.s.master.freeze {
+            let t = [(self.s.master.blackout, "BLACKOUT"), (self.s.master.freeze, "FREEZE")]
+                .iter()
+                .filter(|x| x.0)
+                .map(|x| x.1)
+                .collect::<Vec<_>>()
+                .join(" + ");
+            ui.painter().text(rect.left_top() + vec2(4.0, 4.0), egui::Align2::LEFT_TOP, t, egui::FontId::proportional(11.0), Color32::RED);
+        }
+    }
+
+    fn output_window(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if !self.s.output.window_open {
+            return;
+        }
+        let tex = self.r.as_ref().map(|r| r.out.tex);
+        let tid = self.tex_id(frame, tex);
+        let aspect = self.output_aspect;
+        let vid = egui::ViewportId::from_hash_of("videoping-output");
+        let fullscreen = self.s.output.fullscreen;
+        let mut close = false;
+        let mut toggle_fs = false;
+        ctx.show_viewport_immediate(
+            vid,
+            egui::ViewportBuilder::default().with_title("videoping output").with_inner_size([960.0, 540.0]).with_fullscreen(fullscreen),
+            |ui, _class| {
+                let rect = ui.max_rect();
+                let full = ui.ctx().content_rect();
+                let rect = if full.is_positive() { full } else { rect };
+                paint_tex(ui, rect, tid, aspect);
+                ui.input(|i| {
+                    if i.viewport().close_requested() {
+                        close = true;
+                    }
+                    if i.key_pressed(egui::Key::F) {
+                        toggle_fs = true;
+                    }
+                    if i.key_pressed(egui::Key::Escape) && fullscreen {
+                        toggle_fs = true;
+                    }
+                });
+                if ui.input(|i| i.pointer.button_double_clicked(egui::PointerButton::Primary)) {
+                    toggle_fs = true;
+                }
+            },
+        );
+        if close {
+            self.s.output.window_open = false;
+            self.s.output.fullscreen = false;
+        }
+        if toggle_fs {
+            self.s.output.fullscreen = !self.s.output.fullscreen;
+        }
+        if self.s.output.fullscreen != fullscreen || toggle_fs {
+            ctx.send_viewport_cmd_to(vid, egui::ViewportCommand::Fullscreen(self.s.output.fullscreen));
+        }
+    }
+}
+
+/// Parameter ui: range slider + animation row per parameter.
+fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::hash::Hash + Copy + std::fmt::Debug) {
+    for inp in &info.inputs {
+        let Some(p) = params.iter_mut().find(|p| p.name == inp.name) else { continue };
+        ui.push_id((salt, &inp.name), |ui| match (&inp.kind, &mut p.value) {
+            (InputKind::Float { min, max, .. }, ParamValue::Anim(a)) => anim_ui(ui, &inp.label, &mut a[0], *min, *max, false),
+            (InputKind::Long { min, max, labels, .. }, ParamValue::Anim(a)) => {
+                if labels.is_empty() {
+                    anim_ui(ui, &inp.label, &mut a[0], *min, *max, true)
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label(&inp.label);
+                        let cur = a[0].value.round() as i32;
+                        let txt = labels.iter().find(|l| l.0 == cur).map(|l| l.1.clone()).unwrap_or(cur.to_string());
+                        egui::ComboBox::from_id_salt("long").selected_text(txt).show_ui(ui, |ui| {
+                            for (v, l) in labels {
+                                if ui.selectable_label(*v == cur, l).clicked() {
+                                    a[0].value = *v as f32;
+                                }
+                            }
+                        });
+                    });
+                }
+            }
+            (InputKind::Point2D { min, max, .. }, ParamValue::Anim(a)) if a.len() == 2 => {
+                anim_ui(ui, &format!("{} x", inp.label), &mut a[0], min[0], max[0], false);
+                anim_ui(ui, &format!("{} y", inp.label), &mut a[1], min[1], max[1], false);
+            }
+            (InputKind::Bool { .. }, ParamValue::Bool(b)) => {
+                ui.checkbox(b, &inp.label);
+            }
+            (InputKind::Event, ParamValue::Bool(b)) => {
+                if ui.button(&inp.label).clicked() {
+                    *b = true;
+                }
+            }
+            (InputKind::Color { .. }, ParamValue::Color(c)) => {
+                ui.horizontal(|ui| {
+                    ui.label(&inp.label);
+                    ui.color_edit_button_rgba_unmultiplied(c);
+                });
+            }
+            _ => {}
+        });
+    }
+}
+
+fn anim_ui(ui: &mut Ui, label: &str, a: &mut AnimParam, min: f32, max: f32, integer: bool) {
+    ui.horizontal(|ui| {
+        ui.add_sized(vec2(110.0, 16.0), egui::Label::new(egui::RichText::new(label).small()).truncate());
+        widgets::range_slider(ui, a, min, max, integer);
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(114.0);
+        widgets::transport_row(ui, &mut a.mode, &mut a.loop_mode, &mut a.speed, "/s");
+    });
+}
+
+fn truncate(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_string()
+    } else {
+        format!("{}…", s.chars().take(n.saturating_sub(1)).collect::<String>())
+    }
+}
+
+/// egui's built-in fonts lack symbols like ▶ ◀ ↑ ↓ ≡: add system fonts as fallback.
+fn load_symbol_fonts(ctx: &egui::Context) {
+    let candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
+    ];
+    let mut fonts = egui::FontDefinitions::default();
+    let mut added = false;
+    for (i, path) in candidates.iter().enumerate() {
+        if let Ok(bytes) = std::fs::read(path) {
+            let name = format!("symbols{i}");
+            fonts.font_data.insert(name.clone(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+            for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                fonts.families.entry(fam).or_default().push(name.clone());
+            }
+            added = true;
+        }
+    }
+    if added {
+        ctx.set_fonts(fonts);
+    } else {
+        eprintln!("no DejaVu / Noto Symbols font found: some ui symbols may show as boxes");
+    }
+}
+
+fn style(ctx: &egui::Context) {
+    load_symbol_fonts(ctx);
+    ctx.set_visuals(egui::Visuals::dark());
+    ctx.global_style_mut(|s| {
+        s.spacing.item_spacing = vec2(6.0, 4.0);
+        s.spacing.button_padding = vec2(5.0, 2.0);
+        s.visuals.selection.bg_fill = ACCENT;
+        s.visuals.panel_fill = Color32::from_gray(18);
+        s.visuals.extreme_bg_color = Color32::from_gray(8);
+    });
+}
+
+impl eframe::App for App {
+    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        let Some(gl) = frame.gl().cloned() else { return };
+        self.update_preview(&gl);
+        self.render(&gl);
+
+        egui::Panel::top("top").show(ui, |ui| self.top_bar(ui, &gl));
+        egui::Panel::left("col1").resizable(true).default_size(260.0).size_range(160.0..=600.0).show(ui, |ui| {
+            self.col_finder(ui, frame);
+        });
+        egui::Panel::right("col4").resizable(true).default_size(300.0).size_range(200.0..=700.0).show(ui, |ui| {
+            self.col_output(ui, frame);
+        });
+        egui::Panel::right("col3").resizable(true).default_size(330.0).size_range(220.0..=700.0).show(ui, |ui| {
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| self.col_mixer(ui, frame));
+        });
+        egui::CentralPanel::default().show(ui, |ui| self.col_prepare(ui, frame));
+
+        self.output_window(&ctx, frame);
+        if self.selftest.is_some() {
+            self.selftest_step(&ctx, &gl);
+        } else {
+            self.autosave();
+        }
+        ctx.request_repaint();
+    }
+
+    fn on_exit(&mut self, gl: Option<&glow::Context>) {
+        let _ = save_session(&self.s, &self.autosave_path);
+        if let (Some(r), Some(gl)) = (self.r.as_mut(), gl) {
+            r.ndi = None;
+            let _ = gl;
+        }
+    }
+}
+
+/// Self-test (VIDEOPING_SELFTEST=<dir>): builds a session, saves a ui screenshot and an
+/// output frame as raw RGBA into <dir>, then quits. Never touches the autosave.
+struct SelfTest {
+    dir: PathBuf,
+    start: Instant,
+    shot: bool,
+    dumped: bool,
+}
+
+fn selftest_session(t: &SelfTest) -> Session {
+    let mut s = Session::default();
+    let mut rng = Rng::new();
+    let root = std::env::current_dir().unwrap_or_default();
+    let gen_path = root.join("isf-generator/0-id-display.fs");
+    let fx_path = root.join("isf-effect/gameboy-camera.fs");
+    let clip = std::env::var("VIDEOPING_SELFTEST_CLIP").map(PathBuf::from).unwrap_or_else(|_| t.dir.join("testclip.mp4"));
+    let gen_info = isf::parse_info(&gen_path).expect("generator").0;
+    let fx_info = isf::parse_info(&fx_path).expect("effect").0;
+    let gen_id = s.new_id();
+    s.slots[0] = Some(Instance {
+        id: gen_id,
+        name: "0-id-display".into(),
+        source: SourceKind::Generator { path: gen_path, params: isf::default_params(&gen_info) },
+        effects: vec![],
+        seed: rng.next_f32(),
+    });
+    let clip_id = s.new_id();
+    let fx_uid = s.new_id();
+    s.slots[8] = Some(Instance {
+        id: clip_id,
+        name: "testclip".into(),
+        source: SourceKind::Clip { path: clip, transport: ClipTransport::default() },
+        effects: vec![EffectInst {
+            uid: fx_uid,
+            path: fx_path,
+            active: true,
+            mix: Mix::default(),
+            params: isf::default_params(&fx_info),
+            seed: rng.next_f32(),
+            open: true,
+        }],
+        seed: rng.next_f32(),
+    });
+    s.layers[0].instance = Some(gen_id);
+    s.layers[0].mix.mix_type = MixType::LumaKey;
+    s.layers[1].instance = Some(clip_id);
+    s.selected_instance = Some(clip_id);
+    s.output.ndi_enabled = std::env::var("VIDEOPING_SELFTEST_NDI").is_ok();
+    s
+}
+
+impl App {
+    fn selftest_step(&mut self, ctx: &egui::Context, gl: &glow::Context) {
+        let Some(t) = self.selftest.as_mut() else { return };
+        let secs = t.start.elapsed().as_secs_f32();
+        if secs > 4.0 && !t.dumped {
+            t.dumped = true;
+            if let Some(r) = self.r.as_ref() {
+                let (w, h) = r.size();
+                let px = r.read_output(gl);
+                let _ = std::fs::write(t.dir.join(format!("out_{w}x{h}.rgba")), px);
+            }
+        }
+        if secs > 4.5 && !t.shot {
+            t.shot = true;
+            let dir = t.dir.clone();
+            ctx.request_screenshot(move |img| {
+                let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+                let _ = std::fs::write(dir.join(format!("ui_{}x{}.rgba", img.size[0], img.size[1])), bytes);
+            });
+        }
+        if secs > 6.5 {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
+}
