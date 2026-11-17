@@ -160,6 +160,8 @@ impl App {
             empty_slot: None,
             clear_btn: None,
             brightness_slider: None,
+            fx_handle: None,
+            out_fx: None,
             at2s: None,
             ui_frames: 0,
         });
@@ -892,7 +894,6 @@ impl App {
         if let Some(inst) = self.s.find_mut(id) {
             match &mut inst.source {
                 SourceKind::Clip { transport, .. } => {
-                    ui.separator();
                     let tl_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 22.0));
                     scrub = widgets::timeline(ui, transport, status.position, status.duration);
                     widgets::transport_row(ui, &mut transport.mode, &mut transport.loop_mode, &mut transport.speed, "x");
@@ -901,7 +902,6 @@ impl App {
                     }
                 }
                 SourceKind::Ndi { source } => {
-                    ui.separator();
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("NDI").strong());
                         ui.label(source.as_str());
@@ -916,7 +916,6 @@ impl App {
                     }
                 }
                 SourceKind::Generator { path, params } => {
-                    ui.separator();
                     if let Some(err) = r_ref.and_then(|r| r.shader_error(path)) {
                         ui.colored_label(Color32::RED, err);
                     }
@@ -931,7 +930,7 @@ impl App {
                 r.pending_scrub.push((id, n));
             }
         }
-        ui.separator();
+        ui.add_space(4.0);
         self.effect_stack(ui, Owner::Instance(id));
     }
 
@@ -940,6 +939,9 @@ impl App {
         let mut ev_move: Option<(usize, usize)> = None;
         let mut ev_remove = None;
         let mut ev_add: Option<PathBuf> = None;
+        // effect dragged in from the other stack (clip <-> output): (from owner, from index, insert at)
+        let mut ev_transfer: Option<(Owner, usize, Option<usize>)> = None;
+        let mut first_handle: Option<egui::Pos2> = None;
         let infos = self.infos.clone();
         let shader_errors: Vec<Option<String>> = {
             let paths: Vec<PathBuf> = self.effects_mut(owner).map(|v| v.iter().map(|e| e.path.clone()).collect()).unwrap_or_default();
@@ -951,13 +953,21 @@ impl App {
             Owner::Output => format!("output effects ({count})"),
         };
         let Some(effects) = self.effects_mut(owner) else { return };
-        let frame_resp = egui::Frame::group(ui.style()).show(ui, |ui| {
+        // the stack (= drop area) reaches down to the bottom of the visible column
+        let frame = egui::Frame::group(ui.style());
+        let margins = frame.total_margin().sum().y + 2.0;
+        let fill_h = (ui.clip_rect().bottom() - ui.cursor().top() - margins).max(0.0);
+        let frame_resp = frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
+            ui.set_min_height(fill_h);
             ui.label(egui::RichText::new(header).weak());
             for (i, fx) in effects.iter_mut().enumerate() {
                 let row = ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    let handle = ui.add(egui::Label::new("≡").sense(Sense::drag())).on_hover_text("drag to reorder");
+                    let handle = widgets::drag_handle(ui).on_hover_text("drag to reorder, or onto the other effect stack (clip <-> output)");
+                    if i == 0 && matches!(owner, Owner::Instance(_)) {
+                        first_handle = Some(handle.rect.center());
+                    }
                     handle.dnd_set_drag_payload(Drag::Effect(owner, i));
                     widgets::check(ui, &mut fx.active, ACCENT).on_hover_text("effect on/off");
                     let arrow = if fx.open { "▾" } else { "▸" };
@@ -977,6 +987,7 @@ impl App {
                 if let Some(p) = row.response.dnd_release_payload::<Drag>() {
                     match &*p {
                         Drag::Effect(o, from) if *o == owner => ev_move = Some((*from, i)),
+                        Drag::Effect(o, from) => ev_transfer = Some((*o, *from, Some(i))),
                         Drag::File(path, FileKind::Effect) => ev_add = Some(path.clone()),
                         _ => {}
                     }
@@ -999,13 +1010,29 @@ impl App {
             }
         });
         let resp = frame_resp.response;
-        if resp.dnd_hover_payload::<Drag>().is_some_and(|p| matches!(&*p, Drag::File(_, FileKind::Effect))) {
+        if let Some(t) = self.selftest.as_mut() {
+            match owner {
+                Owner::Instance(_) => t.fx_handle = first_handle.or(t.fx_handle),
+                Owner::Output => t.out_fx = Some(resp.rect),
+            }
+        }
+        let from_elsewhere = |p: &Drag| match p {
+            Drag::File(_, FileKind::Effect) => true,
+            Drag::Effect(o, _) => *o != owner,
+            _ => false,
+        };
+        if resp.dnd_hover_payload::<Drag>().is_some_and(|p| from_elsewhere(&p)) {
             widgets::outline(ui, resp.rect, 2.0, ACCENT);
         }
         if let Some(p) = resp.dnd_release_payload::<Drag>() {
-            if let Drag::File(path, FileKind::Effect) = &*p {
-                ev_add = Some(path.clone());
+            match &*p {
+                Drag::File(path, FileKind::Effect) => ev_add = Some(path.clone()),
+                Drag::Effect(o, from) if *o != owner => ev_transfer = Some((*o, *from, None)),
+                _ => {}
             }
+        }
+        if let Some((from_owner, from, at)) = ev_transfer {
+            self.transfer_effect(from_owner, from, owner, at);
         }
         if let Some(effects) = self.effects_mut(owner) {
             if let Some(i) = ev_remove {
@@ -1019,6 +1046,26 @@ impl App {
         }
         if let Some(p) = ev_add {
             self.add_effect(owner, &p);
+        }
+    }
+
+    /// Move an effect with all its settings between a clip and the output effects.
+    fn transfer_effect(&mut self, from: Owner, idx: usize, to: Owner, at: Option<usize>) {
+        if from == to {
+            return;
+        }
+        let full = match to {
+            Owner::Instance(id) => self.s.find(id).is_some_and(|i| i.effects.len() >= MAX_EFFECTS),
+            Owner::Output => false,
+        };
+        if full {
+            self.set_status(format!("max {MAX_EFFECTS} effects per clip"));
+            return;
+        }
+        let Some(fx) = self.effects_mut(from).and_then(|v| (idx < v.len()).then(|| v.remove(idx))) else { return };
+        if let Some(target) = self.effects_mut(to) {
+            let at = at.unwrap_or(target.len()).min(target.len());
+            target.insert(at, fx);
         }
     }
 
@@ -1523,7 +1570,7 @@ impl eframe::App for App {
             ui.set_min_width(ui.available_width());
             // preview stays on top, the rest scrolls below it
             if let Some(id) = self.prepare_detail_header(ui, frame) {
-                ui.separator();
+                ui.add_space(4.0);
                 egui::ScrollArea::vertical().id_salt("detail").auto_shrink([false, false]).show(ui, |ui| {
                     self.prepare_detail_body(ui, id);
                 });
@@ -1537,7 +1584,6 @@ impl eframe::App for App {
             egui::ScrollArea::vertical().id_salt("mixout").auto_shrink([false, false]).show(ui, |ui| {
                 self.col_mixer(ui, frame);
                 ui.add_space(6.0);
-                ui.separator();
                 self.col_output(ui);
             });
         });
@@ -1560,6 +1606,11 @@ impl eframe::App for App {
             _ => None,
         });
         let pending = self.r.as_ref().map(|r| r.pending_scrub.len()).unwrap_or(0);
+        if std::env::var("VIDEOPING_SELFTEST_FX").is_ok() {
+            self.selftest_fx_transfer(raw);
+            return;
+        }
+        let _ = ctx;
         let l2 = (self.s.layers[1].mix.mix_type, self.s.selected_layer);
         let selected = self.s.selected_instance;
         let Some(t) = self.selftest.as_mut() else { return };
@@ -1748,6 +1799,9 @@ struct SelfTest {
     clear_btn: Option<egui::Pos2>,
     /// rect of the brightness slider (blackout -> fade in test)
     brightness_slider: Option<Rect>,
+    /// "≡" handle of the first clip effect / output effect stack (effect transfer test)
+    fx_handle: Option<egui::Pos2>,
+    out_fx: Option<Rect>,
     /// (video frames, ui frames) at t = 2 s, ui frame counter
     at2s: Option<(u64, u64)>,
     ui_frames: u64,
@@ -1809,6 +1863,35 @@ fn selftest_session(t: &SelfTest) -> Session {
 }
 
 impl App {
+    /// VIDEOPING_SELFTEST_FX: drag the first clip effect by its handle onto the output effects.
+    fn selftest_fx_transfer(&mut self, raw: &mut egui::RawInput) {
+        let counts = |s: &Session| {
+            let clip = s.selected_instance.and_then(|id| s.find(id)).map(|i| i.effects.len()).unwrap_or(0);
+            (clip, s.output_effects.len())
+        };
+        let (clip_n, out_n) = counts(&self.s);
+        let Some(t) = self.selftest.as_mut() else { return };
+        let (Some(h), Some(out)) = (t.fx_handle, t.out_fx) else { return };
+        if t.start.elapsed().as_secs_f32() < 2.0 || t.drag_step > 16 {
+            return;
+        }
+        let target = out.center();
+        let pos = |k: f32| h + (target - h) * k;
+        let btn = |p: egui::Pos2, pressed| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        match t.drag_step {
+            0 => {
+                eprintln!("selftest fx transfer: before clip effects = {clip_n}, output effects = {out_n}");
+                raw.events.push(egui::Event::PointerMoved(h));
+            }
+            1 => raw.events.push(btn(h, true)),
+            2..=13 => raw.events.push(egui::Event::PointerMoved(pos((t.drag_step - 1) as f32 / 12.0))),
+            14 => raw.events.push(btn(target, false)),
+            16 => eprintln!("selftest fx transfer: after  clip effects = {clip_n}, output effects = {out_n} (expected one moved)"),
+            _ => {}
+        }
+        t.drag_step += 1;
+    }
+
     fn selftest_step(&mut self, ctx: &egui::Context, gl: &glow::Context) {
         let Some(t) = self.selftest.as_mut() else { return };
         let secs = t.start.elapsed().as_secs_f32();

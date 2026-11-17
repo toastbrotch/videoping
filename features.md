@@ -141,6 +141,13 @@ the prepare area uses two columns (see "layout of the tab live"):
 
 - effects (layering top-down, max 8 per clip)
   - reorder: drag & drop
+  - drag handle "≡": button-sized grab area (26x18) at the start of the effect row, hand cursor
+  - the effect stack (clip effects and output effects) reaches down to the bottom of its column: the whole empty space below is a drop area
+  - no horizontal lines in the prepare detail (below the name / duplicate row, between the clip interface and the clip effects)
+    nor between the mixer layers and the output effects
+  - move to the output effects and back: drag the "≡" handle onto the other effect stack (onto a row = insert there,
+    onto the empty area = append); the effect keeps all its settings (parameters, ranges, animation, mix, r/g/b);
+    a clip that already has 8 effects refuses it
   - remove: small x on the effect row
   - active/inactive
   - mix-type, R G B and mix slider are always visible, also when the effect is folded in
@@ -235,6 +242,7 @@ visuals:
 ## output effects (layering top-down)
 - multiple effects, they work exactly like the effects in the prepare lane:
   - active/inactive, reorder by drag & drop, remove with x
+  - can be dragged to the selected clip's effect stack and back (keeps all settings)
   - all parameters with range sliders (pause/forward/backward/jumpcut, loop/once/bounce, free/bpm speed, ½x/2x)
   - mix-type, mix percentage
   - r, g, b channel

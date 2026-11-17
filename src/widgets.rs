@@ -29,6 +29,21 @@ pub fn btn(ui: &mut Ui, text: &str) -> egui::Response {
     ui.add(egui::Button::new(egui::RichText::new(text).size(BTN_TEXT)).min_size(BTN))
 }
 
+/// Drag handle ("≡") of an effect row: button-sized grab area, hand cursor.
+pub fn drag_handle(ui: &mut Ui) -> egui::Response {
+    let (rect, r) = ui.allocate_exact_size(vec2(26.0, BTN.y), Sense::drag());
+    if r.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    } else if r.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    let v = ui.style().interact(&r);
+    let p = ui.painter();
+    p.rect_filled(rect, BTN_RADIUS as f32, v.weak_bg_fill);
+    p.text(rect.center(), egui::Align2::CENTER_CENTER, "≡", egui::FontId::proportional(17.0), v.fg_stroke.color);
+    r
+}
+
 /// Big checkbox (18x18): filled with `on_color` and a check mark when on.
 /// Used for effects (active) and mixer layers (on).
 pub fn check(ui: &mut Ui, on: &mut bool, on_color: Color32) -> egui::Response {
