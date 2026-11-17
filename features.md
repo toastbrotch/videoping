@@ -228,7 +228,12 @@ visuals:
 ## output options (fold open)
   - placed in column 2, below the patch-bay
   - resolution: fullHD (default)
-  - screen
+  - frame rate: 25 / 30 / 50 / 60 (default 60) for screen and NDI output
+    - video (instances, mixer, output, NDI) is rendered at this rate, the ui repaints at the display rate
+    - NDI announces this frame rate
+  - screen: buttons 1, 2, 3 ...; the fullscreen output window goes to this screen (also on Wayland)
+    - "connected: eDP-1, HDMI-A-1" shows the connected outputs as a hint (their order can differ from the numbers)
+  - output window on/off, fullscreen on the chosen screen (F / double-click in the output window)
   - ndi name
   - NDI library folder (folder with libndi.so.6, saved; empty = default places)
 
@@ -269,6 +274,19 @@ visuals:
   - uInstanceSeed is saved, so an instance looks the same after save/load
 - parameter LABEL from the isf header is shown in the ui (falls back to NAME)
 
+
+## audio
+- no audio: mp4 clips play without sound, no audio input / audio-reactive effects
+
+## gpu (hybrid laptops)
+- the gpu in use is shown in the output options ("gpu: ...") and printed at start
+- option "render on NVIDIA GPU (applies on restart)" in the output options, or start with `--nvidia`:
+  videoping restarts itself once with PRIME render offload
+- measured on the Pop!_OS laptop (Wayland, 120 Hz 3K panel): native Wayland ~53 fps (Intel) / 30 fps (NVIDIA);
+  X11 (XWayland) 60 fps on both but the ui is upscaled (blurry) on the HiDPI panel — open decision
+
+## platform
+- Linux only for now (no Windows / macOS builds). The code still has Linux-specific bits (libndi.so names / paths, DejaVu font paths); a port would need those plus native CI builds.
 
 ## stack
 - ui: egui / eframe (glow renderer), the same OpenGL context renders the video and the ui

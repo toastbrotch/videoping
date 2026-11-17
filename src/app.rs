@@ -55,6 +55,17 @@ pub struct App {
     output_aspect: f32,
     /// available widths of column 3 / column 4 (last frame): both previews get the same size
     preview_avail: [f32; 2],
+    /// next due time of a video frame (output frame rate)
+    next_video: Option<Instant>,
+    /// rendered video frames (self-test statistics)
+    video_frames: u64,
+    /// OpenGL renderer string of the gpu in use
+    gpu_name: String,
+    /// connected screens (drm connector names), refreshed every few seconds
+    screens: Vec<String>,
+    screens_read: Option<Instant>,
+    /// (fullscreen, screen) last applied to the output window
+    applied_output: Option<(bool, usize)>,
     /// NDI source discovery (started once libndi is loaded)
     ndi_finder: Option<crate::ndi::NdiFinder>,
     ndi_finder_try: Option<Instant>,
@@ -143,6 +154,9 @@ impl App {
             drag_step: 0,
             in_before: None,
             l2_mix: None,
+            closing: false,
+            at2s: None,
+            ui_frames: 0,
         });
         let (s, status) = if let Some(t) = &selftest {
             (selftest_session(t), "selftest".to_string())
@@ -181,6 +195,12 @@ impl App {
             preview_avail: [640.0; 2],
             ndi_finder: None,
             ndi_finder_try: None,
+            next_video: None,
+            video_frames: 0,
+            gpu_name: String::new(),
+            screens: vec![],
+            screens_read: None,
+            applied_output: None,
         }
     }
 
@@ -295,23 +315,37 @@ impl App {
     // ------------------------------------------------------------------ frame
 
     fn render(&mut self, gl: &std::sync::Arc<glow::Context>) {
-        let now = Instant::now();
-        let dt = now.duration_since(self.last).as_secs_f32().min(0.1);
-        self.last = now;
-        let beat_prev = self.beat;
-        self.beat += dt as f64 * self.s.bpm as f64 / 60.0;
-
         let (w, h) = (self.s.output.width as i32, self.s.output.height as i32);
         if self.r.is_none() {
             use glow::HasContext;
             let (vendor, renderer) = unsafe { (gl.get_parameter_string(glow::VENDOR), gl.get_parameter_string(glow::RENDERER)) };
             eprintln!("gpu: {renderer} ({vendor})");
             self.set_status(format!("gpu: {renderer}"));
+            self.gpu_name = renderer;
         }
+        let fps = self.s.output.fps.clamp(1, 240);
         let r = self.r.get_or_insert_with(|| Renderer::new(gl, w, h));
         r.resize(gl, w, h);
-        r.set_ndi(self.s.output.ndi_enabled, &self.s.output.ndi_name, &self.s.output.ndi_lib_dir, 60);
+        r.set_ndi(self.s.output.ndi_enabled, &self.s.output.ndi_name, &self.s.output.ndi_lib_dir, fps as i32);
         self.output_aspect = w as f32 / h as f32;
+
+        // output frame rate: video (instances, mixer, output, NDI) is rendered at the chosen fps,
+        // the ui itself repaints at the display rate
+        let now = Instant::now();
+        let interval = std::time::Duration::from_secs_f64(1.0 / fps as f64);
+        let due = self.next_video.unwrap_or(now);
+        // up to half a frame early is fine: ui repaints come at the display rate, and the
+        // average stays exact because `due` advances by exactly one interval per frame
+        if now + interval / 2 < due {
+            return;
+        }
+        // keep the average rate exact; resync after a stall
+        self.next_video = Some(if now.duration_since(due) > interval * 2 { now + interval } else { due + interval });
+        let dt = now.duration_since(self.last).as_secs_f32().min(0.1);
+        self.last = now;
+        self.video_frames += 1;
+        let beat_prev = self.beat;
+        self.beat += dt as f64 * self.s.bpm as f64 / 60.0;
 
         // NDI discovery: start as soon as libndi can be loaded (retry every 5 s)
         if self.ndi_finder.is_none() && self.ndi_finder_try.is_none_or(|t| t.elapsed().as_secs() >= 5) {
@@ -1057,6 +1091,13 @@ impl App {
 
     /// output options (column 2, below the patch-bay)
     fn section_output_options(&mut self, ui: &mut Ui) {
+        // connected screens (refreshed every 3 s: projectors get plugged in during setup)
+        if self.screens_read.is_none_or(|t| t.elapsed().as_secs() >= 3) {
+            self.screens_read = Some(Instant::now());
+            self.screens = connected_screens();
+        }
+        let screens = self.screens.clone();
+        let gpu = self.gpu_name.clone();
         egui::CollapsingHeader::new("output options").default_open(false).show(ui, |ui| {
             let o = &mut self.s.output;
             let res = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
@@ -1068,9 +1109,31 @@ impl App {
                     }
                 }
             });
+            ui.horizontal(|ui| {
+                ui.label("frame rate");
+                ui.spacing_mut().item_spacing.x = 2.0;
+                for f in [25, 30, 50, 60] {
+                    if widgets::choice(ui, o.fps == f, &f.to_string()).on_hover_text("output frame rate (screen + NDI)").clicked() {
+                        o.fps = f;
+                    }
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("screen");
+                ui.spacing_mut().item_spacing.x = 2.0;
+                let n = screens.len().max(o.screen + 1).max(1);
+                for i in 0..n {
+                    if widgets::choice(ui, o.screen == i, &(i + 1).to_string()).on_hover_text("fullscreen output goes to this screen").clicked() {
+                        o.screen = i;
+                    }
+                }
+            });
+            if !screens.is_empty() {
+                ui.label(egui::RichText::new(format!("connected: {}", screens.join(", "))).weak())
+                    .on_hover_text("names from the system; their order can differ from the screen numbers");
+            }
             ui.checkbox(&mut o.window_open, "output window");
-            ui.add_enabled(o.window_open, egui::Checkbox::new(&mut o.fullscreen, "fullscreen (F in output window)"));
-            ui.label(egui::RichText::new("screen: move the output window to the screen, then fullscreen").weak());
+            ui.add_enabled(o.window_open, egui::Checkbox::new(&mut o.fullscreen, "fullscreen on the chosen screen (F / double-click in output window)"));
             ui.checkbox(&mut o.ndi_enabled, "NDI output");
             ui.horizontal(|ui| {
                 ui.label("ndi name");
@@ -1089,6 +1152,13 @@ impl App {
                 ui.colored_label(Color32::RED, e);
             } else if let Some(n) = self.r.as_ref().and_then(|r| r.ndi.as_ref()) {
                 ui.label(egui::RichText::new("NDI sending").color(Color32::GREEN)).on_hover_text(&n.lib_path);
+            }
+            ui.separator();
+            ui.label(egui::RichText::new(format!("gpu: {gpu}")).weak());
+            if nvidia_available() {
+                let o = &mut self.s.output;
+                ui.checkbox(&mut o.prefer_nvidia, "render on NVIDIA GPU (applies on restart)")
+                    .on_hover_text("restarts itself with PRIME render offload; one-off: start with --nvidia");
             }
         });
     }
@@ -1129,9 +1199,12 @@ impl App {
         let fullscreen = self.s.output.fullscreen;
         let mut close = false;
         let mut toggle_fs = false;
+        let screen = self.s.output.screen;
+        let mut builder = egui::ViewportBuilder::default().with_title("videoping output").with_inner_size([960.0, 540.0]);
+        builder = if fullscreen { builder.with_monitor(screen) } else { builder.with_fullscreen(false) };
         ctx.show_viewport_immediate(
             vid,
-            egui::ViewportBuilder::default().with_title("videoping output").with_inner_size([960.0, 540.0]).with_fullscreen(fullscreen),
+            builder,
             |ui, _class| {
                 let rect = ui.max_rect();
                 let full = ui.ctx().content_rect();
@@ -1156,12 +1229,18 @@ impl App {
         if close {
             self.s.output.window_open = false;
             self.s.output.fullscreen = false;
+            self.applied_output = None;
+            return;
         }
         if toggle_fs {
             self.s.output.fullscreen = !self.s.output.fullscreen;
         }
-        if self.s.output.fullscreen != fullscreen || toggle_fs {
-            ctx.send_viewport_cmd_to(vid, egui::ViewportCommand::Fullscreen(self.s.output.fullscreen));
+        // fullscreen on the chosen screen / back to a window
+        let want = (self.s.output.fullscreen, self.s.output.screen);
+        if self.applied_output != Some(want) {
+            let cmd = if want.0 { egui::ViewportCommand::SetMonitor(want.1) } else { egui::ViewportCommand::Fullscreen(false) };
+            ctx.send_viewport_cmd_to(vid, cmd);
+            self.applied_output = Some(want);
         }
     }
 }
@@ -1234,6 +1313,31 @@ fn param_label(ui: &mut Ui, label: &str) {
         ui.set_width(PARAM_LABEL_W);
         ui.add(egui::Label::new(egui::RichText::new(label).size(widgets::BTN_TEXT)).wrap()).on_hover_text(label);
     });
+}
+
+/// Connected screens (DRM connectors with status "connected"), e.g. ["eDP-1", "HDMI-A-1"].
+fn connected_screens() -> Vec<String> {
+    let mut out = vec![];
+    if let Ok(rd) = std::fs::read_dir("/sys/class/drm") {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            // card1-HDMI-A-1 -> HDMI-A-1 (skip card1, renderD128, ...)
+            let Some((card, conn)) = name.split_once('-') else { continue };
+            if !card.starts_with("card") {
+                continue;
+            }
+            if std::fs::read_to_string(e.path().join("status")).is_ok_and(|s| s.trim() == "connected") {
+                out.push(conn.to_string());
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Is there an NVIDIA GL/EGL driver that PRIME render offload can use?
+pub fn nvidia_available() -> bool {
+    std::path::Path::new(crate::NVIDIA_EGL_VENDOR).exists()
 }
 
 /// Width for a text field followed by a button of width `button_w` on the same line, so the line
@@ -1447,6 +1551,10 @@ struct SelfTest {
     in_before: Option<f32>,
     /// top-left of L2's mix buttons (for the simulated click on "Lk")
     l2_mix: Option<egui::Pos2>,
+    closing: bool,
+    /// (video frames, ui frames) at t = 2 s, ui frame counter
+    at2s: Option<(u64, u64)>,
+    ui_frames: u64,
 }
 
 fn selftest_session(t: &SelfTest) -> Session {
@@ -1498,6 +1606,9 @@ fn selftest_session(t: &SelfTest) -> Session {
     s.layers[1].instance = Some(clip_id);
     s.selected_instance = Some(clip_id);
     s.output.ndi_enabled = std::env::var("VIDEOPING_SELFTEST_NDI").is_ok();
+    if let Some(fps) = std::env::var("VIDEOPING_SELFTEST_FPS").ok().and_then(|f| f.parse().ok()) {
+        s.output.fps = fps;
+    }
     s
 }
 
@@ -1533,7 +1644,21 @@ impl App {
                 let _ = std::fs::write(dir.join(format!("ui_{}x{}.rgba", img.size[0], img.size[1])), bytes);
             });
         }
-        if secs > 6.5 {
+        t.ui_frames += 1;
+        if secs >= 2.0 && t.at2s.is_none() {
+            t.at2s = Some((self.video_frames, t.ui_frames));
+        }
+        if secs > 6.5 && !t.closing {
+            t.closing = true;
+            let (v0, u0) = t.at2s.unwrap_or((0, 0));
+            let span = secs - 2.0;
+            eprintln!(
+                "selftest fps (2 s .. {:.1} s): video {:.1} fps (output set to {}), ui {:.1} fps",
+                secs,
+                (self.video_frames - v0) as f32 / span,
+                self.s.output.fps,
+                (t.ui_frames - u0) as f32 / span
+            );
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }

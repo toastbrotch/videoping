@@ -128,8 +128,27 @@ default. videoping logs the GPU it uses at startup (stderr and the top bar statu
 gpu: Mesa Intel(R) Iris(R) Xe Graphics (RPL-P) (Intel)
 ```
 
-To render on the NVIDIA card, start it with PRIME render offload. Both variable sets are needed:
-eframe uses EGL on Wayland and GLX on X11.
+The easiest way to render on the NVIDIA card:
+
+- output options → **render on NVIDIA GPU (applies on restart)**, then restart videoping, or
+- one-off: `videoping --nvidia`
+
+videoping then restarts itself once with PRIME render offload; the output options show
+`gpu: NVIDIA GeForce ...`.
+
+**Measured on this laptop (Pop!_OS, Wayland, 120 Hz 3K panel), output set to 60 fps:**
+
+| | native Wayland (default) | X11 / XWayland |
+|---|---|---|
+| Intel | ~53 fps, sharp | 60 fps, ui upscaled (blurry) |
+| NVIDIA (offload) | **30 fps**, sharp | 60 fps, ui upscaled (blurry) |
+
+So on the laptop screen, NVIDIA under Wayland is *slower* than Intel: every frame is copied to
+the Intel GPU that drives the panel. To try X11: `env -u WAYLAND_DISPLAY videoping` (or with
+`--nvidia`). For gigs with a projector on the NVIDIA-wired port, `system76-power graphics nvidia`
+(see below) avoids the copy completely.
+
+Manually, the same as `--nvidia` (both variable sets are needed: EGL on Wayland, GLX on X11):
 
 ```sh
 __NV_PRIME_RENDER_OFFLOAD=1 \

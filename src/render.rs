@@ -623,7 +623,7 @@ impl Renderer {
         if self.ndi_lib_dir != lib_dir {
             self.ndi_lib_dir = lib_dir.to_string();
         }
-        let want = enabled.then(|| format!("{name}\u{0}{lib_dir}"));
+        let want = enabled.then(|| format!("{name}\u{0}{lib_dir}\u{0}{fps}"));
         if want == self.ndi_key {
             return;
         }

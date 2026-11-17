@@ -334,6 +334,19 @@ pub struct OutputOptions {
     /// folder with libndi.so.6 (empty = search the default places)
     #[serde(default)]
     pub ndi_lib_dir: String,
+    /// output frame rate (25 / 30 / 50 / 60)
+    #[serde(default = "default_fps")]
+    pub fps: u32,
+    /// screen index for the fullscreen output window (0 = first)
+    #[serde(default)]
+    pub screen: usize,
+    /// start on the discrete NVIDIA GPU (PRIME render offload, applied at program start)
+    #[serde(default)]
+    pub prefer_nvidia: bool,
+}
+
+fn default_fps() -> u32 {
+    60
 }
 
 impl Default for OutputOptions {
@@ -346,6 +359,9 @@ impl Default for OutputOptions {
             ndi_enabled: false,
             ndi_name: "videoping".into(),
             ndi_lib_dir: String::new(),
+            fps: 60,
+            screen: 0,
+            prefer_nvidia: false,
         }
     }
 }
