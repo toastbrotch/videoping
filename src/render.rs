@@ -17,6 +17,8 @@ pub const THUMB_H: i32 = 144;
 pub struct Shader {
     pub info: Option<IsfInfo>,
     prog: Option<Program>,
+    /// bool inputs had to be declared as float (see isf::build_fragment)
+    bool_as_float: bool,
     pub error: Option<String>,
     mtime: Option<SystemTime>,
     checked: Instant,
@@ -30,20 +32,41 @@ impl Shader {
     fn load(gl: &Gl, path: &Path) -> Shader {
         let mt = mtime(path);
         let built = isf::parse_info(path).and_then(|(info, body)| {
-            let fs = isf::build_fragment(&info, &body);
-            let vs = isf::build_vertex(&info, isf::custom_vertex(path).as_deref());
-            match Program::new(gl, &vs, &fs) {
-                Ok(p) => Ok((info, p)),
-                Err(e) => Err(format!("{}: {e}", info.name)),
+            let custom_vs = isf::custom_vertex(path);
+            let compile = |bool_as_float| {
+                let vs = isf::build_vertex(&info, custom_vs.as_deref(), bool_as_float);
+                let fs = isf::build_fragment(&info, &body, bool_as_float);
+                Program::new(gl, &vs, &fs)
+            };
+            match compile(false) {
+                Ok(p) => Ok((info, p, false)),
+                Err(e) => {
+                    let has_bool = info.inputs.iter().any(|i| matches!(i.kind, InputKind::Bool { .. } | InputKind::Event));
+                    let retry = has_bool
+                        .then(|| compile(true).ok())
+                        .flatten();
+                    match retry {
+                        Some(p) => Ok((info, p, true)),
+                        None => Err(format!("{}: {e}", info.name)),
+                    }
+                }
             }
         });
         match built {
-            Ok((info, prog)) => Shader { info: Some(info), prog: Some(prog), error: None, mtime: mt, checked: Instant::now() },
+            Ok((info, prog, bool_as_float)) => Shader {
+                info: Some(info),
+                prog: Some(prog),
+                bool_as_float,
+                error: None,
+                mtime: mt,
+                checked: Instant::now(),
+            },
             Err(e) => {
                 eprintln!("isf: {e}");
                 Shader {
                     info: isf::parse_info(path).ok().map(|x| x.0),
                     prog: None,
+                    bool_as_float: false,
                     error: Some(e),
                     mtime: mt,
                     checked: Instant::now(),
@@ -301,6 +324,7 @@ impl Renderer {
                 }
             }
             let shader = self.shaders.get_mut(path).unwrap();
+            let bool_as_float = shader.bool_as_float;
             let prog = shader.prog.as_mut().unwrap();
             match &pass.target {
                 Some(t) => state.targets[t][1].bind(gl),
@@ -323,7 +347,11 @@ impl Renderer {
                         prog.i1(gl, &inp.name, a[0].value.round() as i32)
                     }
                     (InputKind::Bool { .. } | InputKind::Event, Some(ParamValue::Bool(v))) => {
-                        prog.i1(gl, &inp.name, *v as i32)
+                        if bool_as_float {
+                            prog.f1(gl, &inp.name, *v as i32 as f32)
+                        } else {
+                            prog.i1(gl, &inp.name, *v as i32)
+                        }
                     }
                     (InputKind::Color { .. }, Some(ParamValue::Color(c))) => prog.f4(gl, &inp.name, *c),
                     (InputKind::Point2D { .. }, Some(ParamValue::Anim(a))) if a.len() == 2 => {

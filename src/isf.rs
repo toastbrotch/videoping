@@ -239,7 +239,7 @@ fn strip_version(src: &str) -> String {
         .join("\n")
 }
 
-fn uniform_decls(info: &IsfInfo) -> String {
+fn uniform_decls(info: &IsfInfo, bool_as_float: bool) -> String {
     let mut s = String::new();
     s.push_str(
         "uniform float TIME;\nuniform float TIMEDELTA;\nuniform vec2 RENDERSIZE;\nuniform int PASSINDEX;\n\
@@ -249,6 +249,7 @@ fn uniform_decls(info: &IsfInfo) -> String {
         let ty = match i.kind {
             InputKind::Float { .. } => "float",
             InputKind::Long { .. } => "int",
+            InputKind::Bool { .. } | InputKind::Event if bool_as_float => "float",
             InputKind::Bool { .. } | InputKind::Event => "bool",
             InputKind::Color { .. } => "vec4",
             InputKind::Point2D { .. } => "vec2",
@@ -277,14 +278,16 @@ const MACROS: &str = "\
 #define IMG_NORM_PIXEL_LOD(i, c, l) textureLod(i, c, l)\n\
 #define IMG_PIXEL_LOD(i, c, l) textureLod(i, (c) / vec2(textureSize(i, 0)), l)\n";
 
-pub fn build_fragment(info: &IsfInfo, body: &str) -> String {
+/// `bool_as_float`: declare bool/event inputs as float. Fallback for shaders that
+/// compare them like floats (`if (uInvert > 0.5)`), which is an error with `uniform bool`.
+pub fn build_fragment(info: &IsfInfo, body: &str, bool_as_float: bool) -> String {
     let mut code = strip_version(body);
     code = replace_word(&code, "gl_FragColor", "isf_FragColor");
     code = code.replace("gl_FragData[0]", "isf_FragColor");
     code = replace_word(&code, "varying", "in");
     format!(
         "#version 330\nout vec4 isf_FragColor;\nin vec2 isf_FragNormCoord;\n{}{}#line 1\n{}",
-        uniform_decls(info),
+        uniform_decls(info, bool_as_float),
         MACROS,
         code
     )
@@ -292,7 +295,7 @@ pub fn build_fragment(info: &IsfInfo, body: &str) -> String {
 
 const DEFAULT_VS_MAIN: &str = "void main() { isf_vertShaderInit(); }\n";
 
-pub fn build_vertex(info: &IsfInfo, custom: Option<&str>) -> String {
+pub fn build_vertex(info: &IsfInfo, custom: Option<&str>, bool_as_float: bool) -> String {
     let user = match custom {
         Some(src) => {
             let mut c = strip_version(src);
@@ -306,7 +309,7 @@ pub fn build_vertex(info: &IsfInfo, custom: Option<&str>) -> String {
         "#version 330\nin vec2 isf_position;\nout vec2 isf_FragNormCoord;\n{}\
          void isf_vertShaderInit() {{ gl_Position = vec4(isf_position, 0.0, 1.0); isf_FragNormCoord = isf_position * 0.5 + 0.5; }}\n\
          #line 1\n{}",
-        uniform_decls(info),
+        uniform_decls(info, bool_as_float),
         user
     )
 }
@@ -326,13 +329,13 @@ mod tests {
         let (fx, body) = parse_info(Path::new("isf-effect/gameboy-camera.fs")).unwrap();
         assert!(fx.is_effect);
         assert_eq!(fx.inputs.iter().filter(|i| i.kind != InputKind::Image).count(), 10);
-        let frag = build_fragment(&fx, &body);
+        let frag = build_fragment(&fx, &body, false);
         assert!(frag.contains("isf_FragColor = vec4(col, 1.0)"));
         assert!(!frag.contains("gl_FragColor"));
 
         let (gen_info, body) = parse_info(Path::new("isf-generator/0-id-display.fs")).unwrap();
         assert!(!gen_info.is_effect);
-        let frag = build_fragment(&gen_info, &body);
+        let frag = build_fragment(&gen_info, &body, false);
         assert!(frag.contains("uniform float uInstanceSeed;"));
         assert_eq!(classify(Path::new("isf-generator/0-id-display.fs")), Some(FileKind::Generator));
     }

@@ -61,6 +61,12 @@ pub struct App {
     next_video: Option<Instant>,
     /// rendered video frames (self-test statistics)
     video_frames: u64,
+    /// times of the video frames of the last second (fps counter in the top bar)
+    frame_times: std::collections::VecDeque<Instant>,
+    /// video frames missed since start (rendered too late by a whole interval or more)
+    frames_dropped: u64,
+    /// last time a frame was missed (the counter stays marked for a moment)
+    last_drop: Option<Instant>,
     /// OpenGL renderer string of the gpu in use
     gpu_name: String,
     /// connected screens (drm connector names), refreshed every few seconds
@@ -205,6 +211,9 @@ impl App {
             confirm_new: false,
             next_video: None,
             video_frames: 0,
+            frame_times: Default::default(),
+            frames_dropped: 0,
+            last_drop: None,
             gpu_name: String::new(),
             screens: vec![],
             screens_read: None,
@@ -346,6 +355,16 @@ impl App {
         // average stays exact because `due` advances by exactly one interval per frame
         if now + interval / 2 < due {
             return;
+        }
+        // missed frames: later than one whole interval
+        let late = now.saturating_duration_since(due);
+        if late >= interval {
+            self.frames_dropped += (late.as_secs_f64() / interval.as_secs_f64()) as u64;
+            self.last_drop = Some(now);
+        }
+        self.frame_times.push_back(now);
+        while self.frame_times.front().is_some_and(|t| now.duration_since(*t).as_secs_f32() > 1.0) {
+            self.frame_times.pop_front();
         }
         // keep the average rate exact; resync after a stall
         self.next_video = Some(if now.duration_since(due) > interval * 2 { now + interval } else { due + interval });
@@ -555,11 +574,34 @@ impl App {
                     self.confirm_new = true;
                 }
                 ui.add(egui::TextEdit::singleline(&mut self.file_path).desired_width(260.0));
+                ui.separator();
+                self.fps_counter(ui);
+                ui.separator();
                 if self.status_time.elapsed().as_secs() < 8 {
                     ui.label(egui::RichText::new(&self.status).weak());
                 }
             });
         });
+    }
+
+    /// Output frame rate: measured (last second) / target, plus dropped frames.
+    /// Grey when on target; bright with ⚠ when below or a frame was missed in the last 2 s
+    /// (no color: colors are reserved for the layers).
+    fn fps_counter(&mut self, ui: &mut Ui) {
+        let target = self.s.output.fps.clamp(1, 240);
+        let measured = self.frame_times.len() as u32;
+        let warming_up = self.frame_times.front().is_none_or(|t| t.elapsed().as_secs_f32() < 0.9);
+        let recent_drop = self.last_drop.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0);
+        let low = !warming_up && (measured as f32) < target as f32 * 0.95;
+        let bad = low || recent_drop;
+        let txt = format!("{}{measured:>3} / {target} fps", if bad { "⚠ " } else { "" });
+        let rich = egui::RichText::new(txt).monospace().size(widgets::BTN_TEXT);
+        let rich = if bad { rich.strong().color(Color32::WHITE) } else { rich.color(Color32::from_gray(150)) };
+        ui.label(rich).on_hover_text(format!(
+            "output frame rate: measured over the last second / target\nframes dropped since start: {}\n\
+             on Wayland the compositor can limit this below the target (see install.md)",
+            self.frames_dropped
+        ));
     }
 
     fn col_finder(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
@@ -1408,14 +1450,15 @@ impl App {
 fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::hash::Hash + Copy + std::fmt::Debug) {
     for inp in &info.inputs {
         let Some(p) = params.iter_mut().find(|p| p.name == inp.name) else { continue };
-        ui.push_id((salt, &inp.name), |ui| match (&inp.kind, &mut p.value) {
+        let row = ui.push_id((salt, &inp.name), |ui| match (&inp.kind, &mut p.value) {
             (InputKind::Float { min, max, .. }, ParamValue::Anim(a)) => anim_ui(ui, &inp.label, &mut a[0], *min, *max, false),
             (InputKind::Long { min, max, labels, .. }, ParamValue::Anim(a)) => {
                 if labels.is_empty() {
                     anim_ui(ui, &inp.label, &mut a[0], *min, *max, true)
                 } else {
-                    ui.horizontal(|ui| {
-                        ui.label(&inp.label);
+                    // same layout as the sliders: name column, then the control
+                    ui.horizontal_top(|ui| {
+                        param_label(ui, &inp.label);
                         let cur = a[0].value.round() as i32;
                         let txt = labels.iter().find(|l| l.0 == cur).map(|l| l.1.clone()).unwrap_or(cur.to_string());
                         egui::ComboBox::from_id_salt("long").selected_text(txt).show_ui(ui, |ui| {
@@ -1433,7 +1476,11 @@ fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::
                 anim_ui(ui, &format!("{} y", inp.label), &mut a[1], min[1], max[1], false);
             }
             (InputKind::Bool { .. }, ParamValue::Bool(b)) => {
-                ui.checkbox(b, &inp.label);
+                // same layout as the sliders: name column, then the control
+                ui.horizontal_top(|ui| {
+                    param_label(ui, &inp.label);
+                    widgets::check(ui, b, ACCENT);
+                });
             }
             (InputKind::Event, ParamValue::Bool(b)) => {
                 if ui.button(&inp.label).clicked() {
@@ -1441,13 +1488,27 @@ fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::
                 }
             }
             (InputKind::Color { .. }, ParamValue::Color(c)) => {
-                ui.horizontal(|ui| {
-                    ui.label(&inp.label);
+                // same layout as the sliders: name column, then the control
+                ui.horizontal_top(|ui| {
+                    param_label(ui, &inp.label);
                     ui.color_edit_button_rgba_unmultiplied(c);
                 });
             }
             _ => {}
         });
+        // right click on a parameter row (name or control): back to the default of the isf
+        // header, as freshly loaded (value, range limits, animation off)
+        if std::env::var_os("VIDEOPING_SELFTEST_RESET").is_some() {
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(("selftest_param_row", &inp.name)), row.response.rect));
+        }
+        // (rect_contains_pointer: not when a popup or dragged item lies on top of the row)
+        // on press, not on click: a click is not counted when the mouse moves a little or the
+        // button is held a bit longer
+        let right_click = ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary))
+            && ui.rect_contains_pointer(row.response.rect);
+        if right_click && let Some(d) = isf::default_params(info).into_iter().find(|d| d.name == inp.name) {
+            p.value = d.value;
+        }
     }
 }
 
@@ -1626,6 +1687,10 @@ impl eframe::App for App {
         let pending = self.r.as_ref().map(|r| r.pending_scrub.len()).unwrap_or(0);
         if std::env::var("VIDEOPING_SELFTEST_FX").is_ok() {
             self.selftest_fx_transfer(raw);
+            return;
+        }
+        if std::env::var("VIDEOPING_SELFTEST_RESET").is_ok() {
+            self.selftest_param_reset(ctx, raw);
             return;
         }
         let _ = ctx;
@@ -1830,7 +1895,9 @@ fn selftest_session(t: &SelfTest) -> Session {
     let mut rng = Rng::new();
     let root = std::env::current_dir().unwrap_or_default();
     let gen_path = root.join("isf-generator/0-id-display.fs");
-    let fx_path = root.join("isf-effect/gameboy-camera.fs");
+    let fx_path = std::env::var("VIDEOPING_SELFTEST_EFFECT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| root.join("isf-effect/gameboy-camera.fs"));
     let clip = std::env::var("VIDEOPING_SELFTEST_CLIP").map(PathBuf::from).unwrap_or_else(|_| t.dir.join("testclip.mp4"));
     let gen_info = isf::parse_info(&gen_path).expect("generator").0;
     let fx_info = isf::parse_info(&fx_path).expect("effect").0;
@@ -1910,7 +1977,56 @@ impl App {
         t.drag_step += 1;
     }
 
+    /// VIDEOPING_SELFTEST_RESET: change the first parameter of the first clip effect, then
+    /// right click its row -> back to the default.
+    fn selftest_param_reset(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let Some(t) = self.selftest.as_mut() else { return };
+        if t.start.elapsed().as_secs_f32() < 2.0 || t.drag_step > 17 {
+            return;
+        }
+        let Some(fx) = self.s.selected_instance.and_then(|id| self.s.find_mut(id)).and_then(|i| i.effects.first_mut()) else { return };
+        let Some(p) = fx.params.iter_mut().find(|p| matches!(p.value, ParamValue::Anim(_))) else { return };
+        let ParamValue::Anim(a) = &mut p.value else { return };
+        let rect: Option<Rect> = ctx.data(|d| d.get_temp(egui::Id::unique(("selftest_param_row", &p.name))));
+        let btn = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed, modifiers: Default::default() };
+        let slider_pos = |r: Rect| egui::pos2(r.left() + PARAM_LABEL_W + (r.width() - PARAM_LABEL_W) * 0.3, r.top() + widgets::BAR_H / 2.0);
+        match (t.drag_step, rect) {
+            (0, _) => {
+                a[0].lo = (a[0].lo + a[0].hi) / 2.0;
+                a[0].value = a[0].hi;
+                eprintln!("selftest param reset: {} set to value {} range {}..{}", p.name, a[0].value, a[0].lo, a[0].hi);
+            }
+            // on the slider bar itself (top of the row, right of the label column); a real
+            // press: held for some frames, the mouse moves a little
+            (2, Some(r)) => raw.events.push(egui::Event::PointerMoved(slider_pos(r))),
+            (3, Some(r)) => raw.events.push(btn(slider_pos(r), true)),
+            (4..=14, Some(r)) => raw.events.push(egui::Event::PointerMoved(slider_pos(r) + egui::vec2((t.drag_step % 3) as f32, 0.0))),
+            (15, Some(r)) => raw.events.push(btn(slider_pos(r), false)),
+            (3..=16, _) => eprintln!("selftest param reset: step {} value {}", t.drag_step, a[0].value),
+            (17, _) => eprintln!(
+                "selftest param reset: {} after right click = value {} range {}..{} (expected the default)",
+                p.name, a[0].value, a[0].lo, a[0].hi
+            ),
+            _ => {}
+        }
+        t.drag_step += 1;
+    }
+
     fn selftest_step(&mut self, ctx: &egui::Context, gl: &glow::Context) {
+        // VIDEOPING_SELFTEST_SHADERS=<dir>: compile every .fs in that folder, report, quit
+        if let (Ok(dir), Some(r)) = (std::env::var("VIDEOPING_SELFTEST_SHADERS"), self.r.as_mut()) {
+            let mut files: Vec<_> = std::fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).collect();
+            files.sort();
+            for f in files.iter().filter(|f| f.extension().is_some_and(|e| e == "fs")) {
+                r.shader_info(gl, f);
+                match r.shader_error(f) {
+                    Some(e) => eprintln!("selftest shader FAIL {}: {e}", f.display()),
+                    None => eprintln!("selftest shader ok   {}", f.display()),
+                }
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
         let Some(t) = self.selftest.as_mut() else { return };
         let secs = t.start.elapsed().as_secs_f32();
         // NDI input test: receive our own NDI output as soon as it is discovered

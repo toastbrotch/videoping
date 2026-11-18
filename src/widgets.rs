@@ -90,7 +90,7 @@ pub fn layer_color(i: usize) -> Color32 {
 /// Width of the grab handles.
 const HANDLE_W: f32 = 9.0;
 /// Height of timelines and range sliders.
-const BAR_H: f32 = 22.0;
+pub const BAR_H: f32 = 22.0;
 
 /// Grabbed part of a bar: 0 = body (scrub / set value), 1 = start "[", 2 = end "]".
 #[derive(Clone, Copy)]
@@ -150,7 +150,8 @@ impl Brackets {
 /// Press-time grab handling. Returns the active grab while the button is down on `resp`.
 fn track_grab(ui: &Ui, resp: &egui::Response, b: &Brackets, x_start: f32, x_end: f32) -> Option<Grab> {
     let id = resp.id.with("grab");
-    let down = resp.is_pointer_button_down_on();
+    // left button only (the right button resets a parameter, it must not move the value)
+    let down = resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
     let mut g: Option<(u8, f32)> = ui.data(|d| d.get_temp(id));
     if down && g.is_none() {
         if let Some(o) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos()) {

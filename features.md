@@ -54,6 +54,10 @@ everything below belongs to the tab "live".
 - new button (next to save / load): clears everything after a confirmation dialog ("clear everything" / "cancel", Esc = cancel)
   - cleared: prepare grid, mixer, effects, output effects, bpm, master
   - kept: finder folders and output options (resolution, frame rate, screen, NDI, gpu) — that is setup, not content
+- fps counter in the top bar (next to the session file, visible from every tab): "measured / target fps" of the output
+  - measured = video frames rendered in the last second; target = output options frame rate
+  - grey when on target; bright white with ⚠ when below 95 % of the target or when a frame was dropped in the last 2 s (no color: colors are reserved for the layers)
+  - hover: number of dropped frames since start (a frame counts as dropped when it is rendered a whole interval too late)
 - media (mp4, isf shaders) are referenced by path, not copied into the file
 
 # column 1
@@ -292,12 +296,17 @@ visuals:
 
 ## rendering / isf
 - existing isf files are used unchanged (no editing of shaders)
+- generator or effect is decided automatically from the isf header (isf standard): an image input named `inputImage` = effect, otherwise generator; the folder a file sits in does not matter
 - rendering with OpenGL (rust crate glow), not wgpu: isf shaders in GLSL 1.20 / ES 1.00 style (gl_FragColor, IMG_NORM_PIXEL, TIME, RENDERSIZE) run as they are
 - the host provides the standard isf uniforms (TIME, RENDERSIZE, inputImage, ...) plus the non-standard `uInstanceSeed`:
   - one fixed random value per instance (like the ISFBrowser host does), so two instances of the same shader look different
   - a duplicated instance gets a new uInstanceSeed
   - uInstanceSeed is saved, so an instance looks the same after save/load
 - parameter LABEL from the isf header is shown in the ui (falls back to NAME)
+- bool inputs are shown as the big checkbox (accent color), not as a 0..1 slider; same layout as the sliders: name in the left label column, checkbox where the slider starts
+- color inputs and dropdowns (long inputs with VALUES/LABELS): same layout, name in the left label column, control where the slider starts
+- right click on a parameter (its name or its control) resets it to the default of the isf header, as freshly loaded: value, range limits back to MIN..MAX, animation off (pause); works for effect and generator parameters
+  - bool inputs are declared as `uniform bool`; if a shader then does not compile (it compares them like floats, e.g. `if (uInvert > 0.5)`), it is compiled again with them declared as `float` (0.0 / 1.0), so such shaders still run unchanged
 
 
 ## audio

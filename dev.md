@@ -56,6 +56,9 @@ Useful env vars:
 | `GST_DEBUG=3` | GStreamer warnings (codec / decoding problems) |
 | `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (id-display generator over a clip with gameboy-camera), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, also simulates mouse input (drags the "[" limiter, clicks "Lk" of mixer layer L2, clicks an empty prepare slot, opens "new" and clicks "clear everything", blackout + click on the brightness slider) and prints `selftest drag: …` / `selftest click: …` / `selftest empty slot click: …` / `selftest new: …` / `selftest fade in: …`, quits after ~7 s. Never touches the autosave or the stored ui layout. |
 | `VIDEOPING_SELFTEST_CLIP=<mp4>` | clip for the self-test (default `<dir>/testclip.mp4`) |
+| `VIDEOPING_SELFTEST_EFFECT=<fs>` | first (open) clip effect of the self-test (default `isf-effect/gameboy-camera.fs`) |
+| `VIDEOPING_SELFTEST_RESET=1` | change the first parameter of the first clip effect, right click its row, print value before / after (expected: default) |
+| `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
 | `VIDEOPING_SELFTEST_FX=1` | instead of the default input script: drags the first clip effect by its "≡" handle onto the output effects and prints the effect counts before / after |
 | `VIDEOPING_SELFTEST_NDI=1` | self-test also sends NDI and receives its own output as NDI input (slot 17, selected) |
