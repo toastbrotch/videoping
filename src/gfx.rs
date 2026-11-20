@@ -16,17 +16,26 @@ pub struct Target {
 
 impl Target {
     pub fn new(gl: &Gl, w: i32, h: i32) -> Target {
+        Target::with_format(gl, w, h, glow::RGBA8, glow::RGBA)
+    }
+
+    /// One byte per pixel (recording: NV12 planes).
+    pub fn new_r8(gl: &Gl, w: i32, h: i32) -> Target {
+        Target::with_format(gl, w, h, glow::R8, glow::RED)
+    }
+
+    fn with_format(gl: &Gl, w: i32, h: i32, internal: u32, format: u32) -> Target {
         unsafe {
             let tex = gl.create_texture().expect("texture");
             gl.bind_texture(glow::TEXTURE_2D, Some(tex));
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGBA8 as i32,
+                internal as i32,
                 w,
                 h,
                 0,
-                glow::RGBA,
+                format,
                 glow::UNSIGNED_BYTE,
                 glow::PixelUnpackData::Slice(None),
             );
@@ -305,11 +314,35 @@ uniform float brightness;
 void main() { o = vec4(texture(src, uv).rgb * brightness, 1.0); }
 ";
 
+/// RGBA -> NV12 (BT.709, limited range) for recording, into an R8 target of w x h*3/2:
+/// rows 0..h = Y, rows h.. = interleaved U V of 2x2 blocks. Row 0 is the top of the image
+/// (glReadPixels reads it first), the source texture has row 0 at the bottom.
+const NV12_FS: &str = "#version 330
+out vec4 o;
+uniform sampler2D src;
+uniform ivec2 size;
+const vec3 K = vec3(0.2126, 0.7152, 0.0722);
+vec3 px(ivec2 p) { return texelFetch(src, ivec2(p.x, size.y - 1 - p.y), 0).rgb; }
+void main() {
+    ivec2 f = ivec2(gl_FragCoord.xy);
+    if (f.y < size.y) {
+        o = vec4(vec3((16.0 + 219.0 * dot(px(f), K)) / 255.0), 1.0);
+        return;
+    }
+    ivec2 p = ivec2((f.x / 2) * 2, (f.y - size.y) * 2);
+    vec3 c = (px(p) + px(p + ivec2(1, 0)) + px(p + ivec2(0, 1)) + px(p + ivec2(1, 1))) * 0.25;
+    float y = dot(c, K);
+    float v = (f.x % 2 == 0) ? (c.b - y) / 1.8556 : (c.r - y) / 1.5748;
+    o = vec4(vec3((128.0 + 224.0 * v) / 255.0), 1.0); // alpha 1: blending may still be on
+}
+";
+
 pub struct Builtins {
     pub quad: Quad,
     pub blit: Program,
     pub mix: Program,
     pub master: Program,
+    pub nv12: Program,
 }
 
 impl Builtins {
@@ -319,6 +352,7 @@ impl Builtins {
             blit: Program::new(gl, VS, BLIT_FS).expect("blit shader"),
             mix: Program::new(gl, VS, MIX_FS).expect("mix shader"),
             master: Program::new(gl, VS, MASTER_FS).expect("master shader"),
+            nv12: Program::new(gl, VS, NV12_FS).expect("nv12 shader"),
         }
     }
 
@@ -347,6 +381,17 @@ impl Builtins {
         self.mix.i1(gl, "mixType", mix.mix_type.shader_id());
         self.mix.f1(gl, "amount", mix.amount);
         self.mix.f3(gl, "rgb", mix.rgb.map(|b| if b { 1.0 } else { 0.0 }));
+        self.quad.draw(gl);
+    }
+
+    /// `src` (w x h RGBA) -> `dst` (R8, w x h*3/2) as NV12.
+    pub fn nv12(&mut self, gl: &Gl, src: glow::Texture, w: i32, h: i32, dst: &Target) {
+        dst.bind(gl);
+        self.nv12.use_prog(gl);
+        self.nv12.tex(gl, "src", 0, Some(src));
+        if let Some(l) = self.nv12.loc(gl, "size") {
+            unsafe { gl.uniform_2_i32(Some(&l), w, h) };
+        }
         self.quad.draw(gl);
     }
 

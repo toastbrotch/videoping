@@ -1,7 +1,7 @@
 //! Custom widgets: range slider, animation controls, clip timeline, small toggles.
 
 use crate::state::{AnimParam, ClipTransport, LoopMode, Mix, MixType, PlayMode, Speed};
-use egui::{pos2, vec2, Color32, Rect, Sense, Stroke, StrokeKind, Ui};
+use egui::{pos2, vec2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 /// Accent color (selected buttons, limiters, range sliders, effect checkbox): muted plum #8B4A87,
 /// chosen to sit in the hue gap furthest away from the layer colors (blue, green, orange).
@@ -375,4 +375,28 @@ pub fn fit(rect: Rect, aspect: f32) -> Rect {
 /// Rectangle frame around a rect.
 pub fn outline(ui: &Ui, rect: Rect, width: f32, color: Color32) {
     ui.painter().rect_stroke(rect, 2.0, Stroke::new(width, color), StrokeKind::Inside);
+}
+
+/// Size of the resource meter (3 bars).
+pub const METER_SIZE: Vec2 = vec2(13.0, 11.0);
+
+/// Resource meter: 3 grey bars like a signal meter, `level` 1..3 of them lit
+/// (grey only: colors are reserved for the layers).
+pub fn paint_meter(p: &egui::Painter, rect: Rect, level: u8) {
+    let bw = 3.0;
+    let gap = (rect.width() - 3.0 * bw) / 2.0;
+    for i in 0..3u8 {
+        let h = rect.height() * (0.45 + 0.275 * i as f32);
+        let x = rect.left() + i as f32 * (bw + gap);
+        let bar = Rect::from_min_max(pos2(x, rect.bottom() - h), pos2(x + bw, rect.bottom()));
+        let c = if i < level { Color32::from_gray(225) } else { Color32::from_gray(75) };
+        p.rect_filled(bar, 0.0, c);
+    }
+}
+
+/// Resource meter in a layout, tooltip with the numbers.
+pub fn meter(ui: &mut Ui, level: u8, tip: &str) -> egui::Response {
+    let (rect, r) = ui.allocate_exact_size(METER_SIZE, Sense::hover());
+    paint_meter(ui.painter(), rect, level);
+    r.on_hover_text(tip)
 }

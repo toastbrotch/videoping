@@ -3,6 +3,9 @@
 mod state;
 #[path = "../src/video.rs"]
 mod video;
+#[path = "../src/meter.rs"]
+#[allow(dead_code)]
+mod meter;
 use state::*;
 fn run(name: &str, clip: &str, t: &ClipTransport, secs: f32) {
     let mut p = video::Player::new(std::path::Path::new(clip)).unwrap();

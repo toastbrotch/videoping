@@ -1,6 +1,7 @@
 //! The "live" tab: 5 columns (finder | prepare grid + master + bpm + patch-bay | prepare detail | mixer + output) + top bar.
 
 use crate::isf::{self, FileKind, InputKind, IsfInfo};
+use crate::meter::{self, Key};
 use crate::render::{FrameCtx, Renderer, PREVIEW_ID};
 use crate::state::*;
 use crate::widgets::{self, layer_color, paint_tex, ACCENT};
@@ -38,6 +39,10 @@ pub struct App {
     beat: f64,
     taps: Vec<Instant>,
     finder: Vec<FinderEntry>,
+    /// finder folders as last scanned, with the modification time of every scanned directory:
+    /// checked every 2 s, a change (new / deleted / renamed file, other folders) rescans
+    finder_watch: (Vec<PathBuf>, Vec<(PathBuf, Option<std::time::SystemTime>)>),
+    finder_checked: Instant,
     finder_search: String,
     finder_sel: Option<(PathBuf, FileKind)>,
     finder_new_root: String,
@@ -46,6 +51,12 @@ pub struct App {
     tex_ids: HashMap<glow::Texture, egui::TextureId>,
     infos: HashMap<PathBuf, IsfInfo>,
     autosave_path: PathBuf,
+    /// general config (not part of the session), saved when it changes
+    cfg: Config,
+    /// REC clicked: start (true) / stop (false), done in render() where the GL context is
+    rec_request: Option<bool>,
+    /// size of the current recording file (read once per second)
+    rec_size: (Option<Instant>, u64),
     last_saved: String,
     last_autosave: Instant,
     last_gc: Instant,
@@ -67,6 +78,8 @@ pub struct App {
     frames_dropped: u64,
     /// last time a frame was missed (the counter stays marked for a moment)
     last_drop: Option<Instant>,
+    /// process CPU / RAM (resource meters)
+    proc_stats: crate::meter::ProcStats,
     /// OpenGL renderer string of the gpu in use
     gpu_name: String,
     /// connected screens (drm connector names), refreshed every few seconds
@@ -77,6 +90,23 @@ pub struct App {
     /// NDI source discovery (started once libndi is loaded)
     ndi_finder: Option<crate::ndi::NdiFinder>,
     ndi_finder_try: Option<Instant>,
+}
+
+fn config_path() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("videoping").join("config.json")
+}
+
+fn load_config() -> Config {
+    std::fs::read_to_string(config_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+fn save_config(c: &Config) -> Result<(), String> {
+    let p = config_path();
+    if let Some(d) = p.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let txt = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
+    std::fs::write(&p, txt).map_err(|e| format!("{}: {e}", p.display()))
 }
 
 fn autosave_path() -> PathBuf {
@@ -121,11 +151,17 @@ fn save_session(s: &Session, path: &Path) -> Result<String, String> {
     Ok(txt)
 }
 
-fn scan(roots: &[PathBuf]) -> Vec<FinderEntry> {
-    fn walk(dir: &Path, depth: usize, out: &mut Vec<FinderEntry>) {
+fn mtime(p: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+}
+
+/// Files of the finder folders, plus every scanned directory with its modification time.
+fn scan_with_dirs(roots: &[PathBuf]) -> (Vec<FinderEntry>, Vec<(PathBuf, Option<std::time::SystemTime>)>) {
+    fn walk(dir: &Path, depth: usize, out: &mut Vec<FinderEntry>, dirs: &mut Vec<(PathBuf, Option<std::time::SystemTime>)>) {
         if depth > 5 {
             return;
         }
+        dirs.push((dir.to_path_buf(), mtime(dir)));
         let Ok(rd) = std::fs::read_dir(dir) else { return };
         let mut entries: Vec<_> = rd.flatten().collect();
         entries.sort_by_key(|e| e.file_name());
@@ -136,18 +172,20 @@ fn scan(roots: &[PathBuf]) -> Vec<FinderEntry> {
                 continue;
             }
             if p.is_dir() {
-                walk(&p, depth + 1, out);
+                walk(&p, depth + 1, out, dirs);
             } else if let Some(kind) = isf::classify(&p) {
                 out.push(FinderEntry { name: isf::display_name(&p), path: p, kind });
             }
         }
     }
     let mut out = vec![];
+    let mut dirs = vec![];
     for r in roots {
-        walk(r, 0, &mut out);
+        walk(r, 0, &mut out, &mut dirs);
     }
-    out
+    (out, dirs)
 }
+
 
 impl App {
     pub fn new(cc: &eframe::CreationContext) -> App {
@@ -170,6 +208,9 @@ impl App {
             out_fx: None,
             at2s: None,
             ui_frames: 0,
+            rec_step: 0,
+            rec_file: None,
+            rec_stopped_at: None,
         });
         let (s, status) = if let Some(t) = &selftest {
             (selftest_session(t), "selftest".to_string())
@@ -179,7 +220,8 @@ impl App {
                 Err(_) => (Session::default(), "new session".to_string()),
             }
         };
-        let finder = scan(&s.finder_roots);
+        let (finder, finder_dirs) = scan_with_dirs(&s.finder_roots);
+        let finder_roots = s.finder_roots.clone();
         let default_file = dirs::home_dir().unwrap_or_default().join("videoping-session.json");
         App {
             selftest,
@@ -189,6 +231,8 @@ impl App {
             last: Instant::now(),
             beat: 0.0,
             taps: vec![],
+            finder_watch: (finder_roots, finder_dirs),
+            finder_checked: Instant::now(),
             finder,
             finder_search: String::new(),
             finder_sel: None,
@@ -198,6 +242,16 @@ impl App {
             tex_ids: HashMap::new(),
             infos: HashMap::new(),
             autosave_path: ap,
+            // self-test: default config, never saved (VIDEOPING_SELFTEST_NOMETERS: meters off for
+            // the overhead comparison)
+            cfg: if std::env::var_os("VIDEOPING_SELFTEST").is_some() {
+                Config {
+                    meters: std::env::var_os("VIDEOPING_SELFTEST_NOMETERS").is_none(),
+                    record_dir: std::env::var("VIDEOPING_SELFTEST").unwrap_or_default(),
+                }
+            } else {
+                load_config()
+            },
             last_saved: String::new(),
             last_autosave: Instant::now(),
             last_gc: Instant::now(),
@@ -214,6 +268,9 @@ impl App {
             frame_times: Default::default(),
             frames_dropped: 0,
             last_drop: None,
+            rec_request: None,
+            rec_size: (None, 0),
+            proc_stats: crate::meter::ProcStats::new(),
             gpu_name: String::new(),
             screens: vec![],
             screens_read: None,
@@ -412,7 +469,41 @@ impl App {
         if let Some(p) = self.preview.as_mut() {
             r.render_instance(gl, p, &mut fc);
         }
+        // recording: start / stop (asked by the REC button), errors end it
+        match self.rec_request.take() {
+            Some(true) if r.rec.is_none() => {
+                let path = crate::record::new_file_name(&self.cfg.record_dir());
+                match r.start_recording(gl, &path, fps) {
+                    Ok(()) => {
+                        self.rec_size = (None, 0);
+                        self.status = format!("recording to {}", path.display());
+                        self.status_time = Instant::now();
+                    }
+                    Err(e) => {
+                        self.status = e;
+                        self.status_time = Instant::now();
+                    }
+                }
+            }
+            Some(false) => {
+                if let Some(rec) = r.rec.as_ref() {
+                    self.status = format!("recorded {}", rec.path.display());
+                    self.status_time = Instant::now();
+                }
+                r.stop_recording(gl);
+            }
+            _ => {}
+        }
+        if let Some(e) = r.rec.as_ref().and_then(|x| x.error.clone()) {
+            self.status = e;
+            self.status_time = Instant::now();
+            r.stop_recording(gl);
+        }
+        r.meter.enabled = self.cfg.meters;
         r.render_output(gl, &mut self.s, layer_tex, &mut fc);
+        if self.cfg.meters {
+            self.proc_stats.sample(gl);
+        }
 
         if self.last_gc.elapsed().as_secs() >= 2 {
             self.last_gc = Instant::now();
@@ -491,9 +582,7 @@ impl App {
     fn replace_session(&mut self, s: Session, gl: &glow::Context) {
         self.s = s;
         if let Some(r) = self.r.as_mut() {
-            let (w, h) = r.size();
-            r.resize(gl, w + 1, h); // drops all instance gpu state
-            r.resize(gl, w, h);
+            r.drop_all_instances(gl);
         }
         self.preview = None;
         self.preview_key = None;
@@ -577,6 +666,10 @@ impl App {
                 ui.separator();
                 self.fps_counter(ui);
                 ui.separator();
+                if self.cfg.meters {
+                    self.usage_total(ui);
+                    ui.separator();
+                }
                 if self.status_time.elapsed().as_secs() < 8 {
                     ui.label(egui::RichText::new(&self.status).weak());
                 }
@@ -604,7 +697,101 @@ impl App {
         ));
     }
 
+    /// Frame budget in ms at the output frame rate.
+    fn budget_ms(&self) -> f32 {
+        1000.0 / self.s.output.fps.clamp(1, 240) as f32
+    }
+
+    /// Total resource use next to the fps counter: GPU ms per frame, own VRAM, process CPU / RAM.
+    fn usage_total(&self, ui: &mut Ui) {
+        let Some(r) = self.r.as_ref() else { return };
+        let budget = self.budget_ms();
+        let gpu = r.meter.total_ms;
+        let vram = r.vram_total();
+        let p = &self.proc_stats;
+        let txt = format!("GPU {:.1} ms · VRAM {} · CPU {:.0} %", gpu, meter::mb(vram), p.cpu_percent);
+        let mut tip = format!(
+            "GPU: {gpu:.1} ms per frame ({:.0} % of the {budget:.1} ms frame budget)\n\
+             VRAM: {} allocated by videoping (frame buffers)\n\
+             CPU: {:.0} % of one core ({} cores), mostly video decoding\n\
+             RAM: {}",
+            gpu / budget * 100.0,
+            meter::mb(vram),
+            p.cpu_percent,
+            p.cores,
+            meter::mb(p.rss_bytes),
+        );
+        if let Some((used, total)) = p.gpu_mem {
+            tip.push_str(&format!("\nGPU memory (all programs): {} of {}", meter::mb(used), meter::mb(total)));
+        }
+        ui.label(egui::RichText::new(txt).monospace().size(widgets::BTN_TEXT).color(Color32::from_gray(150))).on_hover_text(tip);
+    }
+
+    /// Level 1..3 and tooltip of an instance (source + its active effects), None when it is not rendered.
+    fn inst_usage(&self, inst: &Instance) -> Option<(u8, String)> {
+        if !self.cfg.meters {
+            return None;
+        }
+        let r = self.r.as_ref()?;
+        let budget = self.budget_ms();
+        let src_ms = r.meter.ms(Key::Src(inst.id))?;
+        let fx: Vec<(f32, u64)> = inst
+            .effects
+            .iter()
+            .filter(|e| e.active)
+            .map(|e| (r.meter.ms(Key::Fx(e.uid)).unwrap_or(0.0), r.vram_fx(e.uid)))
+            .collect();
+        let ms = src_ms + fx.iter().map(|f| f.0).sum::<f32>();
+        let vram = r.vram_inst(inst.id) + fx.iter().map(|f| f.1).sum::<u64>();
+        let mut level = meter::gpu_level(ms, budget).max(meter::vram_level(vram));
+        let mut tip = format!(
+            "GPU {ms:.2} ms ({:.0} % of {budget:.1} ms), source {src_ms:.2} ms + {} effects\nVRAM {}",
+            ms / budget * 100.0,
+            fx.len(),
+            meter::mb(vram)
+        );
+        if let Some(d) = r.decode_info(inst.id) {
+            level = level.max(d.level());
+            tip.push_str(&format!(
+                "\ndecoding: {} ({}), {}x{} {:.0} fps",
+                if d.decoder.is_empty() { "?" } else { &d.decoder },
+                if d.hardware { "hardware" } else { "software, CPU" },
+                d.w,
+                d.h,
+                d.fps
+            ));
+            if d.expected() > 0.0 {
+                tip.push_str(&format!(", delivers {:.0} of {:.0} fps", d.delivered, d.expected()));
+            }
+            if d.behind() {
+                tip.push_str("\n⚠ decoder does not keep up");
+            }
+        }
+        Some((level, tip))
+    }
+
+    fn rescan_finder(&mut self) {
+        let (f, dirs) = scan_with_dirs(&self.s.finder_roots);
+        self.finder = f;
+        self.finder_watch = (self.s.finder_roots.clone(), dirs);
+        self.finder_checked = Instant::now();
+    }
+
+    /// Every 2 s: rescan when a finder folder changed on disk (new recording, copied files) or
+    /// the folders themselves changed (loaded session). Only stats the known directories.
+    fn watch_finder(&mut self) {
+        if self.finder_checked.elapsed().as_secs() < 2 {
+            return;
+        }
+        self.finder_checked = Instant::now();
+        let changed = self.finder_watch.0 != self.s.finder_roots || self.finder_watch.1.iter().any(|(d, t)| mtime(d) != *t);
+        if changed {
+            self.rescan_finder();
+        }
+    }
+
     fn col_finder(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        self.watch_finder();
         // finder preview
         let w = ui.available_width();
         let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
@@ -622,7 +809,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search").desired_width(field_width(ui, widgets::BTN.x)));
             if widgets::btn(ui, "↻").on_hover_text("rescan folders").clicked() {
-                self.finder = scan(&self.s.finder_roots);
+                self.rescan_finder();
             }
         });
         egui::CollapsingHeader::new("folders").default_open(false).show(ui, |ui| {
@@ -637,7 +824,7 @@ impl App {
             }
             if let Some(i) = remove {
                 self.s.finder_roots.remove(i);
-                self.finder = scan(&self.s.finder_roots);
+                self.rescan_finder();
             }
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.finder_new_root).hint_text("/path/to/folder").desired_width(field_width(ui, widgets::BTN.x + 8.0)));
@@ -646,7 +833,7 @@ impl App {
                     if p.is_dir() {
                         self.s.finder_roots.push(p);
                         self.finder_new_root.clear();
-                        self.finder = scan(&self.s.finder_roots);
+                        self.rescan_finder();
                     } else {
                         self.set_status("not a folder");
                     }
@@ -727,6 +914,9 @@ impl App {
             ui.add_space(6.0);
             ui.separator();
             self.section_output_options(ui);
+            ui.add_space(6.0);
+            ui.separator();
+            self.section_general_config(ui);
         });
     }
 
@@ -773,6 +963,7 @@ impl App {
                     let id = inst.id;
                     let name = inst.name.clone();
                     let badge = source_badge(&inst.source);
+                    let usage = self.inst_usage(inst);
                     let live = self.s.live_layer(id);
                     let selected = self.s.selected_instance == Some(id);
                     let tex = self.r.as_ref().and_then(|r| if live.is_some() || selected { r.output_of(id) } else { r.thumb(id) });
@@ -785,6 +976,16 @@ impl App {
                         let br = Rect::from_min_size(thumb_rect.left_top() + vec2(2.0, 2.0), galley.size() + vec2(6.0, 2.0));
                         ui.painter().rect_filled(br, 2.0, Color32::from_black_alpha(170));
                         ui.painter().galley(br.min + vec2(3.0, 1.0), galley, Color32::from_gray(210));
+                    }
+                    // resource meter bottom left of the thumbnail (only while rendered)
+                    if let Some((level, tip)) = usage {
+                        let mr = Rect::from_min_size(thumb_rect.left_bottom() + vec2(2.0, -widgets::METER_SIZE.y - 6.0), widgets::METER_SIZE + vec2(4.0, 4.0));
+                        ui.painter().rect_filled(mr, 2.0, Color32::from_black_alpha(170));
+                        widgets::paint_meter(ui.painter(), mr.shrink(2.0), level);
+                        if ui.rect_contains_pointer(mr) {
+                            egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.scope_id().with(("meter", slot)), egui::PopupAnchor::Pointer)
+                                .show(|ui| ui.label(tip));
+                        }
                     }
                     if let Some(err) = self.r.as_ref().and_then(|r| r.player_error(id)) {
                         ui.painter().text(thumb_rect.center(), egui::Align2::CENTER_CENTER, "error", egui::FontId::proportional(11.0), Color32::RED);
@@ -998,6 +1199,22 @@ impl App {
             let paths: Vec<PathBuf> = self.effects_mut(owner).map(|v| v.iter().map(|e| e.path.clone()).collect()).unwrap_or_default();
             paths.iter().map(|p| self.r.as_ref().and_then(|r| r.shader_error(p)).map(|s| s.to_string())).collect()
         };
+        // resource meter per effect: (level, tooltip), None when not rendered
+        let fx_usage: Vec<Option<(u8, String)>> = {
+            let budget = self.budget_ms();
+            let on = self.cfg.meters;
+            let uids: Vec<u64> = self.effects_mut(owner).map(|v| v.iter().map(|e| e.uid).collect()).unwrap_or_default();
+            uids.iter()
+                .map(|uid| {
+                    let r = self.r.as_ref().filter(|_| on)?;
+                    let ms = r.meter.ms(Key::Fx(*uid))?;
+                    let vram = r.vram_fx(*uid);
+                    let level = meter::gpu_level(ms, budget).max(meter::vram_level(vram));
+                    let tip = format!("GPU {ms:.2} ms ({:.0} % of {budget:.1} ms)\nVRAM {} (own pass buffers)", ms / budget * 100.0, meter::mb(vram));
+                    Some((level, tip))
+                })
+                .collect()
+        };
         let count = self.effects_mut(owner).map(|v| v.len()).unwrap_or(0);
         let header = match owner {
             Owner::Instance(_) => format!("effects ({count}/{MAX_EFFECTS})"),
@@ -1025,6 +1242,9 @@ impl App {
                     let name = isf::display_name(&fx.path);
                     if ui.add(egui::Button::new(format!("{arrow} {name}")).frame(false)).clicked() {
                         fx.open = !fx.open;
+                    }
+                    if let Some(Some((level, tip))) = fx_usage.get(i) {
+                        widgets::meter(ui, *level, tip);
                     }
                     if let Some(Some(e)) = shader_errors.get(i) {
                         ui.colored_label(Color32::RED, "⚠").on_hover_text(e);
@@ -1265,6 +1485,7 @@ impl App {
             if ui.add(egui::Button::new(egui::RichText::new("FREEZE").strong()).fill(fz).min_size(vec2(70.0, 28.0))).clicked() {
                 m.freeze = !m.freeze;
             }
+            self.rec_button(ui);
         });
         // during blackout the slider shows 0 %; pulling it up ends the blackout -> fade in from black
         let m = &mut self.s.master;
@@ -1283,6 +1504,59 @@ impl App {
             } else {
                 m.brightness = v;
             }
+        }
+    }
+
+    /// REC: records the output (after master) to an H.264 mp4 in the recording folder.
+    fn rec_button(&mut self, ui: &mut Ui) {
+        let rec = self.r.as_ref().and_then(|r| r.rec.as_ref());
+        let recording = rec.is_some();
+        let enc = crate::record::encoder();
+        let available = matches!(enc, Some(Ok(_)));
+        let fill = if recording { Color32::from_rgb(170, 25, 25) } else { ui.visuals().widgets.inactive.weak_bg_fill };
+        let label = if recording { "● REC" } else { "REC" };
+        let resp = ui.add_enabled(available || recording, egui::Button::new(egui::RichText::new(label).strong()).fill(fill).min_size(vec2(60.0, 28.0)));
+        let resp = match enc {
+            None => resp.on_disabled_hover_text("testing the hardware encoder ..."),
+            Some(Err(e)) => resp.on_disabled_hover_text(e.as_str()),
+            Some(Ok((name, desc))) => resp.on_hover_text(format!(
+                "record the output (after master) to {}\nH.264 mp4, {desc} ({name}), plays again in videoping",
+                self.cfg.record_dir().display()
+            )),
+        };
+        if resp.clicked() {
+            self.rec_request = Some(!recording);
+        }
+        if let Some(rec) = rec {
+            if self.rec_size.0.is_none_or(|t| t.elapsed().as_secs() >= 1) {
+                self.rec_size = (Some(Instant::now()), std::fs::metadata(&rec.path).map(|m| m.len()).unwrap_or(0));
+            }
+            let secs = rec.elapsed().as_secs();
+            let txt = format!("{:02}:{:02} · {}", secs / 60, secs % 60, meter::mb(self.rec_size.1));
+            let tip = format!("{}\n{} frames, {} dropped, encoder {}", rec.path.display(), rec.frames, rec.dropped, rec.encoder);
+            ui.label(egui::RichText::new(txt).monospace().size(widgets::BTN_TEXT)).on_hover_text(tip);
+            // resource meter: GPU conversion + readback, CPU copy to the encoder, encoder queue
+            if self.cfg.meters {
+                let budget = self.budget_ms();
+                let gpu = self.r.as_ref().and_then(|r| r.meter.ms(Key::Record)).unwrap_or(0.0);
+                let queue = rec.queue();
+                let behind = queue >= crate::record::Recorder::QUEUE_MAX - 2;
+                let level = if behind { 3 } else { meter::gpu_level(gpu, budget).max(meter::gpu_level(rec.cpu_ms, budget)) };
+                let mut mtip = format!(
+                    "GPU {gpu:.2} ms ({:.0} % of {budget:.1} ms): NV12 conversion + readback\n\
+                     CPU {:.2} ms per frame: copy to the encoder (encoding itself runs on the {})\n\
+                     encoder queue {queue} / {}",
+                    gpu / budget * 100.0,
+                    rec.cpu_ms,
+                    if rec.encoder.starts_with("nv") { "NVIDIA GPU" } else { "GPU (VA-API)" },
+                    crate::record::Recorder::QUEUE_MAX
+                );
+                if behind {
+                    mtip.push_str("\n⚠ encoder does not keep up, frames get dropped");
+                }
+                widgets::meter(ui, level, &mtip);
+            }
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
         }
     }
 
@@ -1356,10 +1630,37 @@ impl App {
             }
             ui.separator();
             ui.label(egui::RichText::new(format!("gpu: {gpu}")).weak());
+
             if nvidia_available() {
                 let o = &mut self.s.output;
                 ui.checkbox(&mut o.prefer_nvidia, "render on NVIDIA GPU (applies on restart)")
                     .on_hover_text("restarts itself with PRIME render offload; one-off: start with --nvidia");
+            }
+        });
+    }
+
+    /// General config: settings of the program, not of the session (own file, untouched by
+    /// save / load / new).
+    fn section_general_config(&mut self, ui: &mut Ui) {
+        egui::CollapsingHeader::new("general config").default_open(false).show(ui, |ui| {
+            let before = self.cfg.clone();
+            ui.checkbox(&mut self.cfg.meters, "resource meters")
+                .on_hover_text("GPU time, VRAM and clip decoding per slot / effect, totals in the top bar");
+            ui.label("recording folder");
+            ui.horizontal(|ui| {
+                let hint = self.cfg.record_dir().display().to_string();
+                ui.add(egui::TextEdit::singleline(&mut self.cfg.record_dir).hint_text(hint).desired_width(ui.available_width()));
+            });
+            let dir = self.cfg.record_dir();
+            if !self.s.finder_roots.contains(&dir) && widgets::btn(ui, "add to finder").on_hover_text("show the recordings in the finder").clicked() {
+                let _ = std::fs::create_dir_all(&dir);
+                self.s.finder_roots.push(dir);
+                self.rescan_finder();
+            }
+            if self.cfg != before && self.selftest.is_none() {
+                if let Err(e) = save_config(&self.cfg) {
+                    self.set_status(e);
+                }
             }
         });
     }
@@ -1857,7 +2158,10 @@ impl eframe::App for App {
         }
         if let (Some(r), Some(gl)) = (self.r.as_mut(), gl) {
             r.ndi = None;
-            let _ = gl;
+            // a running recording is finished before quitting (otherwise the end is cut off)
+            if let Some(h) = r.stop_recording(gl) {
+                let _ = h.join();
+            }
         }
     }
 }
@@ -1882,6 +2186,10 @@ struct SelfTest {
     clear_btn: Option<egui::Pos2>,
     /// rect of the brightness slider (blackout -> fade in test)
     brightness_slider: Option<Rect>,
+    /// recording test: 0 = not started, 1 = recording, 2 = stopped, 3 = finder checked
+    rec_step: u8,
+    rec_file: Option<PathBuf>,
+    rec_stopped_at: Option<f32>,
     /// "≡" handle of the first clip effect / output effect stack (effect transfer test)
     fx_handle: Option<egui::Pos2>,
     out_fx: Option<Rect>,
@@ -2040,6 +2348,47 @@ impl App {
                 }
             }
         }
+        // VIDEOPING_SELFTEST_REC: record from 1.5 s to 4 s (file in the self-test folder)
+        if std::env::var_os("VIDEOPING_SELFTEST_REC").is_some() {
+            if let Some(t) = self.selftest.as_mut() {
+                let secs = t.start.elapsed().as_secs_f32();
+                // VIDEOPING_SELFTEST_REC_OFF: same timing without recording (overhead comparison)
+                if t.rec_step == 0 && secs > 1.5 && crate::record::encoder().is_some() && std::env::var_os("VIDEOPING_SELFTEST_REC_OFF").is_none() {
+                    t.rec_step = 1;
+                    self.rec_request = Some(true);
+                    // the recording folder is in the finder: the new file must show up there
+                    let dir = self.cfg.record_dir();
+                    if !self.s.finder_roots.contains(&dir) {
+                        self.s.finder_roots.push(dir);
+                    }
+                } else if t.rec_step == 1 && secs > std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| *v > 1.5).unwrap_or(4.0) {
+                    t.rec_step = 2;
+                    if let Some(rec) = self.r.as_ref().and_then(|r| r.rec.as_ref()) {
+                        eprintln!("selftest rec: {} frames, {} dropped -> {}", rec.frames, rec.dropped, rec.path.display());
+                        let gpu = self.r.as_ref().and_then(|r| r.meter.ms(Key::Record));
+                        eprintln!("selftest rec meter: gpu {gpu:?} ms, cpu {:.2} ms, encoder queue {}", rec.cpu_ms, rec.queue());
+                        t.rec_file = Some(rec.path.clone());
+                    } else {
+                        eprintln!("selftest rec: not recording ({})", self.status);
+                    }
+                    self.rec_request = Some(false);
+                } else if t.rec_step == 2 && t.rec_stopped_at.is_none() {
+                    t.rec_stopped_at = Some(secs);
+                } else if t.rec_step == 2 && t.rec_stopped_at.is_some_and(|s0| secs > s0 + 2.5) {
+                    t.rec_step = 3;
+                    let listed = t.rec_file.as_ref().is_some_and(|f| self.finder.iter().any(|e| &e.path == f));
+                    eprintln!("selftest rec finder: recording listed in the finder = {listed} (expected true)");
+                }
+            }
+        }
+        // resource meters of the session at screenshot time
+        if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > 4.5) {
+            for inst in self.s.slots.iter().flatten() {
+                if let Some((level, tip)) = self.inst_usage(inst) {
+                    eprintln!("selftest meter {}: level {level}, {}", inst.name, tip.replace('\n', " | "));
+                }
+            }
+        }
         let Some(t) = self.selftest.as_mut() else { return };
         if secs > 4.0 && !t.dumped {
             t.dumped = true;
@@ -2061,7 +2410,9 @@ impl App {
         if secs >= 2.0 && t.at2s.is_none() {
             t.at2s = Some((self.video_frames, t.ui_frames));
         }
-        if secs > 6.5 && !t.closing {
+        // a longer test recording (VIDEOPING_SELFTEST_REC=<seconds>) keeps the self-test open
+        let close_at = std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v + 4.0).unwrap_or(0.0).max(6.5);
+        if secs > close_at && !t.closing {
             t.closing = true;
             let (v0, u0) = t.at2s.unwrap_or((0, 0));
             let span = secs - 2.0;

@@ -28,6 +28,8 @@ pub struct Frame {
 struct Shared {
     frame: Mutex<Option<Frame>>,
     seq: AtomicU64,
+    /// frame rate of the clip in millihertz (from the caps)
+    fps_milli: AtomicU64,
 }
 
 pub struct Player {
@@ -45,6 +47,11 @@ pub struct Player {
     last_loop: Option<LoopMode>,
     pub error: Option<String>,
     eos: bool,
+    /// decoder element (resource meter), found after preroll
+    decoder: Option<(String, bool)>,
+    /// (time, seq) at the start of the current delivered-fps window
+    rate_window: (Instant, u64),
+    delivered: f64,
 }
 
 impl Player {
@@ -95,6 +102,9 @@ impl Player {
             last_loop: None,
             error: None,
             eos: false,
+            decoder: None,
+            rate_window: (Instant::now(), 0),
+            delivered: 0.0,
         })
     }
 
@@ -107,6 +117,36 @@ impl Player {
         self.last_seq = seq;
         let guard = self.shared.frame.lock().ok()?;
         guard.as_ref().map(f)
+    }
+
+    /// Decoding info for the resource meter.
+    pub fn decode_info(&self) -> crate::meter::DecodeInfo {
+        let (decoder, hardware) = self.decoder.clone().unwrap_or_default();
+        let (w, h) = self.shared.frame.lock().ok().and_then(|g| g.as_ref().map(|f| (f.w, f.h))).unwrap_or((0, 0));
+        crate::meter::DecodeInfo {
+            decoder,
+            hardware,
+            w,
+            h,
+            fps: self.shared.fps_milli.load(Ordering::Relaxed) as f64 / 1000.0,
+            rate: if self.playing { self.applied_rate } else { 0.0 },
+            delivered: self.delivered,
+        }
+    }
+
+    /// The video decoder playbin picked (name, is hardware).
+    fn find_decoder(&self) -> Option<(String, bool)> {
+        let bin = self.pipeline.downcast_ref::<gst::Bin>()?;
+        for e in bin.iterate_recurse().into_iter().flatten() {
+            let Some(f) = e.factory() else { continue };
+            let klass = f.metadata(gst::ELEMENT_METADATA_KLASS).unwrap_or_default();
+            if klass.contains("Decoder") && klass.contains("Video") {
+                let name = f.name().to_string();
+                let hw = ["va", "nv", "v4l2", "msdk", "qsv"].iter().any(|p| name.starts_with(p));
+                return Some((name, hw));
+            }
+        }
+        None
     }
 
     fn poll_bus(&mut self) {
@@ -163,6 +203,16 @@ impl Player {
             } else {
                 return; // still prerolling
             }
+        }
+        if self.decoder.is_none() {
+            self.decoder = self.find_decoder();
+        }
+        // delivered frames per second (resource meter)
+        let secs = self.rate_window.0.elapsed().as_secs_f64();
+        if secs >= 1.0 {
+            let seq = self.shared.seq.load(Ordering::Relaxed);
+            self.delivered = seq.saturating_sub(self.rate_window.1) as f64 / secs;
+            self.rate_window = (Instant::now(), seq);
         }
         let dur = self.duration.unwrap_or(1.0).max(0.04);
         if let Some(p) = self.pipeline.query_position::<gst::ClockTime>() {
@@ -262,6 +312,10 @@ fn store_sample(sh: &Shared, sample: &gst::Sample) {
     let w = info.width() as i32;
     let h = info.height() as i32;
     let stride = info.stride()[0];
+    let fps = info.fps();
+    if fps.denom() > 0 {
+        sh.fps_milli.store((fps.numer() as u64 * 1000) / fps.denom() as u64, Ordering::Relaxed);
+    }
     let need = (stride * h) as usize;
     if map.len() < need {
         return;

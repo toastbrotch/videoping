@@ -3,7 +3,9 @@
 mod app;
 mod gfx;
 mod isf;
+mod meter;
 mod ndi;
+mod record;
 mod render;
 mod state;
 mod video;
@@ -48,6 +50,9 @@ fn main() -> eframe::Result {
     maybe_restart_on_nvidia();
     if let Err(e) = video::init() {
         eprintln!("gstreamer init failed: {e}");
+    } else {
+        // find a working hardware H.264 encoder for recording (background, ~1 s)
+        record::start_probe();
     }
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,

@@ -349,6 +349,10 @@ fn default_fps() -> u32 {
     60
 }
 
+fn yes() -> bool {
+    true
+}
+
 impl Default for OutputOptions {
     fn default() -> Self {
         OutputOptions {
@@ -362,6 +366,34 @@ impl Default for OutputOptions {
             fps: 60,
             screen: 0,
             prefer_nvidia: false,
+        }
+    }
+}
+
+/// General config of the program (not part of a session: save / load / new do not touch it).
+/// Saved in ~/.config/videoping/config.json.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Config {
+    /// resource meters (GPU time, VRAM, clip decoding) on slots, effects and in the top bar
+    #[serde(default = "yes")]
+    pub meters: bool,
+    /// folder for recordings (empty = ~/Videos/videoping)
+    #[serde(default)]
+    pub record_dir: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config { meters: true, record_dir: String::new() }
+    }
+}
+
+impl Config {
+    pub fn record_dir(&self) -> std::path::PathBuf {
+        if self.record_dir.trim().is_empty() {
+            dirs::video_dir().or_else(|| dirs::home_dir().map(|h| h.join("Videos"))).unwrap_or_else(|| ".".into()).join("videoping")
+        } else {
+            std::path::PathBuf::from(self.record_dir.trim())
         }
     }
 }

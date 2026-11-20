@@ -3,6 +3,8 @@
 
 use crate::gfx::{reset_state, Builtins, Gl, Program, Target, UploadTex};
 use crate::isf::{self, InputKind, IsfInfo};
+use crate::meter::{DecodeInfo, GpuTimer, Key};
+use crate::record::Recorder;
 use crate::ndi::{FrameMsg, NdiReceiver, NdiSender};
 use crate::state::{EffectInst, Instance, Param, ParamValue, Rng, Session, SourceKind, NUM_LAYERS};
 use crate::video::Player;
@@ -185,11 +187,21 @@ pub struct Renderer {
     ndi_key: Option<String>,
     pub clip_status: HashMap<u64, ClipStatus>,
     pub pending_scrub: Vec<(u64, f32)>,
+    /// GPU time per source / effect (resource meters)
+    pub meter: GpuTimer,
+    /// recording of the output (None = not recording)
+    pub rec: Option<Recorder>,
+    /// NV12 conversion target (R8, w x h*3/2) and its readback buffers
+    rec_nv12: Option<Target>,
+    rec_pbos: [glow::Buffer; 2],
+    rec_pending: [bool; 2],
+    rec_idx: usize,
 }
 
 impl Renderer {
     pub fn new(gl: &Gl, w: i32, h: i32) -> Renderer {
         let pbos = unsafe { [gl.create_buffer().expect("pbo"), gl.create_buffer().expect("pbo")] };
+        let rec_pbos = unsafe { [gl.create_buffer().expect("pbo"), gl.create_buffer().expect("pbo")] };
         let r = Renderer {
             b: Builtins::new(gl),
             w,
@@ -213,6 +225,12 @@ impl Renderer {
             ndi_key: None,
             clip_status: HashMap::new(),
             pending_scrub: vec![],
+            meter: GpuTimer::new(),
+            rec: None,
+            rec_nv12: None,
+            rec_pbos,
+            rec_pending: [false; 2],
+            rec_idx: 0,
         };
         reset_state(gl);
         r
@@ -229,6 +247,8 @@ impl Renderer {
         }
         self.w = w;
         self.h = h;
+        // a recording has one fixed size: it ends when the output resolution changes
+        self.stop_recording(gl);
         for t in self.comp.iter().chain([&self.fx_raw, &self.frozen, &self.out, &self.ndi_flip]) {
             t.delete(gl);
         }
@@ -244,6 +264,19 @@ impl Renderer {
             s.delete(gl);
         }
         self.pbo_pending = [false; 2];
+    }
+
+    /// Drop the GPU state of all instances and effects (new / load session). Output buffers, NDI
+    /// and a running recording stay.
+    pub fn drop_all_instances(&mut self, gl: &Gl) {
+        for (_, mut g) in self.insts.drain() {
+            g.delete(gl);
+        }
+        for (_, mut st) in self.fx_states.drain() {
+            st.delete(gl);
+        }
+        self.clip_status.clear();
+        self.ndi_status.clear();
     }
 
     pub fn shader_info(&mut self, gl: &Gl, path: &Path) -> Option<&IsfInfo> {
@@ -284,6 +317,32 @@ impl Renderer {
 
     pub fn thumb(&self, id: u64) -> Option<glow::Texture> {
         self.insts.get(&id).filter(|g| g.has_frame).map(|g| g.thumb.tex)
+    }
+
+    /// Own VRAM of an instance (source, effect ping-pong, thumbnail, generator passes).
+    pub fn vram_inst(&self, id: u64) -> u64 {
+        let Some(g) = self.insts.get(&id) else { return 0 };
+        let t = |t: &Target| t.w as u64 * t.h as u64 * 4;
+        t(&g.src) + t(&g.fx_raw) + t(&g.ping[0]) + t(&g.ping[1]) + t(&g.thumb)
+            + g.upload.w.max(0) as u64 * g.upload.h.max(0) as u64 * 4
+            + pass_bytes(&g.gen_state)
+    }
+
+    /// Own VRAM of an effect (its persistent / pass buffers).
+    pub fn vram_fx(&self, uid: u64) -> u64 {
+        self.fx_states.get(&uid).map(pass_bytes).unwrap_or(0)
+    }
+
+    /// All VRAM videoping allocated for frames (instances, effects, mixer / output buffers).
+    pub fn vram_total(&self) -> u64 {
+        let t = |t: &Target| t.w as u64 * t.h as u64 * 4;
+        let own: u64 = self.comp.iter().chain([&self.fx_raw, &self.frozen, &self.out, &self.ndi_flip]).map(t).sum();
+        own + self.insts.keys().map(|id| self.vram_inst(*id)).sum::<u64>() + self.fx_states.values().map(pass_bytes).sum::<u64>()
+    }
+
+    /// Decoding info of a clip instance (None: not a clip or not playing).
+    pub fn decode_info(&self, id: u64) -> Option<DecodeInfo> {
+        self.insts.get(&id).and_then(|g| g.player.as_ref()).map(|p| p.decode_info())
     }
 
     pub fn output_of(&self, id: u64) -> Option<glow::Texture> {
@@ -429,12 +488,14 @@ impl Renderer {
             }
             let idx = pi;
             let (raw_t, ping_t) = self.take_targets(raw, pings, idx);
+            self.meter.begin(gl, Key::Fx(fx.uid));
             let ok = self.run_isf(gl, &fx.path, &mut fx.params, StateKey::Fx(fx.uid), Some(cur), &raw_t, fx.seed, fc.dt);
             if ok {
                 self.b.mix(gl, cur, raw_t.tex, &fx.mix, &ping_t);
                 cur = ping_t.tex;
                 pi ^= 1;
             }
+            self.meter.end(gl);
             self.put_targets(raw, pings, raw_t, ping_t, idx);
         }
         cur
@@ -476,6 +537,7 @@ impl Renderer {
         let (w, h) = (self.w, self.h);
         let id = inst.id;
         self.insts.entry(id).or_insert_with(|| InstGpu::new(gl, w, h));
+        self.meter.begin(gl, Key::Src(id));
         let g = self.insts.get_mut(&id).unwrap();
         g.last_active = Instant::now();
 
@@ -548,6 +610,7 @@ impl Renderer {
             }
         }
         self.pending_scrub.retain(|s| s.0 != id);
+        self.meter.end(gl);
 
         let src_tex = self.insts[&id].src.tex;
         let out = self.run_effects(gl, &mut inst.effects, src_tex, Some(id), PingSel::Inst, fc);
@@ -556,7 +619,9 @@ impl Renderer {
         g.out = Some(out);
         if g.has_frame {
             let thumb = std::mem::replace(&mut g.thumb, ph(&self.black));
+            self.meter.begin(gl, Key::Src(id));
             self.b.blit(gl, out, w, h, &thumb, false);
+            self.meter.end(gl);
             self.insts.get_mut(&id).unwrap().thumb = thumb;
         }
         Some(out)
@@ -571,6 +636,7 @@ impl Renderer {
         fc: &mut FrameCtx,
     ) -> glow::Texture {
         // mixer: bottom layer (3) first, top layer (1) last
+        self.meter.begin(gl, Key::Mixer);
         self.comp[0].clear(gl);
         let mut cur = 0usize;
         for li in (0..NUM_LAYERS).rev() {
@@ -594,7 +660,9 @@ impl Renderer {
         let (w, h) = (self.w, self.h);
         self.b.blit(gl, mix_tex, w, h, &stage, false);
         let stage_tex = stage.tex;
+        self.meter.end(gl);
         let result = self.run_effects(gl, &mut s.output_effects, stage_tex, None, PingSel::Comp, fc);
+        self.meter.begin(gl, Key::Master);
         if !s.master.freeze {
             self.b.blit(gl, result, w, h, &self.frozen, false);
         }
@@ -608,6 +676,13 @@ impl Renderer {
         if self.ndi.is_some() {
             self.ndi_readback(gl);
         }
+        self.meter.end(gl);
+        if self.rec.is_some() {
+            self.meter.begin(gl, Key::Record);
+            self.rec_readback(gl);
+            self.meter.end(gl);
+        }
+        self.meter.end_frame(gl);
         reset_state(gl);
         self.out.tex
     }
@@ -645,6 +720,60 @@ impl Renderer {
             self.pbo_idx = j;
         }
         self.ndi_flip = flip;
+    }
+
+    /// Start recording the output to `path` (H.264 mp4).
+    pub fn start_recording(&mut self, gl: &Gl, path: &Path, fps: u32) -> Result<(), String> {
+        self.stop_recording(gl);
+        let (w, h) = (self.w & !1, self.h & !1); // NV12 needs even sizes
+        let rec = Recorder::start(path, w, h, fps)?;
+        self.rec_nv12 = Some(Target::new_r8(gl, w, h * 3 / 2));
+        self.rec_pending = [false; 2];
+        self.rec = Some(rec);
+        Ok(())
+    }
+
+    /// Stop recording (the file is finished in the background; the handle ends when it is done).
+    pub fn stop_recording(&mut self, gl: &Gl) -> Option<std::thread::JoinHandle<()>> {
+        let h = self.rec.take().map(|r| r.stop());
+        if let Some(t) = self.rec_nv12.take() {
+            t.delete(gl);
+        }
+        self.rec_pending = [false; 2];
+        h
+    }
+
+    /// NV12 conversion on the GPU, async readback through two PBOs: read this frame, push the
+    /// previous one to the encoder (the CPU never waits for the GPU).
+    fn rec_readback(&mut self, gl: &Gl) {
+        let (Some(rec), Some(nv)) = (self.rec.as_mut(), self.rec_nv12.as_ref()) else { return };
+        rec.poll();
+        let (w, h) = (rec.w, rec.h);
+        let size = (w * h * 3 / 2) as usize;
+        self.b.nv12(gl, self.out.tex, w, h, nv);
+        unsafe {
+            let i = self.rec_idx;
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(nv.fbo));
+            gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
+            gl.bind_buffer(glow::PIXEL_PACK_BUFFER, Some(self.rec_pbos[i]));
+            gl.buffer_data_size(glow::PIXEL_PACK_BUFFER, size as i32, glow::STREAM_READ);
+            gl.read_pixels(0, 0, w, h * 3 / 2, glow::RED, glow::UNSIGNED_BYTE, glow::PixelPackData::BufferOffset(0));
+            gl.pixel_store_i32(glow::PACK_ALIGNMENT, 4);
+            self.rec_pending[i] = true;
+            let j = i ^ 1;
+            if self.rec_pending[j] {
+                gl.bind_buffer(glow::PIXEL_PACK_BUFFER, Some(self.rec_pbos[j]));
+                let ptr = gl.map_buffer_range(glow::PIXEL_PACK_BUFFER, 0, size as i32, glow::MAP_READ_BIT);
+                if !ptr.is_null() {
+                    rec.push(std::slice::from_raw_parts(ptr, size));
+                    gl.unmap_buffer(glow::PIXEL_PACK_BUFFER);
+                }
+                self.rec_pending[j] = false;
+            }
+            gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+            self.rec_idx = j;
+        }
     }
 
     pub fn set_ndi(&mut self, enabled: bool, name: &str, lib_dir: &str, fps: i32) {
@@ -723,6 +852,10 @@ impl Renderer {
             g.delete(gl);
         }
     }
+}
+
+fn pass_bytes(s: &PassState) -> u64 {
+    s.targets.values().flat_map(|p| p.iter()).map(|t| t.w as u64 * t.h as u64 * 4).sum()
 }
 
 /// Placeholder while a target is moved out (never drawn to, never deleted).

@@ -78,6 +78,7 @@ finder finds these:
   - click = preview, double-click / drag = new instance in the prepare grid (like a clip)
   - an NDI instance has no clip interface; the detail shows its status: resolution @ fps, or "no signal" (normal grey text, no color: colors are reserved for the layer color-code)
   - effects work on it like on any clip; it is received only while it is live / selected (stops 10 s later)
+- the finder folders are watched: every 2 s the known folders are checked (modification time only, cheap); a new, deleted or renamed file (e.g. a finished recording, copied clips) appears without a manual refresh
 - videopong clips (prio2)
 - glslop.com shaders or https://editor.isf.video/shaders? (prio2)
 - set (each from above can be added to a set) (prio2)
@@ -244,6 +245,11 @@ visuals:
   - during blackout the slider shows 0 %; moving it up from 0 ends the blackout and sets the brightness -> fade in from black
   - ending the blackout with the button restores the brightness from before
 - all three act at the very end (after the output effects), for NDI and screen output
+- REC button next to FREEZE: records the output (after master, the same picture as NDI) to a file
+  - while recording: "● REC" (red) plus running time and file size; hover: path, frames, dropped frames, encoder, GPU time
+  - files go to the recording folder (general config), named `videoping-YYYY-MM-DD_HH-MM-SS.mp4`
+  - keeps recording through new / load; ends when the output resolution changes; finished properly on quit
+  - disabled (with the reason on hover) when no hardware encoder works
 
 ## output effects (layering top-down)
 - multiple effects, they work exactly like the effects in the prepare lane:
@@ -265,6 +271,12 @@ visuals:
   - output window on/off, fullscreen on the chosen screen (F / double-click in the output window)
   - ndi name
   - NDI library folder (folder with libndi.so.6, saved; empty = default places)
+
+## general config (fold open)
+- placed in column 2, below the output options
+- settings of the program itself, not of a session: own file `~/.config/videoping/config.json`; save / load / new do not change it
+- resource meters on/off (default on): to compare the overhead or switch them off for a show
+- recording folder (empty = `~/Videos/videoping`); "add to finder" adds it to the finder folders, so recordings can be dropped onto a slot
 
 ## output preview
 - main output preview at the top of column 4, always visible (does not scroll away)
@@ -304,10 +316,51 @@ visuals:
   - uInstanceSeed is saved, so an instance looks the same after save/load
 - parameter LABEL from the isf header is shown in the ui (falls back to NAME)
 - bool inputs are shown as the big checkbox (accent color), not as a 0..1 slider; same layout as the sliders: name in the left label column, checkbox where the slider starts
+  - bool inputs are declared as `uniform bool`; if a shader then does not compile (it compares them like floats, e.g. `if (uInvert > 0.5)`), it is compiled again with them declared as `float` (0.0 / 1.0), so such shaders still run unchanged
 - color inputs and dropdowns (long inputs with VALUES/LABELS): same layout, name in the left label column, control where the slider starts
 - right click on a parameter (its name or its control) resets it to the default of the isf header, as freshly loaded: value, range limits back to MIN..MAX, animation off (pause); works for effect and generator parameters
-  - bool inputs are declared as `uniform bool`; if a shader then does not compile (it compares them like floats, e.g. `if (uInvert > 0.5)`), it is compiled again with them declared as `float` (0.0 / 1.0), so such shaders still run unchanged
 
+
+## resource meters
+- on/off in the general config (default on)
+- shown only while an item is rendered (live, selected, or as preview), nothing for idle slots
+- indicator: 3 small bars like a signal meter (1 = light, 2 = medium, 3 = heavy), grey only (colors are reserved for the layers)
+  - prepare slots: bottom left of the thumbnail = the whole instance (source + its active effects)
+  - effects (clip effects and output effects): next to the effect name = that effect alone
+  - hover shows the numbers (GPU ms and % of the frame budget, VRAM, decoder for clips)
+- REC (while recording): meter next to time and size: GPU time of the NV12 conversion + readback, CPU time of the copy to the encoder, and the encoder queue (nearly full = heavy: the encoder does not keep up, frames get dropped)
+- top bar, next to the fps counter: "GPU x ms · VRAM x MB · CPU x %" (hover: RAM, cores, on NVIDIA the GPU memory of all programs)
+- level = the highest of:
+  - GPU time relative to the frame budget (1000 / fps ms): < 15 % light, < 40 % medium, else heavy
+  - own VRAM of the item: < 64 MB light, < 256 MB medium, else heavy
+  - clips: decoding. hardware decoder = light; software decoder by pixel rate (< 95 Mpx/s light, < 380 Mpx/s medium, else heavy, 1080p30 ≈ 62 Mpx/s); heavy when the decoder does not keep up (delivers < 85 % of the frames it should)
+- how it is measured (must not add noticeable load itself):
+  - GPU: OpenGL `TIME_ELAPSED` queries around each source and each effect, read back a few frames later without waiting; only every 8th video frame (each query costs CPU in the driver: measuring every frame cost ~1.2 ms per frame on Intel/Mesa, every 8th frame is not measurable any more)
+  - VRAM: bookkeeping of the frame buffers videoping allocates (no GPU call); total GPU memory only on NVIDIA (GL_NVX_gpu_memory_info)
+  - CPU / RAM: `/proc/self` once per second, for the whole program (CPU per clip cannot be separated reliably, so clips show their decoding instead)
+
+
+## recording
+- goal: a recording plays again in videoping as a clip, with all transport modes (backward, bounce, jumpcut, scrubbing)
+- format: H.264 in .mp4, output resolution and frame rate, no audio
+  - keyframe every fps / 4 frames (8..15), no B-frames: backward play, jumpcut and scrubbing stay smooth
+  - bitrate 40 Mbit/s at 1080p60, scaled by pixel rate (min 8 Mbit/s); about 300 MB per minute at 1080p60
+  - BT.709, frames stamped by frame number (constant frame rate, stays in real time when frames are dropped)
+- hardware encoder only (low CPU): NVIDIA NVENC (nvcudah264enc), else Intel / AMD VA-API (vah264lpenc, vaapih264enc); tested once at program start in the background; no software fallback (x264 would cost more than a CPU core)
+- RGBA -> NV12 conversion in a shader on the GPU, async readback through two PBOs (like NDI), the render thread never waits
+- crash-safe: index space for 1 hour reserved at the start of the file, updated every 2 s; after a crash the file plays up to the last update (tested: killed after 7 s, plays 6 s); longer recordings are finished normally on stop
+- measured (1080p, Intel Iris Xe + NVENC): about 8 % of one CPU core (~1.6 ms per frame)
+
+## shader documentation (.md next to the .fs) — proposal, to be decided later
+- many isf shaders have a markdown file with the same name (`chaos-feedback.fs` + `chaos-feedback.md`) that explains the shader
+- common structure of these files: `# title`, a short description paragraph, a slider table `| **Label** | range | default | description |`, then sections like tips / starting points; some have a ⚠ warning (e.g. flashing)
+- the bold label in the table is the LABEL of the isf header, so a table row can be matched to its parameter
+- ideas (none decided yet):
+  1. parameter tooltip: hover over a parameter name shows its description from the slider table
+  2. "?" button on the effect / generator header (only when an .md exists): opens the whole document rendered (e.g. crate egui_commonmark, tables included) in its own window that can stay open
+  3. finder: hover over a shader file shows the first description paragraph
+  4. ⚠ marker: if the .md contains a ⚠ warning, a small grey ⚠ next to the shader name in the finder and the detail, the warning text on hover
+- read-only: the .md and .fs files are never changed; reloaded when the file changes (like the shaders)
 
 ## audio
 - no audio: mp4 clips play without sound, no audio input / audio-reactive effects
