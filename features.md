@@ -370,7 +370,7 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 
 | column | 8 pads (top-down) |
 |---|---|
-| 1 | select mixer-layer 1-3, activate/deactivate mixer-layer 1-3, global blackout, global freeze |
+| 1 | select mixer-layer 1-3, activate/deactivate mixer-layer 1-3, global blackout, record |
 | 2-5 | select instance in the prepare lane = load it into the selected mixer-layer (4x8 = 32 instances) |
 | 6-8, rows 1-4 | activate/deactivate effects 1-4 of the clip in mixer-layer 1 / 2 / 3 (max 4 effects per clip) |
 | 6, rows 5-8 | activate/deactivate output effects 1-4 |
@@ -382,13 +382,14 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
     - (a first test gave the opposite corner: the device was held turned by 180° then)
 - the leds can only show full brightness, no dimming (changed 2026-11-21, was "bright / dim"): plum (the accent) = "there, but not on"
   - layer colors as hue: layer 1 = #1B6898 (blue, velocity 72), layer 2 = #388E3C (green, 44), layer 3 = #C8640A (orange, 10), plum = 108
-  - column 1: select pad in the layer color when that layer is selected, else off; layer on/off pad in the layer color when on, else off; blackout red when on; freeze cyan when on
+  - column 1: select pad in the layer color when that layer is selected, else off; layer on/off pad in the layer color when on, else off; blackout red when on; record red while recording
   - columns 2-5: slot of the current page: live = color of its layer, loaded but not live = plum, empty = off
   - columns 6-8, rows 1-4: effect pads: active = color of the layer, there but off = plum, no effect = off
   - column 6, rows 5-8: output effects: on = yellow (the output belongs to no layer), there but off = plum, no effect = off
-- leds are switched off on connect (startup, plugging in), when the device's profile changes, and on quit: every bound control plus, for the bhoreal, all 64 pads (profile field clear_notes; never above 63, the firmware does not range-check)
+- every attached controller is cleared completely on connect (startup, plugging in), when its profile changes, and on quit (decided 2026-11-21), also controllers without a profile: notes 0..127 and ccs 0..127 on channel 1 set to 0, plus every bound control on its own channel
+  - a profile can limit it (clear_notes / clear_ccs): bhoreal = notes 0..63 only (its firmware does not range-check higher notes), no ccs; twister = ccs 0..63 (the rings of all 4 banks, also encoders without a binding), no notes
 - built-in profile "Bhoreal" of the generic midi engine (src/midi.rs), picked for ports named "bhoreal" or "leonardo"; tested with a virtual midi port (self-test), not yet with the real device
-- global blackout and global freeze: same as the master buttons in column 2
+- global blackout: same as the master button in column 2; bottom left = record (REC), decided 2026-11-21 (was freeze; freeze stays in the ui and can go on a free pad via learn)
 - more than 32 instances: paging, the bhoreal shows the current page of the prepare grid
 
 ## midifighter twister (4x4 rotary encoders)

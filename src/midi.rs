@@ -69,11 +69,15 @@ pub struct Profile {
     /// a port whose name contains one of these (any case) uses this profile
     pub ports: Vec<String>,
     pub bindings: Vec<Binding>,
-    /// on connect and on quit, besides every bound control, also these notes 0..n are switched
-    /// off on channel 1 (the Bhoreal: all 64 pads; never more than the device has: the Bhoreal
-    /// firmware does not check higher note numbers)
-    #[serde(default)]
-    pub clear_notes: u8,
+    /// on connect and on quit, besides every bound control, notes 0..n on channel 1 are switched
+    /// off; None = all 128 (every controller is cleared completely). The Bhoreal: 64, its firmware
+    /// does not check higher note numbers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clear_notes: Option<u8>,
+    /// the same for control changes 0..n on channel 1; None = all 128 (the Twister: 64 = the rings
+    /// of its 4 banks)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clear_ccs: Option<u8>,
 }
 
 impl Profile {
@@ -116,7 +120,7 @@ pub fn bhoreal_hue(rgb: [u8; 3]) -> u8 {
 /// The Bhoreal Slim (8x8) as in features.md: column 0..7 from the left, row 0..7 from the top
 /// (cable top right, see bhoreal_note).
 /// Colors: layer colors for live / on / selected, plum (the accent) = "there, but not on",
-/// red = blackout, cyan = freeze, off = nothing.
+/// red = blackout / recording, yellow = output effect on, off = nothing.
 /// Note of a Bhoreal pad, column / row counted from the top left as you play it, with the usb
 /// cable at the top right (checked on the hardware 2026-11-21, pads and leds alike: top left =
 /// note 63, the pad right of it = 62, bottom right = note 0; the device counts row by row from
@@ -129,7 +133,6 @@ pub fn bhoreal_profile() -> Profile {
     let layer = [bhoreal_hue([0x1B, 0x68, 0x98]), bhoreal_hue([0x38, 0x8E, 0x3C]), bhoreal_hue([0xC8, 0x64, 0x0A])];
     let plum = bhoreal_hue([0x8B, 0x4A, 0x87]);
     let red = 1;
-    let cyan = bhoreal_hue([0x00, 0xFF, 0xFF]);
     let yellow = bhoreal_hue([0xFF, 0xE0, 0x00]);
     let pad = |col: u8, row: u8| Msg::Note(bhoreal_note(col, row));
     let b = |msg, mode, addr: String, feedback| Binding { channel: 0, msg, mode, addr, feedback, feedback_addr: None };
@@ -140,7 +143,8 @@ pub fn bhoreal_profile() -> Profile {
         v.push(b(pad(0, l + 3), Mode::Toggle, format!("/layer/{}/active", l + 1), Feedback::OnOff { off: 0, on: layer[l as usize] }));
     }
     v.push(b(pad(0, 6), Mode::Toggle, "/master/blackout".into(), Feedback::OnOff { off: 0, on: red }));
-    v.push(b(pad(0, 7), Mode::Toggle, "/master/freeze".into(), Feedback::OnOff { off: 0, on: cyan }));
+    // bottom left: record (red while recording, like "● REC" in the ui)
+    v.push(b(pad(0, 7), Mode::Toggle, "/record".into(), Feedback::OnOff { off: 0, on: red }));
     // columns 2-5: the 32 slots of the current page (top-down per column, like the grid)
     for col in 1..5u8 {
         for row in 0..8u8 {
@@ -162,7 +166,7 @@ pub fn bhoreal_profile() -> Profile {
         v.push(b(pad(5, 4 + k), Mode::Toggle, format!("/out/fx/{}/active", k + 1), Feedback::OnOff { off: plum, on: yellow }));
     }
     // columns 7-8, bottom 4 rows: free
-    Profile { name: "Bhoreal".into(), ports: vec!["bhoreal".into(), "leonardo".into()], bindings: v, clear_notes: 64 }
+    Profile { name: "Bhoreal".into(), ports: vec!["bhoreal".into(), "leonardo".into()], bindings: v, clear_notes: Some(64), clear_ccs: Some(0) }
 }
 
 /// Encoder number of the Midi Fighter Twister: row by row from the top left (checked on the
@@ -185,7 +189,8 @@ pub fn twister_profile() -> Profile {
         feedback_addr: None,
     };
     let bindings = vec![enc(0, "/layer/1/mix"), enc(1, "/layer/2/mix"), enc(2, "/layer/3/mix"), enc(3, "/master/brightness")];
-    Profile { name: "Midi Fighter Twister".into(), ports: vec!["twister".into()], bindings, clear_notes: 0 }
+    // all 4 banks (16 encoders each, cc 0..63): also rings of encoders without a binding go to 0
+    Profile { name: "Midi Fighter Twister".into(), ports: vec!["twister".into()], bindings, clear_notes: Some(0), clear_ccs: Some(64) }
 }
 
 pub fn builtin_profiles() -> Vec<Profile> {
@@ -341,9 +346,7 @@ impl Midi {
         }
         if let Some(d) = self.devices.iter_mut().find(|d| d.port == port) {
             // the old profile's leds off, the new one's state follows with the next feedback
-            if let Some(old) = d.profile {
-                clear_device(d, &self.profiles[old]);
-            }
+            clear_device(d, d.profile.map(|old| &self.profiles[old]));
             d.profile = pi;
             d.sent.clear();
         }
@@ -352,9 +355,8 @@ impl Midi {
     /// Quit: every device's leds off.
     pub fn shutdown(&mut self) {
         for d in &mut self.devices {
-            if let Some(pi) = d.profile {
-                clear_device(d, &self.profiles[pi]);
-            }
+            let p = d.profile.map(|pi| &self.profiles[pi]);
+            clear_device(d, p);
         }
     }
 
@@ -378,7 +380,7 @@ impl Midi {
     /// A new empty profile for this port (named after the device), used for it from now on.
     pub fn new_profile(&mut self, port: &str) -> usize {
         let name = self.unique_name(&port_base(port));
-        self.profiles.push(Profile { name, ports: vec![], bindings: vec![], clear_notes: 0 });
+        self.profiles.push(Profile { name, ports: vec![], bindings: vec![], clear_notes: None, clear_ccs: None });
         let pi = self.profiles.len() - 1;
         self.changed(pi);
         self.set_device_profile(port, Some(pi));
@@ -483,10 +485,9 @@ impl Midi {
                     Some(pi) => eprintln!("midi: {name} -> profile {}", self.profiles[pi].name),
                     None => eprintln!("midi: {name} (no profile)"),
                 }
-                // all leds off first, the real state follows with the next feedback
-                if let Some(pi) = pi {
-                    clear_device(&mut dev, &self.profiles[pi]);
-                }
+                // all leds off first (every controller, also without profile); the real state
+                // follows with the next feedback
+                clear_device(&mut dev, pi.map(|pi| &self.profiles[pi]));
                 self.devices.push(dev);
             }
         }
@@ -628,11 +629,15 @@ impl Midi {
     }
 }
 
-/// Switch off every bound control (note: velocity 0, cc: value 0) and the profile's clear_notes.
-fn clear_device(d: &mut Device, p: &Profile) {
+/// Switch a controller's leds off: every bound control (note: velocity 0, cc: value 0) and notes
+/// / ccs 0..n on channel 1 (all 128 each unless the profile limits it; no profile: all).
+fn clear_device(d: &mut Device, p: Option<&Profile>) {
     let Some(out) = d.output.as_mut() else { return };
-    let mut msgs: Vec<[u8; 3]> = (0..p.clear_notes.min(128)).map(|n| [0x90, n, 0]).collect();
-    for b in &p.bindings {
+    let notes = p.and_then(|p| p.clear_notes).unwrap_or(128).min(128);
+    let ccs = p.and_then(|p| p.clear_ccs).unwrap_or(128).min(128);
+    let mut msgs: Vec<[u8; 3]> = (0..notes).map(|n| [0x90, n, 0]).collect();
+    msgs.extend((0..ccs).map(|c| [0xB0, c, 0]));
+    for b in p.map(|p| p.bindings.as_slice()).unwrap_or_default() {
         let m = match b.msg {
             Msg::Note(n) => [0x90 | b.channel, n, 0],
             Msg::Cc(c) => [0xB0 | b.channel, c, 0],
@@ -768,18 +773,18 @@ mod tests {
     fn bhoreal_layout() {
         let p = bhoreal_profile();
         assert_eq!(p.bindings.len(), 8 + 32 + 12 + 4);
-        assert_eq!(p.clear_notes, 64, "all pads off on connect / quit, not beyond 63");
+        assert_eq!(p.clear_notes, Some(64), "all pads off on connect / quit, not beyond 63");
         let find = |n: u8| p.bindings.iter().find(|b| b.msg == Msg::Note(n)).unwrap().addr.clone();
         let at = |col, row| find(bhoreal_note(col, row));
         // as pressed on the hardware with the cable top right
         assert_eq!(bhoreal_note(0, 0), 63, "top left");
         assert_eq!(bhoreal_note(1, 0), 62, "right of it");
         assert_eq!(bhoreal_note(7, 7), 0, "bottom right");
-        // column 1 top-down: select 1-3, on/off 1-3, blackout, freeze
+        // column 1 top-down: select 1-3, on/off 1-3, blackout, record
         assert_eq!(at(0, 0), "/layer/1/select");
         assert_eq!(at(0, 5), "/layer/3/active");
         assert_eq!(at(0, 6), "/master/blackout");
-        assert_eq!(at(0, 7), "/master/freeze");
+        assert_eq!(at(0, 7), "/record");
         // columns 2-5: slots top-down per column, like the grid
         assert_eq!(at(1, 0), "/page/slot/1/load");
         assert_eq!(at(1, 1), "/page/slot/2/load");
@@ -864,6 +869,7 @@ mod tests {
         assert_eq!(find(7).unwrap().0, "/layer/2/mix");
         assert_eq!(find(11).unwrap().0, "/layer/3/mix");
         assert_eq!(find(15).unwrap().0, "/master/brightness");
+        assert_eq!(p.clear_ccs, Some(64), "all rings of all 4 banks off on connect / quit");
         assert!(p.matches("Midi Fighter Twister:Midi Fighter Twister MIDI 1 16:0"));
         assert!(!bhoreal_profile().matches("Midi Fighter Twister:Midi Fighter Twister MIDI 1 16:0"));
     }

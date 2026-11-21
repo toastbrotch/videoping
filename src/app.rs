@@ -2682,7 +2682,7 @@ impl App {
         use crate::midi::bhoreal_note as pad;
         let slot_pad = |i: usize| pad(1 + (i / 8) as u8, (i % 8) as u8);
         let dup_note = slot_pad(dup.unwrap_or(0));
-        let (sel_l3, blackout, freeze, l2_fx1, l2_fx3, l1_fx1) = (pad(0, 2), pad(0, 6), pad(0, 7), pad(6, 0), pad(6, 2), pad(5, 0));
+        let (sel_l3, blackout, rec, l2_fx1, l2_fx3, l1_fx1) = (pad(0, 2), pad(0, 6), pad(0, 7), pad(6, 0), pad(6, 2), pad(5, 0));
         // pad presses (press / release on consecutive frames, like a finger)
         let seq: [(u32, u8, u8); 8] = [(1, sel_l3, 64), (2, sel_l3, 0), (3, dup_note, 64), (4, dup_note, 0), (5, blackout, 64), (6, blackout, 0), (7, l2_fx1, 64), (8, l2_fx1, 0)];
         if let Some(&(_, note, vel)) = seq.iter().find(|x| x.0 == sim.step) {
@@ -2703,8 +2703,8 @@ impl App {
                 self.s.slots[8].as_ref().is_some_and(|i| i.effects.first().is_some_and(|e| e.active)),
             );
             eprintln!(
-                "selftest midi: leds: L1 select {:?} (0), L3 select {:?} (orange 10), blackout {:?} (red 1), freeze {:?} (0), slot 1 {:?} (blue 72), copy {:?} (orange 10), clip slot 9 {:?} (green 44), empty slot 32 {:?} (0), L2 fx1 {:?} (plum 108), L2 fx3 {:?} (0), L1 fx1 {:?} (0); {} leds received",
-                led(pad(0, 0)), led(sel_l3), led(blackout), led(freeze), led(slot_pad(0)), led(dup_note), led(slot_pad(8)), led(slot_pad(31)), led(l2_fx1), led(l2_fx3), led(l1_fx1), leds.len()
+                "selftest midi: leds: L1 select {:?} (0), L3 select {:?} (orange 10), blackout {:?} (red 1), record {:?} (0), slot 1 {:?} (blue 72), copy {:?} (orange 10), clip slot 9 {:?} (green 44), empty slot 32 {:?} (0), L2 fx1 {:?} (plum 108), L2 fx3 {:?} (0), L1 fx1 {:?} (0); {} leds received",
+                led(pad(0, 0)), led(sel_l3), led(blackout), led(rec), led(slot_pad(0)), led(dup_note), led(slot_pad(8)), led(slot_pad(31)), led(l2_fx1), led(l2_fx3), led(l1_fx1), leds.len()
             );
         }
         // learn: cc 20 of the virtual device -> /master/freeze, then use it
