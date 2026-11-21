@@ -66,6 +66,7 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_L1MIX=a\|lk\|ilk\|ad` | mix-type of layer 1 (the generator over the clip; default lk), check the result in `out_*.rgba` |
 | `VIDEOPING_SELFTEST_L1=clip` | clip in layer 1 over the generator (several brightness levels, for key checks) |
 | `VIDEOPING_SELFTEST_L1AMOUNT=<0..100>` | mix of layer 1 in % (luma fade check with `_L1MIX=lk\|ilk`) |
+| `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
 | `VIDEOPING_SELFTEST_FX=1` | instead of the default input script: drags the first clip effect by its "≡" handle onto the output effects and prints the effect counts before / after |
@@ -131,7 +132,14 @@ src/
   isf.rs       ISF parser + GLSL wrapper (files on disk stay unchanged)
   video.rs     GStreamer playbin -> appsink RGBA; transport via rate seeks
   ndi.rs       NDI: libndi.so loaded once at runtime; sender, finder (discovery), receiver (one thread each)
+  control.rs   control registry: addresses (/layer/2/mix, /slot/5/load, /inst/ID/fx/1/param/NAME ...)
+               list / get / set / snapshot+changes; the base for MIDI, MCP (and OSC); unit tested
+  meter.rs     resource meters (GPU timer queries, VRAM bookkeeping, process CPU / RAM)
+  record.rs    REC: NV12 frames -> hardware H.264 -> crash-safe mp4
 ```
+
+The app side of the registry is `App::control_list / control_get / control_set / control_changes`
+(tap and record need the app, so `control::set` returns them as an `Effect`).
 
 Frame flow (all on the ui thread, inside `App::ui`, same GL context as egui):
 
@@ -151,7 +159,7 @@ egui   : paints textures via register_native_glow_texture (bottom-up -> flipped 
 - the `.fs` is wrapped for `#version 330`: uniforms are declared, `gl_FragColor` →
   `isf_FragColor`, `varying` → `in`, `texture2D` → `texture`, `IMG_*` macros use `textureSize`.
 - inputs: float, long (VALUES/LABELS → dropdown), bool, event, color, point2D, image
-  (`inputImage` = effect input, other images: black for now → patch-bay later), audio (black).
+  (`inputImage` = effect input, other images: black for now), audio (black).
 - `PASSES` with `TARGET` (all targets persist between frames), optional `.vs` next to the `.fs`.
 - extra uniforms: `uInstanceSeed` (per instance, saved), `TIME`, `TIMEDELTA`, `RENDERSIZE`,
   `PASSINDEX`, `FRAMEINDEX`, `DATE`.
@@ -174,5 +182,5 @@ prepare 4x8 grid with pages, detail panel (preview, clip transport, generator pa
 3 mixer layers, bpm tapper, master (blackout / freeze / brightness), output effects, output
 window (fullscreen), NDI output, NDI input (finder discovery, receive), autosave + save / load, duplicate, drag & drop.
 
-not yet: patch-bay, midi (bhoreal, twister), videopong / online shaders, sets,
+not yet: midi (bhoreal, twister), videopong / online shaders, sets,
 audio, api / mcp, other tabs.

@@ -1,4 +1,4 @@
-//! The "live" tab: 5 columns (finder | prepare grid + master + bpm + patch-bay | prepare detail | mixer + output) + top bar.
+//! The "live" tab: 5 columns (finder | prepare grid + master + bpm + record + settings | prepare detail | mixer + output) + top bar.
 
 use crate::isf::{self, FileKind, InputKind, IsfInfo};
 use crate::meter::{self, Key};
@@ -53,6 +53,8 @@ pub struct App {
     autosave_path: PathBuf,
     /// general config (not part of the session), saved when it changes
     cfg: Config,
+    /// control registry: values at the last control_changes() call (change notifications)
+    control_snap: std::collections::BTreeMap<String, crate::control::Value>,
     /// last render time and beat per instance (see inst_clock)
     inst_clock: HashMap<u64, (Instant, f64)>,
     /// prepare work runs every n-th video frame (2 = half rate, 4, 8; 0 = paused)
@@ -232,6 +234,7 @@ impl App {
             rec_step: 0,
             rec_file: None,
             rec_stopped_at: None,
+            control_done: false,
             prep0: 0,
         });
         let (s, status) = if let Some(t) = &selftest {
@@ -296,6 +299,7 @@ impl App {
             frame_times: Default::default(),
             frames_dropped: 0,
             last_drop: None,
+            control_snap: Default::default(),
             inst_clock: HashMap::new(),
             prepare_div: 2,
             prepare_div_since: Instant::now(),
@@ -790,6 +794,44 @@ impl App {
         ));
     }
 
+    // ------------------------------------------------------------ control registry
+    // MIDI, MCP (and later OSC) control videoping through these, see control.rs
+
+    fn control_ext(&self) -> crate::control::Ext {
+        crate::control::Ext { recording: self.r.as_ref().is_some_and(|r| r.rec.is_some()) }
+    }
+
+    /// Every address that exists right now.
+    pub fn control_list(&self) -> Vec<crate::control::Desc> {
+        crate::control::list(&self.s, &self.infos)
+    }
+
+    pub fn control_get(&self, addr: &str) -> Option<crate::control::Value> {
+        crate::control::get(&self.s, self.control_ext(), addr)
+    }
+
+    /// Set an address; tap and record go through the app like the buttons.
+    pub fn control_set(&mut self, addr: &str, value: &crate::control::Value) -> Result<(), String> {
+        match crate::control::set(&mut self.s, &self.infos, addr, value)? {
+            crate::control::Effect::None => {}
+            crate::control::Effect::Tap => self.tap(),
+            crate::control::Effect::Record(on) => {
+                if on != self.control_ext().recording {
+                    self.rec_request = Some(on);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Addresses whose value changed since the last call (also by mouse): LED feedback, MCP.
+    pub fn control_changes(&mut self) -> Vec<(String, crate::control::Value)> {
+        let now = crate::control::snapshot(&self.s, &self.infos, self.control_ext());
+        let ch = crate::control::changes(&self.control_snap, &now);
+        self.control_snap = now;
+        ch
+    }
+
     /// Frame budget in ms at the output frame rate.
     fn budget_ms(&self) -> f32 {
         1000.0 / self.s.output.fps.clamp(1, 240) as f32
@@ -991,7 +1033,7 @@ impl App {
         }
     }
 
-    /// column 2: prepare grid, below it master, bpm, patch-bay and output options
+    /// column 2: prepare grid, below it master, bpm, record, output options and general config
     fn col_grid(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         egui::ScrollArea::vertical().id_salt("gridcol").auto_shrink([false, false]).show(ui, |ui| {
             self.prepare_grid(ui, frame);
@@ -1004,9 +1046,6 @@ impl App {
             ui.add_space(6.0);
             ui.separator();
             self.section_record(ui);
-            ui.add_space(6.0);
-            ui.separator();
-            self.section_patchbay(ui);
             ui.add_space(6.0);
             ui.separator();
             self.section_output_options(ui);
@@ -1543,12 +1582,6 @@ impl App {
 
     }
 
-    /// patch-bay (below the prepare grid)
-    fn section_patchbay(&mut self, ui: &mut Ui) {
-        ui.label("patch-bay");
-        ui.label(egui::RichText::new("not implemented yet").weak());
-    }
-
     /// bpm tapper (below the prepare grid)
     fn section_bpm(&mut self, ui: &mut Ui) {
         ui.label("bpm");
@@ -1676,7 +1709,7 @@ impl App {
         self.effect_stack(ui, Owner::Output);
     }
 
-    /// output options (column 2, below the patch-bay)
+    /// output options (column 2, below record)
     fn section_output_options(&mut self, ui: &mut Ui) {
         // connected screens (refreshed every 3 s: projectors get plugged in during setup)
         if self.screens_read.is_none_or(|t| t.elapsed().as_secs() >= 3) {
@@ -2310,6 +2343,7 @@ struct SelfTest {
     rec_step: u8,
     rec_file: Option<PathBuf>,
     rec_stopped_at: Option<f32>,
+    control_done: bool,
     prep0: u64,
     /// "≡" handle of the first clip effect / output effect stack (effect transfer test)
     fx_handle: Option<egui::Pos2>,
@@ -2532,6 +2566,38 @@ impl App {
                     let listed = t.rec_file.as_ref().is_some_and(|f| self.finder.iter().any(|e| &e.path == f));
                     eprintln!("selftest rec finder: recording listed in the finder = {listed} (expected true)");
                 }
+            }
+        }
+        // VIDEOPING_SELFTEST_CONTROL: drive the session through the control registry at 2 s
+        if std::env::var_os("VIDEOPING_SELFTEST_CONTROL").is_some() && self.selftest.as_ref().is_some_and(|t| !t.control_done && t.start.elapsed().as_secs_f32() > 2.0) {
+            use crate::control::Value;
+            let _ = self.control_changes(); // baseline
+            let n = self.control_list().len();
+            let bpm0 = self.s.bpm;
+            let steps: [(&str, Value); 6] = [
+                ("/layer/1/mixtype", Value::Text("iLk".into())),
+                ("/layer/1/mix", Value::Num(0.6)),
+                ("/master/brightness", Value::Num(0.5)),
+                ("/bpm/double", Value::Bool(true)),
+                ("/layer/2/fx/1/active", Value::Bool(false)),
+                ("/layer/9/mix", Value::Num(0.5)),
+            ];
+            for (a, v) in &steps {
+                eprintln!("selftest control: set {a} = {v:?} -> {:?}", self.control_set(a, v));
+            }
+            let ch = self.control_changes();
+            eprintln!(
+                "selftest control: {n} addresses; layer 1 = {:?} {:.2}, brightness {:.2}, bpm {} -> {}, clip fx 1 on = {:?}",
+                self.s.layers[0].mix.mix_type,
+                self.s.layers[0].mix.amount,
+                self.s.master.brightness,
+                bpm0,
+                self.s.bpm,
+                self.control_get("/layer/2/fx/1/active")
+            );
+            eprintln!("selftest control: changes reported: {:?}", ch.iter().map(|c| c.0.as_str()).collect::<Vec<_>>());
+            if let Some(t) = self.selftest.as_mut() {
+                t.control_done = true;
             }
         }
         // clean status line for the screenshot (no temporary paths)

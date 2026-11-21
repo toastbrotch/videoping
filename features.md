@@ -52,7 +52,7 @@ everything below belongs to the tab "live".
 | column | content |
 |---|---|
 | 1 finder | finder preview, finder |
-| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, record, patch-bay, output options, general config |
+| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, record, output options, general config |
 | 3 prepare detail | prepare preview pinned on top, below it (scrolls): clip interface, effect stack; default width ~30% of the window |
 | 4 mixer + output | main output preview pinned on top, below it (scrolls): mixer (3 layers), output effects; takes the remaining width |
 
@@ -64,7 +64,6 @@ everything below belongs to the tab "live".
 - everything is saved:
   - prepare grid (all pages, instances, their clip settings, effects and all parameters incl. range settings)
   - mixer layers (loaded instances, mix-type, mix %, r/g/b, active, order, selected layer)
-  - patch-bay routings
   - bpm, output effects, master (brightness), output options
   - midi mappings
   - ui layout (column widths, current tab)
@@ -236,37 +235,13 @@ the prepare area uses two columns (see "layout of the tab live"):
 - mark the selected layer
 
 ## record
-- own box in column 2, below bpm (above the patch-bay), directly visible
+- own box in column 2, below bpm (above the output options), directly visible
 - REC button: records the output (after master, the same picture as NDI) to a file
   - while recording: "● REC" (red) plus running time, file size and resource meter; hover: path, frames, dropped frames, encoder
   - the target folder is not shown in the box (only in the REC hover); it is set in the general config (recording folder)
   - files are named `videoping-YYYY-MM-DD_HH-MM-SS.mp4`
   - keeps recording through new / load; ends when the output resolution changes; finished properly on quit
   - disabled (with the reason on hover) when no hardware encoder works
-
-## patch-bay for videosignals
-
-- placed in column 2, below the prepare grid (under master and bpm)
-
-goal: route video signals between any points, mainly backwards for feedback loops.
-
-- sources (tap points):
-  - each prepare entry (post effects)
-  - each mixer-layer (post)
-  - each output effect (post)
-  - global output
-- destinations: anything that takes a video input
-  - extra image inputs of isf effects (e.g. displace, mask, feedback)
-  - a "patch" source as clip/generator in the prepare lane (like an NDI source)
-- a signal routed backwards (to an earlier point in the chain) is the previous frame (1 frame delay) -> this makes feedback possible without endless loops
-
-visuals:
-- a small dropdown "source" at every video input (effect image input, patch clip) -> no extra clutter, routing is visible where it is used
-- no matrix overview (not needed)
-- no node-graph with cables (too much clutter)
-- patch indicator (small icon + source name, e.g. "⇄ L2") on the folded effect row / prepare slot that gets its input from the patch-bay, so patches are visible without folding out
-- no extra panic button: panic = global blackout + global freeze (see mixer / bhoreal)
-- not mapped to midi
 
 ## global bpm tabber
 - placed in column 2, below the prepare grid (under master)
@@ -299,7 +274,7 @@ visuals:
 
 
 ## output options (fold open)
-  - placed in column 2, below the patch-bay
+  - placed in column 2, below record
   - resolution: fullHD (default)
   - frame rate: 25 / 30 / 50 / 60 (default 60) for screen and NDI output
     - video (instances, mixer, output, NDI) is rendered at this rate, the ui repaints at the display rate
@@ -318,6 +293,27 @@ visuals:
 
 ## output preview
 - main output preview at the top of column 4, always visible (does not scroll away)
+
+# control: one registry for midi, mcp (and osc)
+
+decided 2026-11-21: midi and mcp are two front ends to the same thing, so there is one shared base:
+
+- control registry (src/control.rs): every controllable thing has a stable address, a kind and can be read and set
+  - kinds: trigger (may still read a state, e.g. "is selected"), toggle, range (min..max, maybe whole numbers), choice; some addresses are read only
+  - numbers in addresses count from 1, like the ui
+  - addresses: /master/blackout|freeze|brightness, /bpm (+ /bpm/tap|half|double), /record, /page, /layer/N/select|active|mix|mixtype|r|g|b|unload, /slot/N/load|select|state, /inst/ID/fx/K/active|mix|mixtype|param/NAME, /inst/ID/param/NAME (generator), /out/fx/K/...
+  - layer aliases: /layer/N/fx/K/... and /layer/N/param/... reach whatever is loaded in layer N (stable for a controller: the bhoreal effect pads)
+  - parameters: float / long -> range from the isf header (long rounded), bool -> toggle, point2D -> /x and /y; colors and events not yet
+  - set clamps to the range; brightness up during blackout ends it (like the slider); tap and record go through the app like the buttons
+  - change notifications: a snapshot of all values, diffed against the last one -> what changed, also by mouse (needed for led feedback and mcp)
+- on top of it, in this order:
+  1. registry (done)
+  2. midi: bhoreal as a fixed preset with led feedback (below)
+  3. mcp server inside videoping (localhost http): list / read / set / trigger addresses, load files into slots, output or preview frame as image; every mcp change visible in the status line; switch "mcp read only / locked" for shows
+  4. midifighter twister, midi learn (later the "midi mapping" tab)
+- midi must feel instant: input on its own thread, applied at the start of the next video frame, not through the ui
+- mcp use cases (most useful first): writing shaders with claude live (hot reload + look at the output frame), preparing sets, asking / debugging (state, resource meters), playing via an agent (least)
+- open: osc on the same registry (touchosc etc.)?
 
 # midi mapping
 
@@ -439,3 +435,29 @@ visuals:
 - NDI: libndi.so (NDI 6 runtime) is loaded at runtime, not bundled
 - autosave: `~/.local/share/videoping/autosave.json`; blackout/freeze always start off
 - install / dev setup: see install.md and dev.md
+
+# future ideas (not planned)
+
+## patch-bay for videosignals
+
+removed from the app and from the plan (2026-11-21), kept here only as an idea.
+
+goal: route video signals between any points, mainly backwards for feedback loops.
+
+- sources (tap points):
+  - each prepare entry (post effects)
+  - each mixer-layer (post)
+  - each output effect (post)
+  - global output
+- destinations: anything that takes a video input
+  - extra image inputs of isf effects (e.g. displace, mask, feedback)
+  - a "patch" source as clip/generator in the prepare lane (like an NDI source)
+- a signal routed backwards (to an earlier point in the chain) is the previous frame (1 frame delay) -> this makes feedback possible without endless loops
+
+visuals:
+- a small dropdown "source" at every video input (effect image input, patch clip) -> no extra clutter, routing is visible where it is used
+- no matrix overview (not needed)
+- no node-graph with cables (too much clutter)
+- patch indicator (small icon + source name, e.g. "⇄ L2") on the folded effect row / prepare slot that gets its input from the patch-bay, so patches are visible without folding out
+- no extra panic button: panic = global blackout + global freeze (see mixer / bhoreal)
+- not mapped to midi
