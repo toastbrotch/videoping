@@ -7,7 +7,8 @@ pub const SLOTS_PER_PAGE: usize = 32; // 4 x 8 grid, mirrors bhoreal columns 2-5
 pub const GRID_COLS: usize = 4;
 pub const GRID_ROWS: usize = 8;
 pub const NUM_LAYERS: usize = 3;
-pub const MAX_EFFECTS: usize = 8;
+/// effects per instance and on the output (fits the bhoreal: 4 pads per layer + 4 for the output)
+pub const MAX_EFFECTS: usize = 4;
 
 /// Layer colors (ui live-marking and later bhoreal LEDs).
 /// L1 #1B6898 (blue), L2 #388E3C (green), L3 #C8640A (orange)

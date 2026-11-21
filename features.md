@@ -166,7 +166,7 @@ the prepare area uses two columns (see "layout of the tab live"):
       (example: 120 bpm, 8 beats -> the limited part plays in 4 s, regardless of the clip length)
     - ½x and 2x buttons: halve / double the speed instantly (in bpm mode: double / halve the number of beats)
 
-- effects (layering top-down, max 8 per clip)
+- effects (layering top-down, max 4 per clip; decided 2026-11-21, was 8: fits the bhoreal)
   - reorder: drag & drop
   - drag handle "≡": button-sized grab area (26x18) at the start of the effect row, hand cursor
   - the effect stack (clip effects and output effects) reaches down to the bottom of its column: the whole empty space below is a drop area
@@ -174,7 +174,7 @@ the prepare area uses two columns (see "layout of the tab live"):
     nor between the mixer layers and the output effects
   - move to the output effects and back: drag the "≡" handle onto the other effect stack (onto a row = insert there,
     onto the empty area = append); the effect keeps all its settings (parameters, ranges, animation, mix, r/g/b);
-    a clip that already has 8 effects refuses it
+    a clip (or the output) that already has 4 effects refuses it
   - remove: small x on the effect row
   - active/inactive
   - mix-type, R G B and mix slider are always visible, also when the effect is folded in
@@ -266,6 +266,7 @@ the prepare area uses two columns (see "layout of the tab live"):
 - all three act at the very end (after the output effects), for NDI and screen output
 
 ## output effects (layering top-down)
+- max 4 output effects (decided 2026-11-21, like the effects per clip: 4 pads on the bhoreal)
 - multiple effects, they work exactly like the effects in the prepare lane:
   - active/inactive, reorder by drag & drop, remove with x
   - can be dragged to the selected clip's effect stack and back (keeps all settings)
@@ -371,15 +372,20 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 |---|---|
 | 1 | select mixer-layer 1-3, activate/deactivate mixer-layer 1-3, global blackout, global freeze |
 | 2-5 | select instance in the prepare lane = load it into the selected mixer-layer (4x8 = 32 instances) |
-| 6-8 | activate/deactivate effects of the clip in mixer-layer 1 / 2 / 3 (max 8 effects per clip) |
+| 6-8, rows 1-4 | activate/deactivate effects 1-4 of the clip in mixer-layer 1 / 2 / 3 (max 4 effects per clip) |
+| 6, rows 5-8 | activate/deactivate output effects 1-4 |
+| 7-8, rows 5-8 | free (8 pads) |
 
 - protocol (firmware bhoreal_slim_midi, docs table): pads send note on channel 1, note 0..63, press velocity 64, release velocity 0 (note on); leds: note on, velocity = hue on the firmware color wheel (velocity × 8 -> red -> green -> blue -> red), velocity 0 = off; the usb port name is "Arduino Leonardo" according to the docs
-  - pad order (checked on the hardware 2026-11-21 with test leds): the notes run row by row from the top left: note = row × 8 + column (note 0 top left, 1 to its right, 8 below it, 63 bottom right); the usb port shows as "Arduino Leonardo MIDI 1"
+  - orientation: played with the usb cable at the top right
+  - pad order (checked on the hardware 2026-11-21, leds and pads alike): with the cable top right the top left pad is note 63, the pad right of it 62, the bottom right pad note 0: note = 63 − (row × 8 + column), column / row from the top left; the usb port shows as "Arduino Leonardo MIDI 1"
+    - (a first test gave the opposite corner: the device was held turned by 180° then)
 - the leds can only show full brightness, no dimming (changed 2026-11-21, was "bright / dim"): plum (the accent) = "there, but not on"
   - layer colors as hue: layer 1 = #1B6898 (blue, velocity 72), layer 2 = #388E3C (green, 44), layer 3 = #C8640A (orange, 10), plum = 108
   - column 1: select pad in the layer color when that layer is selected, else off; layer on/off pad in the layer color when on, else off; blackout red when on; freeze cyan when on
   - columns 2-5: slot of the current page: live = color of its layer, loaded but not live = plum, empty = off
-  - columns 6-8: effect pads: active = color of the layer, there but off = plum, no effect = off
+  - columns 6-8, rows 1-4: effect pads: active = color of the layer, there but off = plum, no effect = off
+  - column 6, rows 5-8: output effects: on = yellow (the output belongs to no layer), there but off = plum, no effect = off
 - leds are switched off on connect (startup, plugging in), when the device's profile changes, and on quit: every bound control plus, for the bhoreal, all 64 pads (profile field clear_notes; never above 63, the firmware does not range-check)
 - built-in profile "Bhoreal" of the generic midi engine (src/midi.rs), picked for ports named "bhoreal" or "leonardo"; tested with a virtual midi port (self-test), not yet with the real device
 - global blackout and global freeze: same as the master buttons in column 2

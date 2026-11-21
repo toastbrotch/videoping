@@ -96,6 +96,19 @@
   dl.qa dt { color: var(--strong); font-weight: 600; margin-top: 16px; }
   dl.qa dd { margin: 4px 0 0; }
 
+  /* controller layouts */
+  .pads { display: grid; gap: 4px; margin: 12px 0 4px; }
+  .pads.b8 { grid-template-columns: repeat(8, 1fr); max-width: 560px; }
+  .pads.t4 { grid-template-columns: repeat(4, 1fr); max-width: 320px; }
+  .pad {
+    aspect-ratio: 1; border-radius: 5px; border: 2px solid var(--c, #3a3a3a);
+    background: color-mix(in srgb, var(--c, #2a2a2a) 22%, #161616);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    font-size: 10.5px; line-height: 1.15; color: var(--strong); padding: 2px;
+  }
+  .pads.t4 .pad { border-radius: 50%; font-size: 12px; }
+  .pad.free { --c: #333; color: var(--muted); }
+  .devhead { display: flex; justify-content: space-between; max-width: 560px; color: var(--muted); font-size: 12px; }
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; gap: 0; }
     nav { position: static; max-height: none; padding-bottom: 0; }
@@ -123,9 +136,16 @@
     <li><a href="#clips">4 Clips and parameters</a></li>
     <li><a href="#effects">5 Effects</a></li>
     <li><a href="#output">6 Output, NDI, recording</a></li>
-    <li><a href="#performance">7 Performance</a></li>
-    <li><a href="#files">8 Files and settings</a></li>
-    <li><a href="#trouble">9 Troubleshooting</a></li>
+    <li><a href="#midi">7 MIDI controllers</a>
+      <ol>
+        <li><a href="#bhoreal">Bhoreal</a></li>
+        <li><a href="#twister">Midi Fighter Twister</a></li>
+        <li><a href="#mapping">midi mapping tab</a></li>
+      </ol>
+    </li>
+    <li><a href="#performance">8 Performance</a></li>
+    <li><a href="#files">9 Files and settings</a></li>
+    <li><a href="#trouble">10 Troubleshooting</a></li>
   </ol>
 </nav>
 
@@ -175,7 +195,7 @@ any layer) or on the whole output (output effects, after the mixer). An effect c
 the two with all its settings.</p>
 
 <p><b>Signal flow</b></p>
-<pre>instance:  source → effect 1 → effect 2 → …          (up to 8 effects)
+<pre>instance:  source → effect 1 → effect 2 → …          (up to 4 effects)
 mixer:     layer 3 (bottom) → layer 2 → layer 1 (top), each with mix-type, mix %, R G B
 output:    mixer → output effects → freeze → brightness / blackout → screen, NDI, REC</pre>
 
@@ -369,7 +389,7 @@ change the same settings.</p>
 <ul>
   <li><b>Add</b>: drag an effect from the finder onto a slot, onto the effect stack of the selected
     instance, or onto the output effects. Double-click adds it to the selected instance.</li>
-  <li>Up to <b>8 effects</b> per instance; output effects have no limit.</li>
+  <li>Up to <b>4 effects</b> per instance and 4 output effects (that is what the Bhoreal has pads for).</li>
   <li>Each effect row: <span class="b">≡</span> drag handle, on / off checkbox,
     <b>▸ / ▾</b> to show / hide the parameters, the name, <span class="b">×</span>. Mix-type, R G B
     and mix % always stay visible, also when folded.</li>
@@ -415,10 +435,59 @@ change the same settings.</p>
   <li>About 300 MB per minute at 1080p60.</li>
 </ul>
 
-<h3>MIDI controllers</h3>
-<p>Every MIDI controller works the same way: a <b>profile</b> binds its buttons, knobs and faders to
-things in videoping. The Bhoreal comes with a built-in profile; any other controller is mapped in the
-tab <span class="b on">midi mapping</span> (top bar).</p>
+<!-- ================================================================== -->
+<h2 id="midi"><span class="n">7</span>MIDI controllers</h2>
+
+<p>videoping is made to be played with controllers. Every MIDI controller works the same way: a
+<b>profile</b> binds its buttons, knobs and faders to things in videoping, and sends their state back
+to its LEDs. Two controllers come with a built-in profile and work as soon as they are plugged in:
+the <b>Bhoreal</b> (8×8 pads) and the <b>Midi Fighter Twister</b> (4×4 encoders). Any other controller
+is mapped in the tab <span class="b on">midi mapping</span>.</p>
+
+<ul>
+  <li>Plug controllers in before or while videoping runs: they are found within 2 seconds.</li>
+  <li>The LEDs always show the real state, also after changes with the mouse or via MCP.</li>
+  <li>On start (and when a controller is plugged in) all its LEDs are switched off first, then the
+    real state is shown; on quit everything is switched off.</li>
+  <li>A pad or knob acts at the next video frame: as fast as a mouse click.</li>
+</ul>
+
+<h3 id="bhoreal">Bhoreal</h3>
+<p>Hold it with the <b>USB cable at the top right</b>. Column 1 is then on the left.</p>
+<div class="devhead"><span>column 1</span><span>USB cable ▲</span></div>
+<div class="pads b8"><div class="pad" style="--c:var(--l1)">select<br>L1</div><div class="pad" style="--c:#777">slot<br>1</div><div class="pad" style="--c:#777">slot<br>9</div><div class="pad" style="--c:#777">slot<br>17</div><div class="pad" style="--c:#777">slot<br>25</div><div class="pad" style="--c:var(--l1)">L1<br>fx 1</div><div class="pad" style="--c:var(--l2)">L2<br>fx 1</div><div class="pad" style="--c:var(--l3)">L3<br>fx 1</div><div class="pad" style="--c:var(--l2)">select<br>L2</div><div class="pad" style="--c:#777">slot<br>2</div><div class="pad" style="--c:#777">slot<br>10</div><div class="pad" style="--c:#777">slot<br>18</div><div class="pad" style="--c:#777">slot<br>26</div><div class="pad" style="--c:var(--l1)">L1<br>fx 2</div><div class="pad" style="--c:var(--l2)">L2<br>fx 2</div><div class="pad" style="--c:var(--l3)">L3<br>fx 2</div><div class="pad" style="--c:var(--l3)">select<br>L3</div><div class="pad" style="--c:#777">slot<br>3</div><div class="pad" style="--c:#777">slot<br>11</div><div class="pad" style="--c:#777">slot<br>19</div><div class="pad" style="--c:#777">slot<br>27</div><div class="pad" style="--c:var(--l1)">L1<br>fx 3</div><div class="pad" style="--c:var(--l2)">L2<br>fx 3</div><div class="pad" style="--c:var(--l3)">L3<br>fx 3</div><div class="pad" style="--c:var(--l1)">L1<br>on</div><div class="pad" style="--c:#777">slot<br>4</div><div class="pad" style="--c:#777">slot<br>12</div><div class="pad" style="--c:#777">slot<br>20</div><div class="pad" style="--c:#777">slot<br>28</div><div class="pad" style="--c:var(--l1)">L1<br>fx 4</div><div class="pad" style="--c:var(--l2)">L2<br>fx 4</div><div class="pad" style="--c:var(--l3)">L3<br>fx 4</div><div class="pad" style="--c:var(--l2)">L2<br>on</div><div class="pad" style="--c:#777">slot<br>5</div><div class="pad" style="--c:#777">slot<br>13</div><div class="pad" style="--c:#777">slot<br>21</div><div class="pad" style="--c:#777">slot<br>29</div><div class="pad" style="--c:#e6c200">out<br>fx 1</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l3)">L3<br>on</div><div class="pad" style="--c:#777">slot<br>6</div><div class="pad" style="--c:#777">slot<br>14</div><div class="pad" style="--c:#777">slot<br>22</div><div class="pad" style="--c:#777">slot<br>30</div><div class="pad" style="--c:#e6c200">out<br>fx 2</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:#c62828">black-<br>out</div><div class="pad" style="--c:#777">slot<br>7</div><div class="pad" style="--c:#777">slot<br>15</div><div class="pad" style="--c:#777">slot<br>23</div><div class="pad" style="--c:#777">slot<br>31</div><div class="pad" style="--c:#e6c200">out<br>fx 3</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:#00acc1">freeze</div><div class="pad" style="--c:#777">slot<br>8</div><div class="pad" style="--c:#777">slot<br>16</div><div class="pad" style="--c:#777">slot<br>24</div><div class="pad" style="--c:#777">slot<br>32</div><div class="pad" style="--c:#e6c200">out<br>fx 4</div><div class="pad free">free</div><div class="pad free">free</div></div>
+<ul>
+  <li><b>Column 1</b>: select layer 1 / 2 / 3 · layer 1 / 2 / 3 on / off · blackout · freeze.</li>
+  <li><b>Columns 2–5</b>: the 32 slots of the prepare page that is shown, top-down per column like
+    the grid. Press = load into the selected layer. Turn the page in the ui and the pads follow.</li>
+  <li><b>Columns 6–8, top 4 rows</b>: effects 1–4 of what plays in layer 1 / 2 / 3: press = on / off.
+    They follow the layer: load another clip and the pads control its effects.</li>
+  <li><b>Column 6, bottom 4 rows</b>: output effects 1–4 on / off.</li>
+  <li><b>Columns 7–8, bottom 4 rows</b>: free (map them in the tab if you like).</li>
+</ul>
+<p><b>LED colors</b> (the Bhoreal shows only full colors, no dimming):</p>
+<table>
+  <tr><th>color</th><th>means</th></tr>
+  <tr><td><span class="chip" style="background:var(--l1)"></span><span class="chip" style="background:var(--l2)"></span><span class="chip" style="background:var(--l3)"></span>layer color</td><td>live in that layer · layer selected · layer on · effect on</td></tr>
+  <tr><td><span class="chip" style="background:var(--accent)"></span>plum</td><td>there, but not on: a loaded slot that is not live, an effect that is off</td></tr>
+  <tr><td><span class="chip" style="background:#e6c200"></span>yellow</td><td>output effect on</td></tr>
+  <tr><td><span class="chip" style="background:#c62828"></span>red</td><td>blackout on</td></tr>
+  <tr><td><span class="chip" style="background:#00acc1"></span>cyan</td><td>freeze on</td></tr>
+  <tr><td>off</td><td>nothing there (empty slot, no effect), or switched off</td></tr>
+</table>
+
+<h3 id="twister">Midi Fighter Twister</h3>
+<div class="pads t4"><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l1)">L1<br>mix</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l2)">L2<br>mix</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l3)">L3<br>mix</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:#bbb">bright-<br>ness</div></div>
+<ul>
+  <li><b>Column 4</b>, top-down: mix of layer 1, layer 2, layer 3, and the master brightness.</li>
+  <li>The LED ring shows the value, also after changes with the mouse: turning never jumps.</li>
+  <li>Brightness during a blackout: the ring shows 0; turning it up ends the blackout and fades in.</li>
+  <li>The other 12 encoders and the pushes are free for now: map them with learn in the tab.</li>
+</ul>
+
+<h3 id="mapping">The tab "midi mapping"</h3>
+<p>Here every controller is mapped, also the two built-in ones (their profiles can be changed like
+any other; <span class="b">built-in</span> brings the original back).</p>
 <figure><img src="docs/midi.png" width="1500" alt="the midi mapping tab: devices, bindings, addresses"></figure>
 <ul>
   <li><b>Devices</b> (left): every connected controller, also plugged in while videoping runs (found
@@ -462,21 +531,21 @@ also shows its meaning in words (e.g. "slot 9 (testclip) · gameboy-camera · Ko
 layer. A target that does not exist right now (e.g. effect 5 when only 2 are there) shows "not there
 now" in the table and simply does nothing.</p>
 
-<h3>Bhoreal</h3>
-<ul>
-  <li>Plug it in, also while videoping runs: it is found within 2 seconds and works right away.</li>
-  <li>Column 1, top-down: select layer 1, 2, 3 · layer 1, 2, 3 on / off · blackout · freeze.</li>
-  <li>Columns 2–5: the 32 slots of the current prepare page (top-down per column, like the grid):
-    press = load into the selected layer.</li>
-  <li>Columns 6–8: effects 1–8 of what plays in layer 1, 2, 3: press = on / off.</li>
-  <li>LEDs: <span class="chip" style="background:var(--l1)"></span><span class="chip" style="background:var(--l2)"></span><span class="chip" style="background:var(--l3)"></span>
-    layer color = live / on / selected, <span class="chip" style="background:var(--accent)"></span>plum
-    = there but not on (a loaded slot, an effect that is off), off = nothing, red = blackout, cyan =
-    freeze. The LEDs always show the real state, also after changes with the mouse.</li>
-</ul>
+
+<h3>Mapping a new controller, step by step</h3>
+<ol>
+  <li>Plug it in and open <span class="b on">midi mapping</span>: it appears on the left, with "no
+    profile". Move a control: the dot lights up and the monitor shows its messages.</li>
+  <li>Choose what to control on the right, e.g. search "layer/1/mix".</li>
+  <li>Press <span class="b">learn</span> and move the knob or press the button. The first learned
+    control creates a profile named after the controller.</li>
+  <li>Repeat for every control. Check the mode in the table: a knob should be "absolute", an endless
+    encoder "relative", a button "toggle" or "trigger".</li>
+  <li>Done: the profile is saved by itself and is used every time this controller is plugged in.</li>
+</ol>
 
 <!-- ================================================================== -->
-<h2 id="performance"><span class="n">7</span>Performance</h2>
+<h2 id="performance"><span class="n">8</span>Performance</h2>
 
 <p>videoping tells you when it gets too heavy, before the audience sees it.</p>
 
@@ -522,7 +591,7 @@ dropped frames.</p>
 </ul>
 
 <!-- ================================================================== -->
-<h2 id="files"><span class="n">8</span>Files and settings</h2>
+<h2 id="files"><span class="n">9</span>Files and settings</h2>
 
 <p><b>Session</b>: everything you set up — prepare grid (all pages, instances, effects, parameters),
 mixer layers, output effects, bpm, master, output options, finder folders.</p>
@@ -547,13 +616,14 @@ load and new do not touch it. Resource meters on / off, recording folder.</p>
   <tr><td>window and column layout</td><td><code>~/.local/share/videoping/</code></td></tr>
   <tr><td>sessions (save / load)</td><td>the path in the top bar, default <code>~/videoping-session.json</code></td></tr>
   <tr><td>recordings</td><td>recording folder, default <code>~/Videos/videoping/</code></td></tr>
+  <tr><td>MIDI profiles</td><td><code>~/.config/videoping/midi/</code> (one file per profile, saved automatically)</td></tr>
 </table>
 
 <p><b>Shaders</b> are ISF files (<code>.fs</code>). videoping uses them as they are and reloads a
 shader when its file changes, so you can edit a shader in a text editor while it plays.</p>
 
 <!-- ================================================================== -->
-<h2 id="trouble"><span class="n">9</span>Troubleshooting</h2>
+<h2 id="trouble"><span class="n">10</span>Troubleshooting</h2>
 
 <dl class="qa">
   <dt>The fps counter shows ⚠ although nothing is heavy.</dt>
@@ -582,6 +652,20 @@ shader when its file changes, so you can edit a shader in a text editor while it
 
   <dt>A recording does not appear in the finder.</dt>
   <dd>Add the recording folder to the finder: general config → "add to finder".</dd>
+
+  <dt>A MIDI controller does not appear.</dt>
+  <dd>Check whether Linux sees it: <code>amidi -l</code> in a terminal should list it. If not, but
+    <code>lsusb</code> shows it, the USB MIDI driver is not loaded. This happens after a kernel update
+    while the computer kept running: restart the computer. Controllers must be "class compliant" USB
+    MIDI (most are; no driver needed).</dd>
+
+  <dt>The Bhoreal pads do the wrong things / the LEDs are mirrored.</dt>
+  <dd>Hold it with the USB cable at the top right. The monitor in the midi mapping tab shows which note
+    a pad sends: the top left pad must send note 63.</dd>
+
+  <dt>Controller LEDs stay on after videoping is gone.</dt>
+  <dd>They are switched off when videoping quits normally. After a crash they keep their last state
+    until the next start.</dd>
 
   <dt>Some symbols show as boxes.</dt>
   <dd>Install the DejaVu fonts (<code>fonts-dejavu-core</code>).</dd>

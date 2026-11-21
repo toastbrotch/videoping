@@ -412,7 +412,13 @@ impl App {
                     }
                 }
             }
-            Owner::Output => self.s.output_effects.push(fx),
+            Owner::Output => {
+                if self.s.output_effects.len() < MAX_EFFECTS {
+                    self.s.output_effects.push(fx);
+                } else {
+                    self.set_status(format!("max {MAX_EFFECTS} output effects"));
+                }
+            }
         }
     }
 
@@ -1423,7 +1429,7 @@ impl App {
         let count = self.effects_mut(owner).map(|v| v.len()).unwrap_or(0);
         let header = match owner {
             Owner::Instance(_) => format!("effects ({count}/{MAX_EFFECTS})"),
-            Owner::Output => format!("output effects ({count})"),
+            Owner::Output => format!("output effects ({count}/{MAX_EFFECTS})"),
         };
         let Some(effects) = self.effects_mut(owner) else { return };
         // the stack (= drop area) reaches down to the bottom of the visible column
@@ -1532,10 +1538,10 @@ impl App {
         }
         let full = match to {
             Owner::Instance(id) => self.s.find(id).is_some_and(|i| i.effects.len() >= MAX_EFFECTS),
-            Owner::Output => false,
+            Owner::Output => self.s.output_effects.len() >= MAX_EFFECTS,
         };
         if full {
-            self.set_status(format!("max {MAX_EFFECTS} effects per clip"));
+            self.set_status(format!("max {MAX_EFFECTS} effects (per clip and on the output)"));
             return;
         }
         let Some(fx) = self.effects_mut(from).and_then(|v| (idx < v.len()).then(|| v.remove(idx))) else { return };

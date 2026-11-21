@@ -113,14 +113,16 @@ pub fn bhoreal_hue(rgb: [u8; 3]) -> u8 {
     ((h / 360.0 * 1023.0 / 8.0).round() as i32).clamp(1, 127) as u8
 }
 
-/// The Bhoreal Slim (8x8) as in features.md: column 0..7 from the left, row 0..7 from the top,
-/// note = row * 8 + column (bhoreal_note).
+/// The Bhoreal Slim (8x8) as in features.md: column 0..7 from the left, row 0..7 from the top
+/// (cable top right, see bhoreal_note).
 /// Colors: layer colors for live / on / selected, plum (the accent) = "there, but not on",
 /// red = blackout, cyan = freeze, off = nothing.
-/// Note of a Bhoreal pad: the notes run row by row from the top left (checked on the hardware
-/// 2026-11-21: note 0 top left, note 1 to its right, note 8 below it, note 63 bottom right).
+/// Note of a Bhoreal pad, column / row counted from the top left as you play it, with the usb
+/// cable at the top right (checked on the hardware 2026-11-21, pads and leds alike: top left =
+/// note 63, the pad right of it = 62, bottom right = note 0; the device counts row by row from
+/// the corner opposite the cable).
 pub fn bhoreal_note(col: u8, row: u8) -> u8 {
-    row * 8 + col
+    63 - (row * 8 + col)
 }
 
 pub fn bhoreal_profile() -> Profile {
@@ -128,6 +130,7 @@ pub fn bhoreal_profile() -> Profile {
     let plum = bhoreal_hue([0x8B, 0x4A, 0x87]);
     let red = 1;
     let cyan = bhoreal_hue([0x00, 0xFF, 0xFF]);
+    let yellow = bhoreal_hue([0xFF, 0xE0, 0x00]);
     let pad = |col: u8, row: u8| Msg::Note(bhoreal_note(col, row));
     let b = |msg, mode, addr: String, feedback| Binding { channel: 0, msg, mode, addr, feedback, feedback_addr: None };
     let mut v = vec![];
@@ -148,12 +151,17 @@ pub fn bhoreal_profile() -> Profile {
             v.push(slot);
         }
     }
-    // columns 6-8: effects 1-8 of what is loaded in layer 1 / 2 / 3
+    // columns 6-8, top 4 rows: effects 1-4 of what plays in layer 1 / 2 / 3
     for l in 0..3u8 {
-        for k in 0..8u8 {
+        for k in 0..4u8 {
             v.push(b(pad(5 + l, k), Mode::Toggle, format!("/layer/{}/fx/{}/active", l + 1, k + 1), Feedback::OnOff { off: plum, on: layer[l as usize] }));
         }
     }
+    // column 6, bottom 4 rows: output effects 1-4 (yellow: no layer color, the output is everyone's)
+    for k in 0..4u8 {
+        v.push(b(pad(5, 4 + k), Mode::Toggle, format!("/out/fx/{}/active", k + 1), Feedback::OnOff { off: plum, on: yellow }));
+    }
+    // columns 7-8, bottom 4 rows: free
     Profile { name: "Bhoreal".into(), ports: vec!["bhoreal".into(), "leonardo".into()], bindings: v, clear_notes: 64 }
 }
 
@@ -759,14 +767,14 @@ mod tests {
     #[test]
     fn bhoreal_layout() {
         let p = bhoreal_profile();
-        assert_eq!(p.bindings.len(), 8 + 32 + 24);
+        assert_eq!(p.bindings.len(), 8 + 32 + 12 + 4);
         assert_eq!(p.clear_notes, 64, "all pads off on connect / quit, not beyond 63");
         let find = |n: u8| p.bindings.iter().find(|b| b.msg == Msg::Note(n)).unwrap().addr.clone();
         let at = |col, row| find(bhoreal_note(col, row));
-        assert_eq!(bhoreal_note(0, 0), 0, "top left");
-        assert_eq!(bhoreal_note(1, 0), 1, "right of it");
-        assert_eq!(bhoreal_note(0, 1), 8, "below it");
-        assert_eq!(bhoreal_note(7, 7), 63, "bottom right");
+        // as pressed on the hardware with the cable top right
+        assert_eq!(bhoreal_note(0, 0), 63, "top left");
+        assert_eq!(bhoreal_note(1, 0), 62, "right of it");
+        assert_eq!(bhoreal_note(7, 7), 0, "bottom right");
         // column 1 top-down: select 1-3, on/off 1-3, blackout, freeze
         assert_eq!(at(0, 0), "/layer/1/select");
         assert_eq!(at(0, 5), "/layer/3/active");
@@ -777,13 +785,22 @@ mod tests {
         assert_eq!(at(1, 1), "/page/slot/2/load");
         assert_eq!(at(2, 0), "/page/slot/9/load");
         assert_eq!(at(4, 7), "/page/slot/32/load");
-        // columns 6-8: effects of layer 1-3, top-down
+        // columns 6-8, top 4 rows: effects 1-4 of layer 1-3
         assert_eq!(at(5, 0), "/layer/1/fx/1/active");
-        assert_eq!(at(7, 7), "/layer/3/fx/8/active");
-        // every pad exactly once
+        assert_eq!(at(7, 3), "/layer/3/fx/4/active");
+        // column 6, bottom 4 rows: output effects 1-4
+        assert_eq!(at(5, 4), "/out/fx/1/active");
+        assert_eq!(at(5, 7), "/out/fx/4/active");
+        // every pad at most once; columns 7-8, bottom 4 rows are free
         let mut notes: Vec<u8> = p.bindings.iter().map(|b| match b.msg { Msg::Note(n) => n, Msg::Cc(c) => c }).collect();
         notes.sort();
-        assert_eq!(notes, (0..64).collect::<Vec<_>>());
+        notes.dedup();
+        assert_eq!(notes.len(), 56);
+        for col in 6..8 {
+            for row in 4..8 {
+                assert!(!notes.contains(&bhoreal_note(col, row)), "free pad {col},{row}");
+            }
+        }
     }
 
     /// A fake target for the binding modes.

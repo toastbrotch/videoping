@@ -220,7 +220,7 @@ pub fn tools() -> Value {
         },
         {
             "name": "add_effect",
-            "description": "Add an ISF effect (path) to the instance in a slot (number), or to the output (target \"output\"). Default: the selected instance.",
+            "description": "Add an ISF effect (path) to the instance in a slot (number), or to the output (target \"output\"). Default: the selected instance. At most 4 effects per instance and 4 on the output.",
             "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "slot": { "type": "integer" }, "target": { "type": "string" } }, "required": ["path"] }
         },
         {

@@ -184,7 +184,7 @@ impl App {
                     self.set_status(format!("mcp: added {} at {where_}", isf::display_name(&path)));
                     ToolResult::text(format!("added as {where_}"))
                 } else {
-                    ToolResult::error(format!("not added (max {MAX_EFFECTS} effects per instance)"))
+                    ToolResult::error(format!("not added (max {MAX_EFFECTS} effects per instance and on the output)"))
                 }
             }
             "frame" => {
