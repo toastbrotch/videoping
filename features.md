@@ -322,7 +322,7 @@ visuals:
 
 
 ## resource meters
-- on/off in the general config (default on)
+- on/off in the general config (default on); off hides the meters, the GPU timing keeps running for the render priority
 - shown only while an item is rendered (live, selected, or as preview), nothing for idle slots
 - indicator: 3 small bars like a signal meter (1 = light, 2 = medium, 3 = heavy), grey only (colors are reserved for the layers)
   - prepare slots: bottom left of the thumbnail = the whole instance (source + its active effects)
@@ -338,6 +338,22 @@ visuals:
   - GPU: OpenGL `TIME_ELAPSED` queries around each source and each effect, read back a few frames later without waiting; only every 8th video frame (each query costs CPU in the driver: measuring every frame cost ~1.2 ms per frame on Intel/Mesa, every 8th frame is not measurable any more)
   - VRAM: bookkeeping of the frame buffers videoping allocates (no GPU call); total GPU memory only on NVIDIA (GL_NVX_gpu_memory_info)
   - CPU / RAM: `/proc/self` once per second, for the whole program (CPU per clip cannot be separated reliably, so clips show their decoding instead)
+
+
+## render priority (main mix first)
+- every video frame: 1. live instances (in the layers), 2. main mix (mixer, output effects, master, NDI, REC), 3. only then prepare work
+- prepare work = the selected instance when it is not live, the finder preview, thumbnails of slots that never rendered
+- prepare work runs at a reduced rate, chosen from the main mix's GPU time per frame (resource meter timing):
+  - < 60 % of the frame budget: half the output rate (60 -> 30 fps)
+  - < 80 %: a quarter, < 95 %: an eighth, above: paused until the main mix recovers
+  - a dropped frame in the last 2 s counts as "tight" (at least a quarter) only when videoping's own GPU load is above 50 % of the budget (on Wayland the compositor alone can drop frames, pausing the preview would not help)
+  - slower at once, faster again only after 2 s of calm
+- thumbnails of newly loaded slots: one per prepare frame, only without pressure (no burst after loading a session)
+- every instance has its own clock: animations, generator TIME and jumpcut beats run in real time also at the lower rate, nothing jumps when an instance goes live
+- unchanged on purpose: resolution (a preview looks exactly like it will live, feedback buffers continue when it goes live) and clip decoding (prepare clips keep playing)
+- the prepare detail header shows the rate when the instance is not live: "prepare 30 fps" or "paused: main mix has priority" (grey; hover: GPU time of the main mix)
+- the GPU timing always runs (also with the resource meters hidden), its cost is not measurable
+- measured (Intel Iris Xe, live clip with rutt-etra, fractal-terrain selected in prepare, 8 ms GPU per render): main output 37 fps with priority = the same as without the prepare generator; before (prepare every frame): 30 fps
 
 
 ## recording
@@ -371,6 +387,10 @@ visuals:
   videoping restarts itself once with PRIME render offload
 - measured on the Pop!_OS laptop (Wayland, 120 Hz 3K panel): native Wayland ~53 fps (Intel) / 30 fps (NVIDIA);
   X11 (XWayland) 60 fps on both but the ui is upscaled (blurry) on the HiDPI panel — open decision
+
+## documentation
+- features.md = spec (decisions), manual.md = end-user manual (concept, tour with screenshots in docs/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
+- user-visible changes go into manual.md in the same step as features.md
 
 ## platform
 - Linux only for now (no Windows / macOS builds). The code still has Linux-specific bits (libndi.so names / paths, DejaVu font paths); a port would need those plus native CI builds.

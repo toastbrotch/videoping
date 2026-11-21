@@ -203,66 +203,7 @@ Notes:
   NVIDIA card. For fullscreen output on an external screen it is best when that screen is
   connected to the GPU that renders.
 
-# 5. files videoping writes
+# 5. using videoping
 
-| what | where |
-|---|---|
-| autosave of the whole session (every 2 s when something changed, and on quit) | `~/.local/share/videoping/autosave.json` |
-| general config (resource meters, recording folder) | `~/.config/videoping/config.json` |
-| recordings (REC) | recording folder, default `~/Videos/videoping/` |
-| ui layout (column widths) | eframe storage in `~/.local/share/videoping/` |
-| explicit save / load | the path in the top bar (default `~/videoping-session.json`) |
-
-Media (mp4, isf) is referenced by path, never copied.
-
-# 6. quick usage
-
-- **finder** (column 1): click = preview, double-click = add to the first free prepare slot
-  (effects: add to the selected instance), drag onto a slot / effect stack.
-  Generator or effect is recognised from the isf header (`inputImage` = effect), not the folder.
-  New or removed files in the finder folders (e.g. a finished recording) show up by themselves
-  within 2 s.
-- **prepare grid** (column 2): 4x8 grid. Click = select (detail in column 3), click on an empty
-  slot = deselect, double-click = load into the selected mixer-layer, drag = move, × = delete
-  (not while it is live in the mixer). Dropping a clip from the finder onto an occupied,
-  non-live slot replaces it. Badge top left: ▶ clip, ∿ generator, NDI source.
-  Below the grid: **master** (BLACKOUT, FREEZE, REC, brightness; moving the brightness slider
-  during a blackout ends it, so you can fade in), **bpm** (TAP, slider, ½x / 2x), the patch-bay (not
-  implemented yet), the **output options** (resolution, frame rate, screen, output window,
-  NDI, GPU) and the **general config** (resource meters, recording folder; settings of the
-  program, not saved in a session).
-- **prepare detail** (column 3): preview on top (stays visible), below it clip controls and
-  effect stack of the selected instance.
-- **parameters** (effects and generators):
-  - range slider: drag the `[` `]` handles to set the animation range, click / drag on the bar
-    sets the value (in pause mode); the row below animates it (play directions, loop / once /
-    bounce, speed or bpm, ½x / 2x)
-  - bool parameters are checkboxes, colors a color button, lists a dropdown
-  - **right click** on a parameter (name or control) = back to the default of the shader
-    (value, range and animation)
-- **effects**: checkbox = on / off, ▸ / ▾ = show / hide the parameters (mix controls stay
-  visible), drag the ≡ handle to reorder or to move the effect with all its settings between
-  the clip and the output effects, × = remove.
-- **mixer + output** (column 4): main output preview on top (stays visible). Mixer: click a
-  layer = select it + focus its instance; drop a slot on a layer to load it. Below: output
-  effects.
-- **top bar**: **new** (clears everything after asking; keeps finder folders and output options),
-  **save** / **load** to the path in the text field.
-  - **fps counter** `measured / target fps`: grey = fine; white with ⚠ = below the target or a
-    frame was dropped in the last 2 s (hover: dropped frames since start). On Wayland the
-    compositor can limit it (see section 4).
-  - **resource total** `GPU ms · VRAM · CPU %` (hover: RAM, NVIDIA GPU memory).
-- **resource meters**: three grey bars (1 = light, 2 = medium, 3 = heavy) bottom left on a
-  rendered prepare slot (whole instance) and next to each effect name (that effect). Hover for
-  the numbers: GPU time and share of the frame, VRAM, and for clips the decoder (hardware /
-  software) and whether it keeps up. Only shown while something is rendered. Switch them off
-  in the general config ("resource meters").
-- **REC** (master): records the output after master (the same picture as NDI) as H.264 mp4 into the
-  recording folder (default `~/Videos/videoping`), named with date and time. While recording it shows
-  "● REC", the running time, the file size and a resource meter (hover: GPU / CPU time and
-  whether the encoder keeps up). The file plays again in videoping with all transport
-  modes; "add to finder" in the general config puts the folder into the finder. It keeps recording
-  through new / load, stops when the output resolution changes, and is finished on quit. If
-  videoping crashes, the file still plays up to about 2 s before the crash.
-- **output window**: double-click or `F` = fullscreen on the screen chosen in the output options,
-  `Esc` = leave fullscreen.
+See the [manual](manual.md): concept, a tour of the screen, playing a set, effects, output and
+recording, performance, files and settings, troubleshooting.

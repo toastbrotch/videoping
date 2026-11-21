@@ -53,6 +53,15 @@ pub struct App {
     autosave_path: PathBuf,
     /// general config (not part of the session), saved when it changes
     cfg: Config,
+    /// last render time and beat per instance (see inst_clock)
+    inst_clock: HashMap<u64, (Instant, f64)>,
+    /// prepare work runs every n-th video frame (2 = half rate, 4, 8; 0 = paused)
+    prepare_div: u32,
+    prepare_div_since: Instant,
+    /// GPU ms of the main mix per frame (live instances, mixer, output effects, master, REC)
+    main_ms: f32,
+    /// renders of the selected non-live instance (self-test statistics)
+    prepare_renders: u64,
     /// REC clicked: start (true) / stop (false), done in render() where the GL context is
     rec_request: Option<bool>,
     /// size of the current recording file (read once per second)
@@ -151,6 +160,18 @@ fn save_session(s: &Session, path: &Path) -> Result<String, String> {
     Ok(txt)
 }
 
+/// Time step and beat of an instance since its own last render (instances in prepare are rendered
+/// less often: their animations still run in real time). First render: the frame's dt.
+fn inst_clock(clocks: &mut HashMap<u64, (Instant, f64)>, id: u64, now: Instant, dt: f32, beat_prev: f64, beat_now: f64) -> (f32, f64) {
+    let r = match clocks.get(&id) {
+        // longer gaps (instance was idle) are not caught up: at most half a second
+        Some((t, b)) if now.duration_since(*t).as_secs_f32() < 1.0 => (now.duration_since(*t).as_secs_f32().min(0.5), *b),
+        _ => (dt, beat_prev),
+    };
+    clocks.insert(id, (now, beat_now));
+    r
+}
+
 fn mtime(p: &Path) -> Option<std::time::SystemTime> {
     std::fs::metadata(p).and_then(|m| m.modified()).ok()
 }
@@ -211,6 +232,7 @@ impl App {
             rec_step: 0,
             rec_file: None,
             rec_stopped_at: None,
+            prep0: 0,
         });
         let (s, status) = if let Some(t) = &selftest {
             (selftest_session(t), "selftest".to_string())
@@ -268,6 +290,11 @@ impl App {
             frame_times: Default::default(),
             frames_dropped: 0,
             last_drop: None,
+            inst_clock: HashMap::new(),
+            prepare_div: 2,
+            prepare_div_since: Instant::now(),
+            main_ms: 0.0,
+            prepare_renders: 0,
             rec_request: None,
             rec_size: (None, 0),
             proc_stats: crate::meter::ProcStats::new(),
@@ -439,35 +466,22 @@ impl App {
             }
         }
 
-        let mut fc = FrameCtx { dt, bpm: self.s.bpm, beat_prev, beat_now: self.beat, rng: &mut self.rng };
-
-        // active instances: live in a layer, selected; plus instances still without thumbnail
-        let mut active: Vec<u64> = self.s.layers.iter().filter_map(|l| l.instance).collect();
-        if let Some(sel) = self.s.selected_instance {
-            if !active.contains(&sel) {
-                active.push(sel);
-            }
-        }
-        let mut thumbs_needed = 0;
-        for inst in self.s.slots.iter().flatten() {
-            if !active.contains(&inst.id) && r.thumb(inst.id).is_none() && thumbs_needed < 2 && r.player_error(inst.id).is_none() {
-                active.push(inst.id);
-                thumbs_needed += 1;
-            }
-        }
+        // ---- 1. live instances (main mix), each with its own clock
+        let now_beat = self.beat;
+        let bpm = self.s.bpm;
+        let live: Vec<u64> = self.s.layers.iter().filter_map(|l| l.instance).collect();
         let mut layer_tex = [None; NUM_LAYERS];
-        for id in active {
-            if let Some(inst) = self.s.slots.iter_mut().flatten().find(|i| i.id == id) {
+        for id in &live {
+            let (idt, ibeat) = inst_clock(&mut self.inst_clock, *id, now, dt, beat_prev, now_beat);
+            if let Some(inst) = self.s.slots.iter_mut().flatten().find(|i| i.id == *id) {
+                let mut fc = FrameCtx { dt: idt, bpm, beat_prev: ibeat, beat_now: now_beat, rng: &mut self.rng };
                 let tex = r.render_instance(gl, inst, &mut fc);
                 for (li, l) in self.s.layers.iter().enumerate() {
-                    if l.instance == Some(id) {
+                    if l.instance == Some(*id) {
                         layer_tex[li] = tex;
                     }
                 }
             }
-        }
-        if let Some(p) = self.preview.as_mut() {
-            r.render_instance(gl, p, &mut fc);
         }
         // recording: start / stop (asked by the REC button), errors end it
         match self.rec_request.take() {
@@ -499,15 +513,87 @@ impl App {
             self.status_time = Instant::now();
             r.stop_recording(gl);
         }
-        r.meter.enabled = self.cfg.meters;
+        // GPU timing always runs (also with the meters hidden): the prepare priority needs it;
+        // its cost is not measurable (every 8th frame)
+        r.meter.enabled = true;
+        // ---- 2. main mix: mixer, output effects, master, NDI, REC
+        let mut fc = FrameCtx { dt, bpm, beat_prev, beat_now: now_beat, rng: &mut self.rng };
         r.render_output(gl, &mut self.s, layer_tex, &mut fc);
         if self.cfg.meters {
             self.proc_stats.sample(gl);
         }
 
+        // ---- 3. prepare work (selected non-live instance, finder preview, thumbnails): only after
+        // the main mix, at a reduced rate that drops further when the main mix gets tight
+        let main_ms = {
+            let m = &r.meter;
+            let ms = |k| m.ms(k).unwrap_or(0.0);
+            let mut sum = ms(Key::Mixer) + ms(Key::Master) + ms(Key::Record);
+            sum += self.s.output_effects.iter().filter(|e| e.active).map(|e| ms(Key::Fx(e.uid))).sum::<f32>();
+            for inst in self.s.slots.iter().flatten().filter(|i| live.contains(&i.id)) {
+                sum += ms(Key::Src(inst.id)) + inst.effects.iter().filter(|e| e.active).map(|e| ms(Key::Fx(e.uid))).sum::<f32>();
+            }
+            sum
+        };
+        let budget = 1000.0 / fps as f32;
+        // a dropped frame counts only when our own GPU load is significant (on Wayland the
+        // compositor alone can drop frames; pausing the preview would not help there)
+        let drop_counts = self.last_drop.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) && r.meter.total_ms > budget * 0.5;
+        let p = main_ms / budget;
+        let mut want: u32 = if p < 0.6 { 2 } else if p < 0.8 { 4 } else if p < 0.95 { 8 } else { 0 };
+        if drop_counts && want == 2 {
+            want = 4;
+        }
+        // slower at once, faster again only after 2 s of calm (no flickering between rates)
+        let slower = |a: u32, b: u32| if a == 0 { u32::MAX } else { a } > if b == 0 { u32::MAX } else { b };
+        if slower(want, self.prepare_div) {
+            self.prepare_div = want;
+            self.prepare_div_since = Instant::now();
+        } else if want != self.prepare_div && self.prepare_div_since.elapsed().as_secs_f32() > 2.0 {
+            self.prepare_div = want;
+            self.prepare_div_since = Instant::now();
+        }
+        self.main_ms = main_ms;
+        // self-test comparison: the old behaviour (prepare every frame)
+        if std::env::var_os("VIDEOPING_SELFTEST_NOPRIORITY").is_some() && self.selftest.is_some() {
+            self.prepare_div = 1;
+        }
+        let div = self.prepare_div as u64;
+        if div > 0 && self.video_frames.is_multiple_of(div) {
+            let mut prep: Vec<u64> = vec![];
+            if let Some(sel) = self.s.selected_instance.filter(|id| !live.contains(id)) {
+                prep.push(sel);
+            }
+            // thumbnails of slots that never rendered: one at a time, only without pressure
+            if div == 2 {
+                if let Some(inst) = self.s.slots.iter().flatten().find(|i| {
+                    !live.contains(&i.id) && !prep.contains(&i.id) && r.thumb(i.id).is_none() && r.player_error(i.id).is_none()
+                }) {
+                    prep.push(inst.id);
+                }
+            }
+            for id in prep {
+                if Some(id) == self.s.selected_instance {
+                    self.prepare_renders += 1;
+                }
+                let (idt, ibeat) = inst_clock(&mut self.inst_clock, id, now, dt, beat_prev, now_beat);
+                if let Some(inst) = self.s.slots.iter_mut().flatten().find(|i| i.id == id) {
+                    let mut fc = FrameCtx { dt: idt, bpm, beat_prev: ibeat, beat_now: now_beat, rng: &mut self.rng };
+                    r.render_instance(gl, inst, &mut fc);
+                }
+            }
+            if let Some(pv) = self.preview.as_mut() {
+                let (idt, ibeat) = inst_clock(&mut self.inst_clock, pv.id, now, dt, beat_prev, now_beat);
+                let mut fc = FrameCtx { dt: idt, bpm, beat_prev: ibeat, beat_now: now_beat, rng: &mut self.rng };
+                r.render_instance(gl, pv, &mut fc);
+            }
+            crate::gfx::reset_state(gl);
+        }
+
         if self.last_gc.elapsed().as_secs() >= 2 {
             self.last_gc = Instant::now();
             r.gc(gl, &self.s);
+            self.inst_clock.retain(|_, (t, _)| t.elapsed().as_secs() < 10);
         }
 
         // shader infos for the ui (labels, ranges)
@@ -671,7 +757,8 @@ impl App {
                     ui.separator();
                 }
                 if self.status_time.elapsed().as_secs() < 8 {
-                    ui.label(egui::RichText::new(&self.status).weak());
+                    // only the space that is left (a long path must not run over the tabs)
+                    ui.add(egui::Label::new(egui::RichText::new(&self.status).weak()).truncate()).on_hover_text(&self.status);
                 }
             });
         });
@@ -1111,6 +1198,16 @@ impl App {
             ui.label(egui::RichText::new(&inst.name).strong());
             if let Some(l) = live {
                 ui.label(egui::RichText::new(format!("live in L{}", l + 1)).color(layer_color(l)));
+            } else {
+                // not live: rendered with lower priority than the main mix
+                let fps = self.s.output.fps.clamp(1, 240);
+                let (txt, tip) = match self.prepare_div {
+                    0 => ("paused: main mix has priority".to_string(), "the main mix needs the whole frame budget"),
+                    d => (format!("prepare {} fps", fps / d), "not live: rendered after the main mix at a lower rate"),
+                };
+                let budget = 1000.0 / fps as f32;
+                ui.label(egui::RichText::new(txt).weak().size(widgets::BTN_TEXT))
+                    .on_hover_text(format!("{tip}\nmain mix: GPU {:.1} ms of {budget:.1} ms per frame", self.main_ms));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::btn(ui, "duplicate").clicked() {
@@ -2190,6 +2287,7 @@ struct SelfTest {
     rec_step: u8,
     rec_file: Option<PathBuf>,
     rec_stopped_at: Option<f32>,
+    prep0: u64,
     /// "≡" handle of the first clip effect / output effect stack (effect transfer test)
     fx_handle: Option<egui::Pos2>,
     out_fx: Option<Rect>,
@@ -2248,6 +2346,24 @@ fn selftest_session(t: &SelfTest) -> Session {
     s.layers[0].mix.mix_type = MixType::LumaKey;
     s.layers[1].instance = Some(clip_id);
     s.selected_instance = Some(clip_id);
+    // finder: only the repo shaders and the self-test folder (no private files in screenshots)
+    s.finder_roots = vec![root.join("isf-generator"), root.join("isf-effect"), t.dir.clone()];
+    // VIDEOPING_SELFTEST_PREPARE=<generator .fs>: a (heavy) generator in slot 3, selected but not
+    // live -> prepare priority test
+    if let Ok(p) = std::env::var("VIDEOPING_SELFTEST_PREPARE") {
+        let path = PathBuf::from(p);
+        if let Ok((info, _)) = isf::parse_info(&path) {
+            let id = s.new_id();
+            s.slots[2] = Some(Instance {
+                id,
+                name: isf::display_name(&path),
+                source: SourceKind::Generator { params: isf::default_params(&info), path },
+                effects: vec![],
+                seed: rng.next_f32(),
+            });
+            s.selected_instance = Some(id);
+        }
+    }
     s.output.ndi_enabled = std::env::var("VIDEOPING_SELFTEST_NDI").is_ok();
     if let Some(fps) = std::env::var("VIDEOPING_SELFTEST_FPS").ok().and_then(|f| f.parse().ok()) {
         s.output.fps = fps;
@@ -2381,8 +2497,18 @@ impl App {
                 }
             }
         }
+        // clean status line for the screenshot (no temporary paths)
+        if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > 4.0) {
+            self.status.clear();
+        }
         // resource meters of the session at screenshot time
         if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > 4.5) {
+            eprintln!(
+                "selftest prepare priority: main mix GPU {:.2} ms of {:.1} ms, prepare every {} frames (0 = paused)",
+                self.main_ms,
+                1000.0 / self.s.output.fps.max(1) as f32,
+                self.prepare_div
+            );
             for inst in self.s.slots.iter().flatten() {
                 if let Some((level, tip)) = self.inst_usage(inst) {
                     eprintln!("selftest meter {}: level {level}, {}", inst.name, tip.replace('\n', " | "));
@@ -2409,6 +2535,7 @@ impl App {
         t.ui_frames += 1;
         if secs >= 2.0 && t.at2s.is_none() {
             t.at2s = Some((self.video_frames, t.ui_frames));
+            t.prep0 = self.prepare_renders;
         }
         // a longer test recording (VIDEOPING_SELFTEST_REC=<seconds>) keeps the self-test open
         let close_at = std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v + 4.0).unwrap_or(0.0).max(6.5);
@@ -2423,6 +2550,7 @@ impl App {
                 self.s.output.fps,
                 (t.ui_frames - u0) as f32 / span
             );
+            eprintln!("selftest prepare: selected non-live instance rendered {:.1} times per second", (self.prepare_renders - t.prep0) as f32 / span);
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }

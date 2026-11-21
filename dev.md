@@ -61,6 +61,8 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_NOMETERS=1` | self-test with the resource meters off (overhead comparison: `time` both runs); with meters on, the self-test prints the meter of each instance |
 | `VIDEOPING_SELFTEST_REC=<seconds>` | record from 1.5 s to the given time (default 4) into the self-test folder; the self-test stays open until then; check the file with `cargo run --release --example transport_test -- <file>` |
 | `VIDEOPING_SELFTEST_REC_OFF=1` | same timing without recording (CPU comparison) |
+| `VIDEOPING_SELFTEST_PREPARE=<generator.fs>` | put that generator into slot 3 and select it (not live): prepare priority test, prints its renders per second |
+| `VIDEOPING_SELFTEST_NOPRIORITY=1` | old behaviour for comparison: prepare work every frame |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
 | `VIDEOPING_SELFTEST_FX=1` | instead of the default input script: drags the first clip effect by its "≡" handle onto the output effects and prints the effect counts before / after |
@@ -82,6 +84,34 @@ cargo run --example transport_test -- clip.mp4   # forward / backward / bounce /
 cargo run --example ndi_test -- /path/to/ndi/lib  # sends 2 s of test frames as "videoping-test"
 cargo run --example ndi_loop_test -- [ndi lib dir] # NDI loopback: send, discover, receive, check pixels
 ```
+
+# documentation
+
+| file | for whom |
+|---|---|
+| `features.md` | the spec: every design decision, thresholds, measurements, open points |
+| `manual.md` | end users: how to play with videoping (screenshots in `docs/`) |
+| `install.md` | installation only |
+| `dev.md` | this file |
+
+Screenshots for the manual come from the self-test (it uses only the repo shaders and the test clip
+in the finder, and clears the status line before the screenshot):
+
+```sh
+S=/tmp/vp-docs; mkdir -p $S; cp <testclip.mp4> $S/testclip.mp4
+VIDEOPING_SELFTEST=$S VIDEOPING_SELFTEST_REC=8 ./target/release/videoping
+U=$S/ui_3000x1818.rgba   # size depends on the screen
+c(){ ffmpeg -y -f rawvideo -pix_fmt rgba -s 3000x1818 -i $U -vf "$1" docs/$2; }
+c "scale=1500:-1,split[a][b];[a]palettegen=max_colors=160[p];[b][p]paletteuse=dither=none" overview.png
+c "crop=1300:36:1700:0" topbar.png
+c "crop=390:1300:0:36" finder.png
+c "crop=620:1440:392:36" prepare.png
+c "crop=890:1700:1022:36" detail.png
+c "crop=1080:1100:1920:36" mixer.png
+```
+
+(the crop rectangles fit a 3000x1818 window; detail.png and mixer.png also go through the palette
+filter to stay small)
 
 # architecture
 
