@@ -294,7 +294,15 @@ effects — all before anything is live. The preview shows the result.</p>
   <tr><td><span class="b">Ad</span></td><td>add: the layer is added on top (brightens)</td></tr>
 </table>
 <ul>
-  <li><b>mix %</b>: 100 % = fully on, 0 % = off.</li>
+  <li><b>mix %</b>: 100 % = fully on, 0 % = off.
+    <ul>
+      <li>In <span class="b">A</span> and <span class="b">Ad</span> it fades the layer as a whole.</li>
+      <li>In <span class="b">Lk</span> and <span class="b">iLk</span> it moves the key instead
+        (<b>luma fade</b>): at 100 % only black (iLk: white) is keyed out; going down, more and more of
+        the dark (iLk: bright) parts disappear, the brightest (iLk: darkest) parts last, until nothing
+        is left at 0 %. Pull it down slowly for a luma fade-out, up for a fade-in.</li>
+    </ul>
+  </li>
   <li><b>Ch</b> <span class="b on">R</span> <span class="b on">G</span> <span class="b on">B</span>:
     which color channels of the layer are mixed in. Switch one off and that channel comes only from
     the layers below — a quick way to color effects.</li>

@@ -2373,6 +2373,15 @@ fn selftest_session(t: &SelfTest) -> Session {
         _ => MixType::LumaKey,
     };
     s.layers[1].instance = Some(clip_id);
+    // VIDEOPING_SELFTEST_L1=clip: clip in layer 1 (over the generator), VIDEOPING_SELFTEST_L1AMOUNT:
+    // its mix in % (luma fade check: the clip has several brightness levels)
+    if std::env::var("VIDEOPING_SELFTEST_L1").as_deref() == Ok("clip") {
+        s.layers[0].instance = Some(clip_id);
+        s.layers[1].instance = Some(gen_id);
+    }
+    if let Some(a) = std::env::var("VIDEOPING_SELFTEST_L1AMOUNT").ok().and_then(|v| v.parse::<f32>().ok()) {
+        s.layers[0].mix.amount = a / 100.0;
+    }
     s.selected_instance = Some(clip_id);
     // finder: only the repo shaders and the self-test folder (no private files in screenshots)
     s.finder_roots = vec![root.join("isf-generator"), root.join("isf-effect"), t.dir.clone()];

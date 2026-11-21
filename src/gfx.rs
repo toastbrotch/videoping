@@ -295,16 +295,19 @@ void main() {
     vec4 b = texture(bottom, uv);
     vec4 t = texture(top, uv);
     float l = dot(t.rgb, vec3(0.299, 0.587, 0.114));
-    // luma key: dark parts of the top become transparent (black -> 0, from l = 0.35 fully visible)
-    // inverted luma key: the same key on the inverted luma, so bright parts become transparent
-    // (white -> 0, up to l = 0.65 fully visible) -- not the inverted matte of the luma key, which
-    // would also throw away all mid tones
-    float key = smoothstep(0.05, 0.35, l);
-    float inv_key = smoothstep(0.05, 0.35, 1.0 - l);
+    // luma key: dark parts of the top become transparent; inverted luma key: the same key on the
+    // inverted luma, so bright parts become transparent (not the inverted matte, which would also
+    // throw away all mid tones).
+    // In both, the mix slider moves the cut instead of fading (luma fade): 100 % = only black (iLk:
+    // white) is removed, soft edge 0.05..0.35; going down the cut moves towards white (iLk: black),
+    // 0 % = nothing left. Dark parts disappear first, the brightest last.
+    float lo = 0.05 + (1.0 - amount) * 0.95;
+    float key = smoothstep(lo, lo + 0.3, l);
+    float inv_key = smoothstep(lo, lo + 0.3, 1.0 - l);
     vec3 r;
     if (mixType == 0)      r = mix(b.rgb, t.rgb, t.a * amount);
-    else if (mixType == 1) r = mix(b.rgb, t.rgb, key * t.a * amount);
-    else if (mixType == 2) r = mix(b.rgb, t.rgb, inv_key * t.a * amount);
+    else if (mixType == 1) r = mix(b.rgb, t.rgb, key * t.a);
+    else if (mixType == 2) r = mix(b.rgb, t.rgb, inv_key * t.a);
     else                   r = b.rgb + t.rgb * amount;
     r = mix(b.rgb, r, rgb);
     o = vec4(clamp(r, 0.0, 1.0), 1.0);

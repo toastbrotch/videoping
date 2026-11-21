@@ -354,7 +354,12 @@ pub fn mix_controls(ui: &mut Ui, mix: &mut Mix, id_salt: impl std::hash::Hash + 
         if !one_line {
             ui.horizontal(|ui| ch_group(ui, mix));
         }
-        percent_slider(ui, &mut mix.amount, "mix");
+        let tip = match mix.mix_type {
+            crate::state::MixType::LumaKey => "luma fade: lower = more of the dark parts disappear (100 % = only black is keyed out, 0 % = nothing left)",
+            crate::state::MixType::InvLumaKey => "luma fade: lower = more of the bright parts disappear (100 % = only white is keyed out, 0 % = nothing left)",
+            _ => "how strongly this layer covers what is below it",
+        };
+        percent_slider(ui, &mut mix.amount, "mix").on_hover_text(tip);
     });
 }
 
