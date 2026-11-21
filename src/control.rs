@@ -19,18 +19,25 @@
 //! /slot/N/load                               trigger: into the selected layer
 //! /slot/N/select                             trigger, reads "is selected"
 //! /slot/N/state                              read only: empty | loaded | L1 | L2 | L3
-//! /inst/ID/fx/K/active|mix|mixtype           effect K of instance ID
-//! /inst/ID/fx/K/param/NAME[/x|/y]            effect parameter (ISF input NAME)
-//! /inst/ID/param/NAME[/x|/y]                 generator parameter
-//! /layer/N/fx/K/...  /layer/N/param/...      the same for whatever is loaded in layer N
+//! /slot/N/fx/K/active|mix|mixtype            effect K of the instance in slot N
+//! /slot/N/fx/K/param/P[/x|/y]                its parameter P (counted top-down like the ui)
+//! /slot/N/param/P[/x|/y]                     parameter P of the generator in slot N
+//! /page/slot/N/...                           slot N (1..32) of the page shown (controllers
+//!                                            follow the page)
+//! /layer/N/fx/K/...  /layer/N/param/P        the same for whatever is loaded in layer N
 //! /out/fx/K/...                              output effect K
+//!
+//! Slots count like the grid: top-down per column, 32 per page (page 2 starts at 33). A binding
+//! to a slot controls whatever is in that slot. Parameters are numbered in the order the ui
+//! shows them (the ISF header order, image inputs left out); colors and events keep their number
+//! but are not controllable yet.
 //! ```
 //!
-//! Parameters: float / long -> range (MIN..MAX of the ISF header, long rounded), bool -> toggle,
-//! point2D -> /x and /y ranges. Colors and events are not in the registry (yet).
+//! Parameter kinds: float / long -> range (MIN..MAX of the ISF header, long rounded), bool ->
+//! toggle, point2D -> /x and /y ranges.
 
 use crate::isf::{InputKind, IsfInfo};
-use crate::state::{EffectInst, MixType, Param, ParamValue, Session, SourceKind, NUM_LAYERS};
+use crate::state::{EffectInst, MixType, Param, ParamValue, Session, SourceKind, NUM_LAYERS, SLOTS_PER_PAGE};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
@@ -140,7 +147,7 @@ pub fn list(s: &Session, infos: &Infos) -> Vec<Desc> {
         v.push(d(format!("{p}/unload"), &format!("unload layer {n}"), Kind::Trigger));
         // aliases for what is loaded in the layer (stable for a controller, whatever is loaded)
         if let Some(inst) = s.layers[n - 1].instance.and_then(|id| s.find(id)) {
-            list_instance(&mut v, &p, inst, infos);
+            list_instance(&mut v, &p, &format!("layer {n} ({})", inst.name), inst, infos);
         }
     }
     for (i, slot) in s.slots.iter().enumerate() {
@@ -151,28 +158,46 @@ pub fn list(s: &Session, infos: &Infos) -> Vec<Desc> {
         st.writable = false;
         v.push(st);
         if let Some(inst) = slot {
-            list_instance(&mut v, &format!("/inst/{}", inst.id), inst, infos);
+            list_instance(&mut v, &format!("/slot/{n}"), &format!("slot {n} ({})", inst.name), inst, infos);
         }
     }
+    for n in 1..=SLOTS_PER_PAGE {
+        v.push(d(format!("/page/slot/{n}/load"), &format!("load slot {n} of the page"), Kind::Trigger));
+        v.push(d(format!("/page/slot/{n}/select"), &format!("select slot {n} of the page"), Kind::Trigger));
+        let mut st = d(format!("/page/slot/{n}/state"), &format!("slot {n} of the page"), choice(&["empty", "loaded", "L1", "L2", "L3"]));
+        st.writable = false;
+        v.push(st);
+    }
     for (k, fx) in s.output_effects.iter().enumerate() {
-        list_fx(&mut v, &format!("/out/fx/{}", k + 1), fx, infos);
+        list_fx(&mut v, &format!("/out/fx/{}", k + 1), "output", fx, infos);
     }
     v
 }
 
-fn list_instance(v: &mut Vec<Desc>, prefix: &str, inst: &crate::state::Instance, infos: &Infos) {
-    if let SourceKind::Generator { path, params } = &inst.source {
-        if let Some(info) = infos.get(path) {
-            list_params(v, &format!("{prefix}/param"), &inst.name, params, info);
+/// "/page/slot/N/x" -> "/slot/<page * 32 + N>/x"
+pub fn page_alias(s: &Session, addr: &str) -> Option<String> {
+    match parts(addr).as_slice() {
+        ["page", "slot", n, rest @ ..] if !rest.is_empty() => {
+            let n = n.parse::<usize>().ok().filter(|n| (1..=SLOTS_PER_PAGE).contains(n))?;
+            Some(format!("/slot/{}/{}", s.page * SLOTS_PER_PAGE + n, rest.join("/")))
         }
-    }
-    for (k, fx) in inst.effects.iter().enumerate() {
-        list_fx(v, &format!("{prefix}/fx/{}", k + 1), fx, infos);
+        _ => None,
     }
 }
 
-fn list_fx(v: &mut Vec<Desc>, prefix: &str, fx: &EffectInst, infos: &Infos) {
-    let name = crate::isf::display_name(&fx.path);
+fn list_instance(v: &mut Vec<Desc>, prefix: &str, owner: &str, inst: &crate::state::Instance, infos: &Infos) {
+    if let SourceKind::Generator { path, params } = &inst.source {
+        if let Some(info) = infos.get(path) {
+            list_params(v, &format!("{prefix}/param"), owner, params, info);
+        }
+    }
+    for (k, fx) in inst.effects.iter().enumerate() {
+        list_fx(v, &format!("{prefix}/fx/{}", k + 1), owner, fx, infos);
+    }
+}
+
+fn list_fx(v: &mut Vec<Desc>, prefix: &str, owner: &str, fx: &EffectInst, infos: &Infos) {
+    let name = format!("{owner} · {}", crate::isf::display_name(&fx.path));
     v.push(d(format!("{prefix}/active"), &format!("{name} on"), Kind::Toggle));
     v.push(d(format!("{prefix}/mix"), &format!("{name} mix"), Kind::Range { min: 0.0, max: 1.0, integer: false }));
     v.push(d(format!("{prefix}/mixtype"), &format!("{name} mix-type"), choice(&MIXTYPES)));
@@ -181,13 +206,19 @@ fn list_fx(v: &mut Vec<Desc>, prefix: &str, fx: &EffectInst, infos: &Infos) {
     }
 }
 
+/// Parameter number (1-based) -> ISF input, counted like the ui shows them (no image inputs).
+fn nth_input(info: &IsfInfo, n: usize) -> Option<&crate::isf::Input> {
+    info.inputs.iter().filter(|i| !matches!(i.kind, InputKind::Image | InputKind::Audio)).nth(n.checked_sub(1)?)
+}
+
 fn list_params(v: &mut Vec<Desc>, prefix: &str, owner: &str, params: &[Param], info: &IsfInfo) {
-    for inp in &info.inputs {
+    let shown = info.inputs.iter().filter(|i| !matches!(i.kind, InputKind::Image | InputKind::Audio));
+    for (k, inp) in shown.enumerate() {
         if !params.iter().any(|p| p.name == inp.name) {
             continue;
         }
-        let a = format!("{prefix}/{}", inp.name);
-        let label = format!("{owner}: {}", inp.label);
+        let a = format!("{prefix}/{}", k + 1);
+        let label = format!("{owner} · {}", inp.label);
         match &inp.kind {
             InputKind::Float { min, max, .. } => v.push(d(a, &label, Kind::Range { min: *min, max: *max, integer: false })),
             InputKind::Long { min, max, .. } => v.push(d(a, &label, Kind::Range { min: *min, max: *max, integer: true })),
@@ -217,10 +248,13 @@ fn num(p: Option<&&str>) -> Option<usize> {
     p.and_then(|x| x.parse::<usize>().ok())
 }
 
-/// "/layer/N/..." or "/inst/ID/..." -> instance id and the rest after the prefix
+/// "/layer/N/fx|param..." or "/slot/N/fx|param..." -> instance id and the rest after the prefix
 fn resolve_owner<'a>(s: &Session, p: &'a [&'a str]) -> Option<(Owner, &'a [&'a str])> {
     match p {
-        ["inst", id, rest @ ..] => Some((Owner::Inst(id.parse().ok()?), rest)),
+        ["slot", n, rest @ ..] if matches!(rest.first(), Some(&"fx") | Some(&"param")) => {
+            let si = n.parse::<usize>().ok()?.checked_sub(1)?;
+            Some((Owner::Inst(s.slots.get(si)?.as_ref()?.id), rest))
+        }
         ["layer", n, rest @ ..] if matches!(rest.first(), Some(&"fx") | Some(&"param")) => {
             let li = n.parse::<usize>().ok()?.checked_sub(1)?;
             Some((Owner::Inst(s.layers.get(li)?.instance?), rest))
@@ -246,7 +280,10 @@ fn effects_of_mut<'a>(s: &'a mut Session, o: &Owner) -> Option<&'a mut Vec<Effec
 
 // ---------------------------------------------------------------------------------- get
 
-pub fn get(s: &Session, ext: Ext, addr: &str) -> Option<Value> {
+pub fn get(s: &Session, infos: &Infos, ext: Ext, addr: &str) -> Option<Value> {
+    if let Some(a) = page_alias(s, addr) {
+        return get(s, infos, ext, &a);
+    }
     let p = parts(addr);
     match p.as_slice() {
         ["master", "blackout"] => Some(Value::Bool(s.master.blackout)),
@@ -296,14 +333,18 @@ pub fn get(s: &Session, ext: Ext, addr: &str) -> Option<Value> {
                         _ => None,
                     }
                 }
-                ["fx", k, "param", name, sub @ ..] => {
+                ["fx", k, "param", n, sub @ ..] => {
                     let fx = effects_of(s, &owner)?.get(num(Some(k))?.checked_sub(1)?)?;
-                    get_param(&fx.params, name, sub.first().copied())
+                    let inp = nth_input(infos.get(&fx.path)?, n.parse().ok()?)?;
+                    get_param(&fx.params, &inp.name, sub.first().copied())
                 }
-                ["param", name, sub @ ..] => {
+                ["param", n, sub @ ..] => {
                     let Owner::Inst(id) = owner else { return None };
                     match &s.find(id)?.source {
-                        SourceKind::Generator { params, .. } => get_param(params, name, sub.first().copied()),
+                        SourceKind::Generator { path, params } => {
+                            let inp = nth_input(infos.get(path)?, n.parse().ok()?)?;
+                            get_param(params, &inp.name, sub.first().copied())
+                        }
                         _ => None,
                     }
                 }
@@ -328,6 +369,9 @@ fn get_param(params: &[Param], name: &str, sub: Option<&str>) -> Option<Value> {
 
 /// Set an address. Triggers ignore the value. Ranges are clamped to their limits.
 pub fn set(s: &mut Session, infos: &Infos, addr: &str, value: &Value) -> Result<Effect, String> {
+    if let Some(a) = page_alias(s, addr) {
+        return set(s, infos, &a, value);
+    }
     let p = parts(addr);
     let bad = || format!("unknown or read-only address: {addr}");
     let want_bool = || value.as_bool().ok_or_else(|| format!("{addr}: needs on / off"));
@@ -358,7 +402,7 @@ pub fn set(s: &mut Session, infos: &Infos, addr: &str, value: &Value) -> Result<
                     if let Some(id) = s.layers[li].instance {
                         s.selected_instance = Some(id);
                         if let Some(slot) = s.slot_of(id) {
-                            s.page = slot / crate::state::SLOTS_PER_PAGE;
+                            s.page = slot / SLOTS_PER_PAGE;
                         }
                     }
                 }
@@ -398,18 +442,20 @@ pub fn set(s: &mut Session, infos: &Infos, addr: &str, value: &Value) -> Result<
                         _ => return Err(bad()),
                     }
                 }
-                ["fx", k, "param", name, sub @ ..] => {
+                ["fx", k, "param", n, sub @ ..] => {
                     let ki = num(Some(k)).and_then(|k| k.checked_sub(1)).ok_or_else(bad)?;
                     let fx = effects_of_mut(s, &owner).and_then(|v| v.get_mut(ki)).ok_or_else(bad)?;
                     let info = infos.get(&fx.path).ok_or_else(|| format!("{addr}: shader not loaded yet"))?;
-                    set_param(&mut fx.params, info, name, sub.first().copied(), value).ok_or_else(bad)?;
+                    let name = nth_input(info, n.parse().map_err(|_| bad())?).ok_or_else(bad)?.name.clone();
+                    set_param(&mut fx.params, info, &name, sub.first().copied(), value).ok_or_else(bad)?;
                 }
-                ["param", name, sub @ ..] => {
+                ["param", n, sub @ ..] => {
                     let Owner::Inst(id) = owner else { return Err(bad()) };
                     let inst = s.find_mut(id).ok_or_else(bad)?;
                     let SourceKind::Generator { path, params } = &mut inst.source else { return Err(bad()) };
                     let info = infos.get(path).ok_or_else(|| format!("{addr}: shader not loaded yet"))?;
-                    set_param(params, info, name, sub.first().copied(), value).ok_or_else(bad)?;
+                    let name = nth_input(info, n.parse().map_err(|_| bad())?).ok_or_else(bad)?.name.clone();
+                    set_param(params, info, &name, sub.first().copied(), value).ok_or_else(bad)?;
                 }
                 _ => return Err(bad()),
             }
@@ -443,11 +489,20 @@ fn set_param(params: &mut [Param], info: &IsfInfo, name: &str, sub: Option<&str>
     Some(())
 }
 
+/// min / max of a range address (None: not a range or does not exist)
+pub fn range(s: &Session, infos: &Infos, addr: &str) -> Option<(f32, f32)> {
+    let addr = page_alias(s, addr).unwrap_or_else(|| addr.to_string());
+    list(s, infos).into_iter().find(|d| d.addr == addr).and_then(|d| match d.kind {
+        Kind::Range { min, max, .. } => Some((min, max)),
+        _ => None,
+    })
+}
+
 // ---------------------------------------------------------------------------------- feedback
 
 /// The value of every readable address (for change notifications: LEDs, MCP).
 pub fn snapshot(s: &Session, infos: &Infos, ext: Ext) -> BTreeMap<String, Value> {
-    list(s, infos).into_iter().filter_map(|d| get(s, ext, &d.addr).map(|v| (d.addr, v))).collect()
+    list(s, infos).into_iter().filter_map(|d| get(s, infos, ext, &d.addr).map(|v| (d.addr, v))).collect()
 }
 
 /// Addresses whose value changed (or appeared) between two snapshots.
@@ -503,7 +558,7 @@ mod tests {
     fn master_bpm_layers() {
         let (mut s, infos, _) = setup();
         set(&mut s, &infos, "/master/blackout", &Value::Bool(true)).unwrap();
-        assert_eq!(get(&s, Ext::default(), "/master/brightness"), Some(Value::Num(0.0)));
+        assert_eq!(get(&s, &infos, Ext::default(), "/master/brightness"), Some(Value::Num(0.0)));
         set(&mut s, &infos, "/master/brightness", &Value::Num(0.4)).unwrap();
         assert!(!s.master.blackout, "pulling brightness up ends the blackout");
         set(&mut s, &infos, "/bpm", &Value::Num(127.6)).unwrap();
@@ -517,7 +572,7 @@ mod tests {
         set(&mut s, &infos, "/layer/2/mix", &Value::Num(7.0)).unwrap();
         assert_eq!(s.layers[1].mix.amount, 1.0, "clamped");
         set(&mut s, &infos, "/layer/2/g", &Value::Bool(false)).unwrap();
-        assert_eq!(get(&s, Ext::default(), "/layer/2/g"), Some(Value::Bool(false)));
+        assert_eq!(get(&s, &infos, Ext::default(), "/layer/2/g"), Some(Value::Bool(false)));
         assert!(set(&mut s, &infos, "/layer/4/mix", &Value::Num(0.5)).is_err());
         assert!(set(&mut s, &infos, "/slot/1/state", &Value::Text("L1".into())).is_err(), "read only");
     }
@@ -528,13 +583,20 @@ mod tests {
         set(&mut s, &infos, "/layer/2/select", &Value::Bool(true)).unwrap();
         set(&mut s, &infos, "/slot/1/load", &Value::Bool(true)).unwrap();
         assert_eq!(s.layers[1].instance, Some(clip));
-        assert_eq!(get(&s, Ext::default(), "/slot/1/state"), Some(Value::Text("L2".into())));
-        assert_eq!(get(&s, Ext::default(), "/slot/2/state"), Some(Value::Text("loaded".into())));
-        assert_eq!(get(&s, Ext::default(), "/slot/3/state"), Some(Value::Text("empty".into())));
+        assert_eq!(get(&s, &infos, Ext::default(), "/slot/1/state"), Some(Value::Text("L2".into())));
+        assert_eq!(get(&s, &infos, Ext::default(), "/slot/2/state"), Some(Value::Text("loaded".into())));
+        assert_eq!(get(&s, &infos, Ext::default(), "/slot/3/state"), Some(Value::Text("empty".into())));
         // the layer alias reaches the effect of whatever is loaded in layer 2
         set(&mut s, &infos, "/layer/2/fx/1/active", &Value::Bool(false)).unwrap();
         assert!(!s.find(clip).unwrap().effects[0].active);
-        assert_eq!(get(&s, Ext::default(), &format!("/inst/{clip}/fx/1/active")), Some(Value::Bool(false)));
+        assert_eq!(get(&s, &infos, Ext::default(), "/slot/1/fx/1/active"), Some(Value::Bool(false)), "slot 1 holds the clip");
+        let _ = clip;
+        // page alias: slot 1 of page 1 is slot 1; on page 2 it is slot 33 (empty)
+        assert_eq!(get(&s, &infos, Ext::default(), "/page/slot/1/state"), Some(Value::Text("L2".into())));
+        s.slots.extend(std::iter::repeat_n(None, SLOTS_PER_PAGE));
+        set(&mut s, &infos, "/page", &Value::Num(2.0)).unwrap();
+        assert_eq!(get(&s, &infos, Ext::default(), "/page/slot/1/state"), Some(Value::Text("empty".into())));
+        set(&mut s, &infos, "/page", &Value::Num(1.0)).unwrap();
         set(&mut s, &infos, "/layer/2/unload", &Value::Bool(true)).unwrap();
         assert!(s.layers[1].instance.is_none());
         assert!(set(&mut s, &infos, "/layer/2/fx/1/active", &Value::Bool(true)).is_err(), "nothing loaded");
@@ -543,11 +605,17 @@ mod tests {
     #[test]
     fn params_clamped_and_listed() {
         let (mut s, infos, clip) = setup();
-        let a = format!("/inst/{clip}/fx/1/param/uResolution");
+        let _ = clip;
+        // parameter 1 of gameboy-camera is uResolution (32..288)
+        let a = "/slot/1/fx/1/param/1".to_string();
         set(&mut s, &infos, &a, &Value::Num(9999.0)).unwrap();
-        assert_eq!(get(&s, Ext::default(), &a), Some(Value::Num(288.0)), "clamped to the ISF MAX");
+        assert_eq!(get(&s, &infos, Ext::default(), &a), Some(Value::Num(288.0)), "clamped to the ISF MAX");
         let l = list(&s, &infos);
         let desc = l.iter().find(|d| d.addr == a).expect("listed");
+        assert!(desc.label.contains("slot 1 (clip)") && desc.label.contains("gameboy-camera"), "{}", desc.label);
+        // the page alias reaches the same parameter
+        assert_eq!(get(&s, &infos, Ext::default(), "/page/slot/1/fx/1/param/1"), Some(Value::Num(288.0)));
+        assert!(set(&mut s, &infos, "/slot/1/fx/1/param/99", &Value::Num(1.0)).is_err(), "no parameter 99");
         assert_eq!(desc.kind, Kind::Range { min: 32.0, max: 288.0, integer: false });
         // every listed, readable address round-trips through get
         let snap = snapshot(&s, &infos, Ext::default());

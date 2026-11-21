@@ -18,8 +18,11 @@ Runtime packages from `install.md`, plus:
 
 ```sh
 sudo apt install build-essential pkg-config \
-  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+  libasound2-dev
 ```
+
+`libasound2-dev` is for MIDI (ALSA, crate `midir`).
 
 That is all: the windowing libs (wayland, x11, xkbcommon) and OpenGL are loaded at runtime,
 and NDI is loaded with `dlopen` (no NDI headers needed to build).
@@ -36,7 +39,7 @@ for f in *.deb; do dpkg-deb -x "$f" root; done
 L=$PWD/root/usr/lib/x86_64-linux-gnu
 for l in $L/*.so; do ln -sf /usr/lib/x86_64-linux-gnu/$(readlink $l) $l; done
 sed -i "s#^libdir=.*#libdir=$L#; /^Requires.private/d" $L/pkgconfig/*.pc
-export PKG_CONFIG_PATH=$L/pkgconfig
+export PKG_CONFIG_PATH=$L/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig   # keep the system path: alsa
 ```
 
 # build, run, test
@@ -66,6 +69,8 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_L1MIX=a\|lk\|ilk\|ad` | mix-type of layer 1 (the generator over the clip; default lk), check the result in `out_*.rgba` |
 | `VIDEOPING_SELFTEST_L1=clip` | clip in layer 1 over the generator (several brightness levels, for key checks) |
 | `VIDEOPING_SELFTEST_L1AMOUNT=<0..100>` | mix of layer 1 in % (luma fade check with `_L1MIX=lk\|ilk`) |
+| `VIDEOPING_SELFTEST_MIDI=1` | a virtual "Bhoreal selftest" MIDI port (ALSA) presses pads (select L3, load the copy of the generator, blackout, effect off), the LED feedback is checked, then cc 20 is learned onto /master/freeze and used; the mouse script is off |
+| `VIDEOPING_SELFTEST_TAB=midi` | start in the midi mapping tab (screenshot of the tab; with `_MIDI` the virtual device is selected) |
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
@@ -132,8 +137,11 @@ src/
   isf.rs       ISF parser + GLSL wrapper (files on disk stay unchanged)
   video.rs     GStreamer playbin -> appsink RGBA; transport via rate seeks
   ndi.rs       NDI: libndi.so loaded once at runtime; sender, finder (discovery), receiver (one thread each)
-  control.rs   control registry: addresses (/layer/2/mix, /slot/5/load, /inst/ID/fx/1/param/NAME ...)
+  control.rs   control registry: addresses (/layer/2/mix, /slot/5/load, /slot/9/fx/1/param/2 ...)
                list / get / set / snapshot+changes; the base for MIDI, MCP (and OSC); unit tested
+  midi_tab.rs  the tab "midi mapping" (devices, bindings table, addresses + learn); child module of app
+  midi.rs      MIDI engine: profiles of bindings (MIDI message <-> control address), modes, LED
+               feedback, port scan every 2 s; built-in Bhoreal profile; unit tested
   meter.rs     resource meters (GPU timer queries, VRAM bookkeeping, process CPU / RAM)
   record.rs    REC: NV12 frames -> hardware H.264 -> crash-safe mp4
 ```

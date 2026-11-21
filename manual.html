@@ -415,6 +415,58 @@ change the same settings.</p>
   <li>About 300 MB per minute at 1080p60.</li>
 </ul>
 
+<h3>MIDI controllers</h3>
+<p>Every MIDI controller works the same way: a <b>profile</b> binds its buttons, knobs and faders to
+things in videoping. The Bhoreal comes with a built-in profile; any other controller is mapped in the
+tab <span class="b on">midi mapping</span> (top bar).</p>
+<figure><img src="docs/midi.png" width="1500" alt="the midi mapping tab: devices, bindings, addresses"></figure>
+<ul>
+  <li><b>Devices</b> (left): every connected controller, also plugged in while videoping runs (found
+    within 2 s). The dot lights up when it sends something. Choose its profile in the dropdown. Below:
+    the monitor with the last messages.</li>
+  <li><b>Bindings</b> (middle): what each control does: the control, the <b>mode</b> (trigger = fire
+    once, toggle = on / off, momentary = on while held, absolute = fader / knob over the whole range,
+    relative = endless encoder), the <b>target</b> and the LED <b>feedback</b>. The row of the control
+    you just moved lights up. <span class="b">×</span> removes a binding.</li>
+  <li><b>Learn</b> (right): choose what to control in the list (search helps, e.g. "blackout" or
+    "layer/2"), press <span class="b">learn</span>, move a control on the controller: done. The mode is
+    guessed (a button on an on / off, a fader or encoder on a range); change it in the table if needed.</li>
+  <li>Changes are marked "● not saved": <span class="b">save</span> keeps the profile
+    (<code>~/.config/videoping/midi/</code>), <span class="b">built-in</span> brings back the original
+    Bhoreal profile. Profiles are part of your setup, not of a session.</li>
+</ul>
+
+<p><b>What the addresses mean.</b> Each target is written as a short path. In the tab every address
+also shows its meaning in words (e.g. "slot 9 (testclip) · gameboy-camera · Kontrast").</p>
+<table>
+  <tr><th>address</th><th>means</th></tr>
+  <tr><td><code>/layer/2/mix</code></td><td>mixer layer 2 (also: select, active, mixtype, r, g, b, unload)</td></tr>
+  <tr><td><code>/layer/2/fx/3/active</code></td><td>effect 3 of whatever plays in layer 2 right now</td></tr>
+  <tr><td><code>/layer/2/param/4</code></td><td>parameter 4 of the generator playing in layer 2</td></tr>
+  <tr><td><code>/slot/9/load</code></td><td>slot 9 of the grid (top-down per column; page 2 starts at 33): load, select, state</td></tr>
+  <tr><td><code>/slot/9/fx/1/param/2</code></td><td>parameter 2 of effect 1 of whatever is in slot 9</td></tr>
+  <tr><td><code>/page/slot/9/…</code></td><td>slot 9 of the page shown: a controller follows the page</td></tr>
+  <tr><td><code>…/param/4</code></td><td>the 4th parameter, counted top-down like the parameter list (not by name: names change while shaders are made)</td></tr>
+  <tr><td><code>/out/fx/1/…</code></td><td>output effect 1</td></tr>
+  <tr><td><code>/master/blackout</code> <code>/bpm</code> <code>/record</code> <code>/page</code></td><td>master, tempo, recording, the prepare page</td></tr>
+</table>
+<p>A binding to a slot controls whatever is in that slot; a binding to a layer whatever plays in that
+layer. A target that does not exist right now (e.g. effect 5 when only 2 are there) shows "not there
+now" in the table and simply does nothing.</p>
+
+<h3>Bhoreal</h3>
+<ul>
+  <li>Plug it in, also while videoping runs: it is found within 2 seconds and works right away.</li>
+  <li>Column 1, top-down: select layer 1, 2, 3 · layer 1, 2, 3 on / off · blackout · freeze.</li>
+  <li>Columns 2–5: the 32 slots of the current prepare page (top-down per column, like the grid):
+    press = load into the selected layer.</li>
+  <li>Columns 6–8: effects 1–8 of what plays in layer 1, 2, 3: press = on / off.</li>
+  <li>LEDs: <span class="chip" style="background:var(--l1)"></span><span class="chip" style="background:var(--l2)"></span><span class="chip" style="background:var(--l3)"></span>
+    layer color = live / on / selected, <span class="chip" style="background:var(--accent)"></span>plum
+    = there but not on (a loaded slot, an effect that is off), off = nothing, red = blackout, cyan =
+    freeze. The LEDs always show the real state, also after changes with the mouse.</li>
+</ul>
+
 <!-- ================================================================== -->
 <h2 id="performance"><span class="n">7</span>Performance</h2>
 

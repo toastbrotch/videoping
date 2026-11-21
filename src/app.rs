@@ -53,6 +53,13 @@ pub struct App {
     autosave_path: PathBuf,
     /// general config (not part of the session), saved when it changes
     cfg: Config,
+    tab: Tab,
+    /// midi mapping tab: selected device (port), address, search
+    midi_sel_port: Option<String>,
+    midi_sel_addr: Option<String>,
+    midi_search: String,
+    /// MIDI engine (generic, profiles; None while it is being polled)
+    midi: Option<crate::midi::Midi>,
     /// control registry: values at the last control_changes() call (change notifications)
     control_snap: std::collections::BTreeMap<String, crate::control::Value>,
     /// last render time and beat per instance (see inst_clock)
@@ -162,6 +169,18 @@ fn save_session(s: &Session, path: &Path) -> Result<String, String> {
     Ok(txt)
 }
 
+impl crate::midi::Target for App {
+    fn get(&self, addr: &str) -> Option<crate::control::Value> {
+        self.control_get(addr)
+    }
+    fn set(&mut self, addr: &str, value: &crate::control::Value) -> Result<(), String> {
+        self.control_set(addr, value)
+    }
+    fn range(&self, addr: &str) -> Option<(f32, f32)> {
+        self.control_range(addr)
+    }
+}
+
 /// Time step and beat of an instance since its own last render (instances in prepare are rendered
 /// less often: their animations still run in real time). First render: the frame's dt.
 fn inst_clock(clocks: &mut HashMap<u64, (Instant, f64)>, id: u64, now: Instant, dt: f32, beat_prev: f64, beat_now: f64) -> (f32, f64) {
@@ -235,6 +254,7 @@ impl App {
             rec_file: None,
             rec_stopped_at: None,
             control_done: false,
+            midi_sim: None,
             prep0: 0,
         });
         let (s, status) = if let Some(t) = &selftest {
@@ -299,6 +319,11 @@ impl App {
             frame_times: Default::default(),
             frames_dropped: 0,
             last_drop: None,
+            tab: if std::env::var("VIDEOPING_SELFTEST_TAB").as_deref() == Ok("midi") { Tab::Midi } else { Tab::Live },
+            midi_sel_port: None,
+            midi_sel_addr: None,
+            midi_search: String::new(),
+            midi: Some(crate::midi::Midi::new()),
             control_snap: Default::default(),
             inst_clock: HashMap::new(),
             prepare_div: 2,
@@ -426,6 +451,11 @@ impl App {
     // ------------------------------------------------------------------ frame
 
     fn render(&mut self, gl: &std::sync::Arc<glow::Context>) {
+        // MIDI first: a pad pressed before this frame is already in it
+        if let Some(mut m) = self.midi.take() {
+            m.poll(self);
+            self.midi = Some(m);
+        }
         let (w, h) = (self.s.output.width as i32, self.s.output.height as i32);
         if self.r.is_none() {
             use glow::HasContext;
@@ -732,10 +762,14 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("videoping").strong().color(ACCENT));
             ui.separator();
-            let _ = widgets::choice(ui, true, "live");
+            if widgets::choice(ui, self.tab == Tab::Live, "live").clicked() {
+                self.tab = Tab::Live;
+            }
             ui.add_enabled(false, egui::Button::new(egui::RichText::new("mapping").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
             ui.add_enabled(false, egui::Button::new(egui::RichText::new("shader editor").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
-            ui.add_enabled(false, egui::Button::new(egui::RichText::new("midi mapping").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
+            if widgets::choice(ui, self.tab == Tab::Midi, "midi mapping").clicked() {
+                self.tab = Tab::Midi;
+            }
             ui.add_enabled(false, egui::Button::new(egui::RichText::new("sequencer").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::btn(ui, "load").clicked() {
@@ -807,7 +841,7 @@ impl App {
     }
 
     pub fn control_get(&self, addr: &str) -> Option<crate::control::Value> {
-        crate::control::get(&self.s, self.control_ext(), addr)
+        crate::control::get(&self.s, &self.infos, self.control_ext(), addr)
     }
 
     /// Set an address; tap and record go through the app like the buttons.
@@ -830,6 +864,16 @@ impl App {
         let ch = crate::control::changes(&self.control_snap, &now);
         self.control_snap = now;
         ch
+    }
+
+    /// "/page/slot/9/..." -> the absolute "/slot/N/..." for the page shown (other addresses as they are)
+    pub fn page_slot_resolve(&self, addr: &str) -> String {
+        crate::control::page_alias(&self.s, addr).unwrap_or_else(|| addr.to_string())
+    }
+
+    /// min / max of a range address
+    pub fn control_range(&self, addr: &str) -> Option<(f32, f32)> {
+        crate::control::range(&self.s, &self.infos, addr)
     }
 
     /// Frame budget in ms at the output frame rate.
@@ -2083,14 +2127,9 @@ fn style(ctx: &egui::Context) {
     });
 }
 
-impl eframe::App for App {
-    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
-        let Some(gl) = frame.gl().cloned() else { return };
-        self.update_preview(&gl);
-        self.render(&gl);
-
-        egui::Panel::top("top").show(ui, |ui| self.top_bar(ui, &gl));
+impl App {
+    /// The tab "live": finder | prepare grid | prepare detail | mixer + output.
+    fn live_tab(&mut self, ui: &mut Ui, frame: &mut eframe::Frame, ctx: &egui::Context) {
         egui::Panel::left("col1").resizable(true).default_size(260.0).size_range(160.0..=600.0).show(ui, |ui| {
             self.col_finder(ui, frame);
         });
@@ -2121,6 +2160,32 @@ impl eframe::App for App {
                 self.col_output(ui);
             });
         });
+    }
+}
+
+#[path = "midi_tab.rs"]
+mod midi_tab;
+
+/// Top-level tabs (mapping, shader editor and sequencer later).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Tab {
+    Live,
+    Midi,
+}
+
+impl eframe::App for App {
+    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        let Some(gl) = frame.gl().cloned() else { return };
+        self.update_preview(&gl);
+        self.render(&gl);
+
+        egui::Panel::top("top").show(ui, |ui| self.top_bar(ui, &gl));
+        // the output keeps rendering in every tab (render() above)
+        match self.tab {
+            Tab::Live => self.live_tab(ui, frame, &ctx),
+            Tab::Midi => self.midi_tab(ui),
+        }
 
         self.confirm_new_dialog(&ctx, &gl);
         self.output_window(&ctx, frame);
@@ -2135,6 +2200,10 @@ impl eframe::App for App {
     /// the self-test must not touch the stored ui layout
     /// self-test: simulated mouse drag of the in-limiter "[" of the prepare-detail timeline
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // the MIDI self-test plays without the simulated mouse (its clicks select layers too)
+        if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() {
+            return;
+        }
         let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
             SourceKind::Clip { transport, .. } => Some(transport.in_pt),
             _ => None,
@@ -2321,6 +2390,15 @@ impl eframe::App for App {
 
 /// Self-test (VIDEOPING_SELFTEST=<dir>): builds a session, saves a ui screenshot and an
 /// output frame as raw RGBA into <dir>, then quits. Never touches the autosave.
+/// Virtual "Bhoreal" for the MIDI self-test: an output videoping reads the pads from, an input
+/// that receives the LED feedback.
+struct MidiSim {
+    out: midir::MidiOutputConnection,
+    _leds_in: midir::MidiInputConnection<()>,
+    leds: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>>,
+    step: u32,
+}
+
 struct SelfTest {
     dir: PathBuf,
     start: Instant,
@@ -2344,6 +2422,7 @@ struct SelfTest {
     rec_file: Option<PathBuf>,
     rec_stopped_at: Option<f32>,
     control_done: bool,
+    midi_sim: Option<MidiSim>,
     prep0: u64,
     /// "≡" handle of the first clip effect / output effect stack (effect transfer test)
     fx_handle: Option<egui::Pos2>,
@@ -2435,6 +2514,10 @@ fn selftest_session(t: &SelfTest) -> Session {
             s.selected_instance = Some(id);
         }
     }
+    // MIDI test: a copy of the generator that is not live (to load with a pad)
+    if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() {
+        s.duplicate_slot(0, &mut rng);
+    }
     s.output.ndi_enabled = std::env::var("VIDEOPING_SELFTEST_NDI").is_ok();
     if let Some(fps) = std::env::var("VIDEOPING_SELFTEST_FPS").ok().and_then(|f| f.parse().ok()) {
         s.output.fps = fps;
@@ -2507,6 +2590,104 @@ impl App {
         t.drag_step += 1;
     }
 
+    fn selftest_midi(&mut self) {
+        use midir::os::unix::{VirtualInput, VirtualOutput};
+        let Some(t) = self.selftest.as_mut() else { return };
+        if t.midi_sim.is_none() {
+            if t.start.elapsed().as_secs_f32() < 0.5 {
+                return;
+            }
+            let leds: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>> = Default::default();
+            let l2 = leds.clone();
+            let out = midir::MidiOutput::new("bhoreal-selftest-pads").and_then(|o| o.create_virtual("Bhoreal selftest").map_err(|e| e.kind()).map_err(|_| midir::InitError));
+            let inp = midir::MidiInput::new("bhoreal-selftest-leds").ok().and_then(|i| {
+                i.create_virtual(
+                    "Bhoreal selftest",
+                    move |_, b, _| {
+                        if b.len() == 3 && b[0] & 0xF0 == 0x90 {
+                            l2.lock().unwrap().insert(b[1], b[2]);
+                        }
+                    },
+                    (),
+                )
+                .ok()
+            });
+            match (out, inp) {
+                (Ok(out), Some(inp)) => t.midi_sim = Some(MidiSim { out, _leds_in: inp, leds, step: 0 }),
+                _ => {
+                    eprintln!("selftest midi: could not create virtual ports (ALSA sequencer?)");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        let connected = self.midi.as_ref().is_some_and(|m| m.devices().iter().any(|d| d.0.contains("selftest")));
+        // the copy of the generator: the generator in a slot other than slot 1
+        let dup = self.s.slots.iter().enumerate().skip(1).find(|(_, x)| x.as_ref().is_some_and(|i| matches!(i.source, SourceKind::Generator { .. }))).map(|(i, _)| i);
+        let Some(t) = self.selftest.as_mut() else { return };
+        let Some(sim) = t.midi_sim.as_mut() else { return };
+        if sim.step == 0 && !connected {
+            return; // wait for the port scan (every 2 s)
+        }
+        let dup_note = 8 + dup.unwrap_or(0) as u8;
+        // pad presses (press / release on consecutive frames, like a finger)
+        let seq: [(u32, u8, u8); 8] = [(1, 2, 64), (2, 2, 0), (3, dup_note, 64), (4, dup_note, 0), (5, 6, 64), (6, 6, 0), (7, 48, 64), (8, 48, 0)];
+        if let Some(&(_, note, vel)) = seq.iter().find(|x| x.0 == sim.step) {
+            let _ = sim.out.send(&[0x90, note, vel]);
+        }
+        if sim.step == 1 {
+            eprintln!("selftest midi: connected: {:?}", self.midi.as_ref().map(|m| m.devices()));
+        }
+        if sim.step == 40 {
+            let leds = sim.leds.lock().unwrap().clone();
+            let led = |n: u8| leds.get(&n).copied();
+            eprintln!(
+                "selftest midi: selected layer = L{} (expected L3), L3 = slot {:?} (expected the copy in slot {}), blackout = {} (expected true), clip fx 1 on = {} (expected false)",
+                self.s.selected_layer + 1,
+                self.s.layers[2].instance.and_then(|id| self.s.slot_of(id)).map(|x| x + 1),
+                dup.map(|x| x + 1).unwrap_or(0),
+                self.s.master.blackout,
+                self.s.slots[8].as_ref().is_some_and(|i| i.effects.first().is_some_and(|e| e.active)),
+            );
+            eprintln!(
+                "selftest midi: leds: L1 select {:?} (0), L3 select {:?} (orange 10), blackout {:?} (red 1), freeze {:?} (0), slot 1 {:?} (blue 72), copy {:?} (orange 10), clip slot 9 {:?} (green 44), empty slot 32 {:?} (0), L2 fx1 {:?} (plum 108), L2 fx3 {:?} (0), L1 fx1 {:?} (0); {} leds received",
+                led(0), led(2), led(6), led(7), led(8), led(dup_note), led(16), led(39), led(48), led(50), led(40), leds.len()
+            );
+        }
+        // learn: cc 20 of the virtual device -> /master/freeze, then use it
+        let port = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("selftest")).map(|d| d.0));
+        match sim.step {
+            42 => {
+                if let (Some(m), Some(port)) = (self.midi.as_mut(), port.clone()) {
+                    m.learn = Some(crate::midi::Learn { port: port.clone(), addr: "/master/freeze".into(), kind: crate::control::Kind::Toggle });
+                    self.midi_sel_port = Some(port);
+                    self.midi_sel_addr = Some("/master/freeze".into());
+                }
+            }
+            45 => {
+                let _ = sim.out.send(&[0xB0, 20, 127]);
+            }
+            46 | 56 => {
+                let _ = sim.out.send(&[0xB0, 20, 0]);
+            }
+            55 => {
+                let _ = sim.out.send(&[0xB0, 20, 127]);
+            }
+            62 => {
+                let m = self.midi.as_ref();
+                let bound = m.and_then(|m| m.profiles().iter().find(|p| p.name == "Bhoreal").map(|p| p.bindings.iter().any(|b| b.msg == crate::midi::Msg::Cc(20) && b.addr == "/master/freeze")));
+                eprintln!(
+                    "selftest midi learn: {:?}; binding in the Bhoreal profile = {:?} (expected true); freeze after using it = {} (expected true)",
+                    m.and_then(|m| m.learned.clone()),
+                    bound,
+                    self.s.master.freeze
+                );
+            }
+            _ => {}
+        }
+        sim.step += 1;
+    }
+
     fn selftest_step(&mut self, ctx: &egui::Context, gl: &glow::Context) {
         // VIDEOPING_SELFTEST_SHADERS=<dir>: compile every .fs in that folder, report, quit
         if let (Ok(dir), Some(r)) = (std::env::var("VIDEOPING_SELFTEST_SHADERS"), self.r.as_mut()) {
@@ -2567,6 +2748,10 @@ impl App {
                     eprintln!("selftest rec finder: recording listed in the finder = {listed} (expected true)");
                 }
             }
+        }
+        // VIDEOPING_SELFTEST_MIDI: a virtual Bhoreal presses pads, the LED feedback is checked
+        if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() {
+            self.selftest_midi();
         }
         // VIDEOPING_SELFTEST_CONTROL: drive the session through the control registry at 2 s
         if std::env::var_os("VIDEOPING_SELFTEST_CONTROL").is_some() && self.selftest.as_ref().is_some_and(|t| !t.control_done && t.start.elapsed().as_secs_f32() > 2.0) {

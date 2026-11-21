@@ -5,6 +5,7 @@ mod control;
 mod gfx;
 mod isf;
 mod meter;
+mod midi;
 mod ndi;
 mod record;
 mod render;

@@ -14,6 +14,8 @@ Tested on Pop!_OS 24.04 (Ubuntu 24.04 base), Intel Iris Xe, Wayland.
 - **GStreamer 1.20+** with the usual plugins, for mp4 playback
 - **DejaVu Sans** font (ui symbols like ▶ ◀ ↑ ↓; without it some icons show as boxes)
 - optional: the **NDI 6 runtime** for NDI output
+- MIDI controllers: ALSA (`libasound2`, installed on every desktop); class-compliant USB MIDI
+  devices need no driver
 
 Ubuntu / Debian / Pop!_OS:
 

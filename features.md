@@ -65,7 +65,6 @@ everything below belongs to the tab "live".
   - prepare grid (all pages, instances, their clip settings, effects and all parameters incl. range settings)
   - mixer layers (loaded instances, mix-type, mix %, r/g/b, active, order, selected layer)
   - bpm, output effects, master (brightness), output options
-  - midi mappings
   - ui layout (column widths, current tab)
 - autosave: the current state is saved continuously, on restart (or after a crash) everything is back
 - save / load buttons: save the whole state to a file / load it from a file
@@ -301,9 +300,12 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
 - control registry (src/control.rs): every controllable thing has a stable address, a kind and can be read and set
   - kinds: trigger (may still read a state, e.g. "is selected"), toggle, range (min..max, maybe whole numbers), choice; some addresses are read only
   - numbers in addresses count from 1, like the ui
-  - addresses: /master/blackout|freeze|brightness, /bpm (+ /bpm/tap|half|double), /record, /page, /layer/N/select|active|mix|mixtype|r|g|b|unload, /slot/N/load|select|state, /inst/ID/fx/K/active|mix|mixtype|param/NAME, /inst/ID/param/NAME (generator), /out/fx/K/...
-  - layer aliases: /layer/N/fx/K/... and /layer/N/param/... reach whatever is loaded in layer N (stable for a controller: the bhoreal effect pads)
-  - parameters: float / long -> range from the isf header (long rounded), bool -> toggle, point2D -> /x and /y; colors and events not yet
+  - addresses: /master/blackout|freeze|brightness, /bpm (+ /bpm/tap|half|double), /record, /page, /layer/N/select|active|mix|mixtype|r|g|b|unload, /slot/N/load|select|state, /slot/N/fx/K/active|mix|mixtype|param/P, /slot/N/param/P (generator), /out/fx/K/...
+  - instances are addressed by their slot (decided 2026-11-21, was an internal instance id): /slot/9/... = slot 9 as in the grid (top-down per column, page 2 starts at 33); a binding to a slot controls whatever is in that slot
+  - parameters are addressed by number (decided 2026-11-21, was the isf input name): /param/3 = the 3rd parameter, counted top-down like the parameter list in the ui (isf header order, image inputs left out); the names change constantly while shaders are developed, the number fits every shader and the twister ("the n-th parameter"); colors and events keep their number but are not controllable yet
+  - aliases: /layer/N/fx/K/... and /layer/N/param/P reach whatever plays in layer N (the bhoreal effect pads); /page/slot/N/... = slot N of the page shown (the bhoreal follows the page)
+  - every address has a description in words ("slot 9 (testclip) · gameboy-camera · Kontrast"), shown in the midi mapping tab
+  - parameters: float / long -> range from the isf header (long rounded), bool -> toggle, point2D -> /x and /y
   - set clamps to the range; brightness up during blackout ends it (like the slider); tap and record go through the app like the buttons
   - change notifications: a snapshot of all values, diffed against the last one -> what changed, also by mouse (needed for led feedback and mcp)
 - on top of it, in this order:
@@ -317,6 +319,30 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
 
 # midi mapping
 
+decided 2026-11-21: generic for any midi controller, edited in the tab "midi mapping"; bhoreal and twister are built-in profiles of the same engine
+
+- engine: knows no devices, only bindings: midi message (channel, note / cc) <-> control registry address
+  - modes: trigger (press = fire once), toggle (press = on/off), momentary (on while held), absolute (cc 0-127 -> the address range), relative (endless encoder: +/- steps)
+  - feedback to the controller from the registry change notifications (leds show the true state, also after mouse changes): toggle / trigger -> velocity per state, choice -> velocity per value (e.g. slot state empty / loaded / L1 / L2 / L3 -> bhoreal colors), range -> value back as cc (twister rings)
+  - relative targets in the registry for controllers: /page/slot/N (slot N of the current page, the bhoreal follows the page), /layer/N/fx/K/... (what is loaded in layer N), /sel/... (the selected instance; /sel/param/#n = its n-th parameter)
+- profiles: one per controller, picked automatically by midi port name; bhoreal and twister ship built in, editable, "save" keeps your own version
+  - stored in the general config (~/.config/videoping/midi/<profile>.json), not in the session: a controller mapping is setup, like the output options
+- tab "midi mapping":
+  - devices: midi inputs / outputs (alsa), on/off, profile, activity light, monitor of the last incoming messages
+  - bindings of the selected device: control, mode, target address, feedback
+  - addresses: the registry as a searchable tree; choose an address, "learn", move a control -> binding created
+- order: 1. engine + bhoreal profile with leds (playable) — done 2. the tab with bindings table and learn — done 3. twister profile
+- the tab as built (2026-11-21):
+  - top bar: "live" and "midi mapping" switch the tab; the output keeps rendering in every tab
+  - left: every midi input (except videoping's own ports and "Midi Through"), activity light, profile per device (dropdown: none / any profile; choosing one makes that profile also match the device name next time), monitor of the last messages
+  - middle: the bindings of the selected device's profile: control (channel, note / cc), mode (dropdown), target address (editable; "←" takes the address chosen on the right), feedback (off / on values editable), × to remove; the row of the control just moved lights up in the accent color; "● not saved", save (~/.config/videoping/midi/<profile>.json), "built-in" (back to the built-in version)
+  - right: the writable addresses (searchable) with their range and their meaning in words; a foldable "what the addresses mean" legend; learn: choose an address, press learn, move a control
+  - a target that does not exist right now (no such effect in that layer, empty slot) shows "not there now"; hover on a target shows what it is
+  - learn picks the mode from the address: trigger / toggle for buttons, cc on a range -> absolute (fader / knob) or relative (an encoder step: value 1, 63, 65 or 127); a button on a range is refused; a learned control replaces an older binding of the same control
+  - a device without profile gets a new one on its first learned control (named after the device), or with "new profile"
+  - cc buttons: value 0 counts as release (trigger / toggle / momentary)
+- a binding can read its feedback from another address than it triggers (a slot pad triggers /page/slot/N/load, its color comes from /page/slot/N/state)
+
 ## bhoreal (8x8 led-pushbuttons)
 
 8 vertical columns, 8 pads each (LED shows state):
@@ -327,16 +353,25 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
 | 2-5 | select instance in the prepare lane = load it into the selected mixer-layer (4x8 = 32 instances) |
 | 6-8 | activate/deactivate effects of the clip in mixer-layer 1 / 2 / 3 (max 8 effects per clip) |
 
-- LED colors per mixer-layer (same colors as the live-marking in the ui), layer 1 = #1B6898 (blue), layer 2 = #388E3C (green), layer 3 = #C8640A (orange)
-  - column 1: select/activate pads in the color of their layer
-  - columns 2-5: instance pad lights up in the color of the layer it is live in, dim/off when not live
-  - columns 6-8: effect pads in the color of their layer, bright = active, dim = inactive, off = no effect
+- protocol (firmware bhoreal_slim_midi, docs table): pads send note on channel 1, note 0..63, press velocity 64, release velocity 0 (note on); leds: note on, velocity = hue on the firmware color wheel (velocity × 8 -> red -> green -> blue -> red), velocity 0 = off; the usb port name is "Arduino Leonardo" according to the docs
+  - pad order assumed: note = column × 8 + row (column from the left, row from the top) — to be checked on the hardware (the firmware does not say)
+- the leds can only show full brightness, no dimming (changed 2026-11-21, was "bright / dim"): plum (the accent) = "there, but not on"
+  - layer colors as hue: layer 1 = #1B6898 (blue, velocity 72), layer 2 = #388E3C (green, 44), layer 3 = #C8640A (orange, 10), plum = 108
+  - column 1: select pad in the layer color when that layer is selected, else off; layer on/off pad in the layer color when on, else off; blackout red when on; freeze cyan when on
+  - columns 2-5: slot of the current page: live = color of its layer, loaded but not live = plum, empty = off
+  - columns 6-8: effect pads: active = color of the layer, there but off = plum, no effect = off
+- built-in profile "Bhoreal" of the generic midi engine (src/midi.rs), picked for ports named "bhoreal" or "leonardo"; tested with a virtual midi port (self-test), not yet with the real device
 - global blackout and global freeze: same as the master buttons in column 2
 - more than 32 instances: paging, the bhoreal shows the current page of the prepare grid
 
 ## midifighter twister (4x4 rotary encoders)
 
-- tbd
+decided 2026-11-21:
+- bank 1: the 16 encoders = the first 16 parameters of the selected effect (or of the selected generator), relative mode
+  - push an encoder = reset that parameter to its isf default (same as right click in the ui)
+  - led ring = the value
+- bank 2: layer mixes and master
+- like every profile: editable in the midi mapping tab
 
 # technical
 
