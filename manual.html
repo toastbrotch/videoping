@@ -143,9 +143,10 @@
         <li><a href="#mapping">midi mapping tab</a></li>
       </ol>
     </li>
-    <li><a href="#performance">8 Performance</a></li>
-    <li><a href="#files">9 Files and settings</a></li>
-    <li><a href="#trouble">10 Troubleshooting</a></li>
+    <li><a href="#mcp">8 AI control (MCP)</a></li>
+    <li><a href="#performance">9 Performance</a></li>
+    <li><a href="#files">10 Files and settings</a></li>
+    <li><a href="#trouble">11 Troubleshooting</a></li>
   </ol>
 </nav>
 
@@ -254,7 +255,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       <span class="b">½x</span> <span class="b">2x</span>.</li>
     <li><b>record</b>: <span class="b">REC</span>.</li>
     <li><b>output options</b> (fold open): resolution, frame rate, screen, output window, NDI, GPU.</li>
-    <li><b>general config</b> (fold open): resource meters, recording folder.</li>
+    <li><b>general config</b> (fold open): resource meters, recording folder, MCP server.</li>
   </ul>
   <figure><img src="docs/prepare.png" width="310" alt="prepare grid with master, bpm and record"></figure>
 </div>
@@ -547,7 +548,46 @@ now" in the table and simply does nothing.</p>
 </ol>
 
 <!-- ================================================================== -->
-<h2 id="performance"><span class="n">8</span>Performance</h2>
+<h2 id="mcp"><span class="n">8</span>AI control (MCP)</h2>
+
+<p>videoping can be read and controlled by an AI assistant such as Claude Code, through
+<b>MCP</b> (Model Context Protocol). The assistant sees what is live, changes things the same way a
+MIDI controller does, loads clips and effects, and can look at the output as an image. This is
+most useful for <b>writing shaders</b> (the assistant edits an ISF file, videoping reloads it, the
+assistant looks at the result and keeps going), for <b>preparing a set</b> ("put all clips from
+folder X into page 2, each with VHS glitch") and for <b>asking</b> ("what is live, why is it
+slow?").</p>
+
+<h3>Connect</h3>
+<ol>
+  <li>Start videoping. The MCP server runs by itself (general config → <i>MCP server</i>, port 7466).</li>
+  <li>Once, in a terminal:
+    <pre>claude mcp add --transport http videoping http://127.0.0.1:7466/mcp</pre>
+    (the same command is shown in the general config, for copying).</li>
+  <li>Ask Claude Code, e.g. "what is live in videoping?", "put rutt-etra on the output", "show me
+    the output", "set layer 2 to luma key at 60 %".</li>
+</ol>
+
+<h3>What the assistant can do</h3>
+<table>
+  <tr><th>tool</th><th>what it does</th></tr>
+  <tr><td><code>state</code></td><td>overview: what plays in which layer, master, bpm, recording, the slots and their effects, output effects, frame rate and GPU load</td></tr>
+  <tr><td><code>list_addresses</code> · <code>get</code> · <code>set</code></td><td>everything a controller can do, with the same <a href="#midi">addresses</a> (<code>/layer/2/mix</code>, <code>/slot/9/fx/1/param/3</code> …)</td></tr>
+  <tr><td><code>list_files</code> · <code>load_file</code> · <code>add_effect</code></td><td>the files of the finder; put a clip or generator into a slot; add an effect to a slot or the output (max 4)</td></tr>
+  <tr><td><code>frame</code></td><td>the output, the preview or a slot as an image</td></tr>
+  <tr><td><code>shader_errors</code> · <code>shader_info</code></td><td>which shaders do not compile and why; the parameters of a shader in videoping's numbering</td></tr>
+</table>
+
+<h3>Safety</h3>
+<ul>
+  <li>Only programs on this computer can connect (127.0.0.1); requests from web pages are refused.</li>
+  <li>Every change shows in the status line of the top bar, e.g. "mcp: /layer/1/mix = 0.5".</li>
+  <li><b>read only (for shows)</b> in the general config: the assistant can still look, but every
+    change is refused. Switch <i>MCP server</i> off to close it completely.</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2 id="performance"><span class="n">9</span>Performance</h2>
 
 <p>videoping tells you when it gets too heavy, before the audience sees it.</p>
 
@@ -593,7 +633,7 @@ dropped frames.</p>
 </ul>
 
 <!-- ================================================================== -->
-<h2 id="files"><span class="n">9</span>Files and settings</h2>
+<h2 id="files"><span class="n">10</span>Files and settings</h2>
 
 <p><b>Session</b>: everything you set up — prepare grid (all pages, instances, effects, parameters),
 mixer layers, output effects, bpm, master, output options, finder folders.</p>
@@ -608,7 +648,8 @@ mixer layers, output effects, bpm, master, output options, finder folders.</p>
 </ul>
 
 <p><b>General config</b> (column 2): settings of the program itself, not part of a session — save,
-load and new do not touch it. Resource meters on / off, recording folder.</p>
+load and new do not touch it. Resource meters on / off, recording folder, MCP server (on / off, port,
+read only).</p>
 
 <p><b>Where files go</b></p>
 <table>
@@ -625,7 +666,7 @@ load and new do not touch it. Resource meters on / off, recording folder.</p>
 shader when its file changes, so you can edit a shader in a text editor while it plays.</p>
 
 <!-- ================================================================== -->
-<h2 id="trouble"><span class="n">10</span>Troubleshooting</h2>
+<h2 id="trouble"><span class="n">11</span>Troubleshooting</h2>
 
 <dl class="qa">
   <dt>The fps counter shows ⚠ although nothing is heavy.</dt>
@@ -668,6 +709,12 @@ shader when its file changes, so you can edit a shader in a text editor while it
   <dt>Controller LEDs stay on after videoping is gone.</dt>
   <dd>They are switched off when videoping quits normally. After a crash they keep their last state
     until the next start.</dd>
+
+  <dt>The AI assistant can not reach videoping (MCP).</dt>
+  <dd>videoping must be running, with <i>MCP server</i> on in the general config. "port not free" there
+    means another program uses 7466: choose another port and add the server again with that port
+    (<code>claude mcp add …:PORT/mcp</code>). In Claude Code, <code>/mcp</code> shows whether it is
+    connected.</dd>
 
   <dt>Some symbols show as boxes.</dt>
   <dd>Install the DejaVu fonts (<code>fonts-dejavu-core</code>).</dd>

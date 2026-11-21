@@ -54,6 +54,8 @@ pub struct App {
     /// general config (not part of the session), saved when it changes
     cfg: Config,
     tab: Tab,
+    /// self-test screenshot: output options and general config folded open (VIDEOPING_SELFTEST_CONFIG)
+    selftest_open_config: bool,
     /// midi mapping tab: selected device (port), address, search
     midi_sel_port: Option<String>,
     midi_sel_addr: Option<String>,
@@ -329,6 +331,7 @@ impl App {
             frame_times: Default::default(),
             frames_dropped: 0,
             last_drop: None,
+            selftest_open_config: std::env::var_os("VIDEOPING_SELFTEST_CONFIG").is_some(),
             tab: if std::env::var("VIDEOPING_SELFTEST_TAB").as_deref() == Ok("midi") { Tab::Midi } else { Tab::Live },
             midi_sel_port: None,
             midi_sel_addr: None,
@@ -1101,7 +1104,8 @@ impl App {
 
     /// column 2: prepare grid, below it master, bpm, record, output options and general config
     fn col_grid(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
-        egui::ScrollArea::vertical().id_salt("gridcol").auto_shrink([false, false]).show(ui, |ui| {
+        // self-test screenshot of the settings: scrolled to the bottom
+        egui::ScrollArea::vertical().id_salt("gridcol").auto_shrink([false, false]).stick_to_bottom(self.selftest_open_config).show(ui, |ui| {
             self.prepare_grid(ui, frame);
             ui.add_space(6.0);
             ui.separator();
@@ -1784,109 +1788,154 @@ impl App {
         }
         let screens = self.screens.clone();
         let gpu = self.gpu_name.clone();
-        egui::CollapsingHeader::new("output options").default_open(false).show(ui, |ui| {
+        let ndi_state = match self.r.as_ref() {
+            Some(r) if r.ndi_error.is_some() => Err(r.ndi_error.clone().unwrap_or_default()),
+            Some(r) => Ok(r.ndi.as_ref().map(|n| n.lib_path.clone())),
+            None => Ok(None),
+        };
+        egui::CollapsingHeader::new("output options").default_open(self.selftest_open_config).show(ui, |ui| {
             let o = &mut self.s.output;
-            let res = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
-            egui::ComboBox::from_label("resolution").selected_text(format!("{}x{}", o.width, o.height)).show_ui(ui, |ui| {
-                for (w, h) in res {
-                    if ui.selectable_label(o.width == w && o.height == h, format!("{w}x{h}")).clicked() {
-                        o.width = w;
-                        o.height = h;
+            widgets::config_group(ui, "picture", |ui| {
+                widgets::config_row(ui, "resolution", |ui| {
+                    let res = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
+                    egui::ComboBox::from_id_salt("out_res").selected_text(format!("{}x{}", o.width, o.height)).show_ui(ui, |ui| {
+                        for (w, h) in res {
+                            if ui.selectable_label(o.width == w && o.height == h, format!("{w}x{h}")).clicked() {
+                                o.width = w;
+                                o.height = h;
+                            }
+                        }
+                    });
+                });
+                widgets::config_row(ui, "frame rate", |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for f in [25, 30, 50, 60] {
+                        if widgets::choice(ui, o.fps == f, &f.to_string()).on_hover_text("output frame rate (screen, NDI, recording)").clicked() {
+                            o.fps = f;
+                        }
                     }
+                });
+            });
+            widgets::config_group(ui, "screen", |ui| {
+                widgets::config_row(ui, "screen", |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let n = screens.len().max(o.screen + 1).max(1);
+                    for i in 0..n {
+                        if widgets::choice(ui, o.screen == i, &(i + 1).to_string()).on_hover_text("fullscreen output goes to this screen").clicked() {
+                            o.screen = i;
+                        }
+                    }
+                });
+                if !screens.is_empty() {
+                    widgets::config_row(ui, "", |ui| {
+                        ui.label(egui::RichText::new(format!("connected: {}", screens.join(", "))).weak().size(widgets::BTN_TEXT))
+                            .on_hover_text("names from the system; their order can differ from the screen numbers");
+                    });
+                }
+                widgets::config_row(ui, "window", |ui| {
+                    ui.checkbox(&mut o.window_open, "output window");
+                });
+                widgets::config_row(ui, "", |ui| {
+                    ui.add_enabled(o.window_open, egui::Checkbox::new(&mut o.fullscreen, "fullscreen"))
+                        .on_hover_text("on the chosen screen; F or double-click in the output window");
+                });
+            });
+            widgets::config_group(ui, "NDI", |ui| {
+                widgets::config_row(ui, "send", |ui| {
+                    ui.checkbox(&mut o.ndi_enabled, "NDI output");
+                    match &ndi_state {
+                        Err(e) => {
+                            ui.colored_label(Color32::RED, "error").on_hover_text(e);
+                        }
+                        Ok(Some(lib)) => {
+                            ui.label(egui::RichText::new("sending").weak()).on_hover_text(lib);
+                        }
+                        Ok(None) => {}
+                    }
+                });
+                widgets::config_row(ui, "name", |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut o.ndi_name).desired_width(ui.available_width()));
+                });
+                widgets::config_row(ui, "library folder", |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut o.ndi_lib_dir).hint_text("empty = default places").desired_width(ui.available_width()))
+                        .on_hover_text("folder that contains libndi.so.6, e.g. from the NDI SDK for Linux: lib/x86_64-linux-gnu");
+                });
+                if let Err(e) = &ndi_state {
+                    ui.colored_label(Color32::RED, e);
                 }
             });
-            ui.horizontal(|ui| {
-                ui.label("frame rate");
-                ui.spacing_mut().item_spacing.x = 2.0;
-                for f in [25, 30, 50, 60] {
-                    if widgets::choice(ui, o.fps == f, &f.to_string()).on_hover_text("output frame rate (screen + NDI)").clicked() {
-                        o.fps = f;
-                    }
+            widgets::config_group(ui, "GPU", |ui| {
+                widgets::config_row(ui, "renders on", |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(&gpu).weak().size(widgets::BTN_TEXT)).truncate()).on_hover_text(&gpu);
+                });
+                if nvidia_available() {
+                    widgets::config_row(ui, "", |ui| {
+                        ui.checkbox(&mut o.prefer_nvidia, "NVIDIA (applies on restart)")
+                            .on_hover_text("restarts itself with PRIME render offload; one-off: start with --nvidia");
+                    });
                 }
             });
-            ui.horizontal(|ui| {
-                ui.label("screen");
-                ui.spacing_mut().item_spacing.x = 2.0;
-                let n = screens.len().max(o.screen + 1).max(1);
-                for i in 0..n {
-                    if widgets::choice(ui, o.screen == i, &(i + 1).to_string()).on_hover_text("fullscreen output goes to this screen").clicked() {
-                        o.screen = i;
-                    }
-                }
-            });
-            if !screens.is_empty() {
-                ui.label(egui::RichText::new(format!("connected: {}", screens.join(", "))).weak())
-                    .on_hover_text("names from the system; their order can differ from the screen numbers");
-            }
-            ui.checkbox(&mut o.window_open, "output window");
-            ui.add_enabled(o.window_open, egui::Checkbox::new(&mut o.fullscreen, "fullscreen on the chosen screen (F / double-click in output window)"));
-            ui.checkbox(&mut o.ndi_enabled, "NDI output");
-            ui.horizontal(|ui| {
-                ui.label("ndi name");
-                ui.add(egui::TextEdit::singleline(&mut o.ndi_name).desired_width(140.0));
-            });
-            ui.horizontal(|ui| {
-                ui.label("NDI library folder");
-                ui.add(
-                    egui::TextEdit::singleline(&mut o.ndi_lib_dir)
-                        .hint_text("empty = default places")
-                        .desired_width(ui.available_width()),
-                )
-                .on_hover_text("folder that contains libndi.so.6, e.g. from the NDI SDK for Linux: lib/x86_64-linux-gnu");
-            });
-            if let Some(e) = self.r.as_ref().and_then(|r| r.ndi_error.as_ref()) {
-                ui.colored_label(Color32::RED, e);
-            } else if let Some(n) = self.r.as_ref().and_then(|r| r.ndi.as_ref()) {
-                ui.label(egui::RichText::new("NDI sending").color(Color32::GREEN)).on_hover_text(&n.lib_path);
-            }
-            ui.separator();
-            ui.label(egui::RichText::new(format!("gpu: {gpu}")).weak());
-
-            if nvidia_available() {
-                let o = &mut self.s.output;
-                ui.checkbox(&mut o.prefer_nvidia, "render on NVIDIA GPU (applies on restart)")
-                    .on_hover_text("restarts itself with PRIME render offload; one-off: start with --nvidia");
-            }
         });
     }
 
     /// General config: settings of the program, not of the session (own file, untouched by
     /// save / load / new).
     fn section_general_config(&mut self, ui: &mut Ui) {
-        egui::CollapsingHeader::new("general config").default_open(false).show(ui, |ui| {
+        egui::CollapsingHeader::new("general config").default_open(self.selftest_open_config).show(ui, |ui| {
             let before = self.cfg.clone();
-            ui.checkbox(&mut self.cfg.meters, "resource meters")
-                .on_hover_text("GPU time, VRAM and clip decoding per slot / effect, totals in the top bar");
-            ui.label("recording folder");
-            ui.horizontal(|ui| {
-                let hint = self.cfg.record_dir().display().to_string();
-                ui.add(egui::TextEdit::singleline(&mut self.cfg.record_dir).hint_text(hint).desired_width(ui.available_width()));
-            });
-            ui.add_space(4.0);
-            ui.checkbox(&mut self.cfg.mcp, "MCP server").on_hover_text("lets Claude Code and other MCP clients read and control videoping (localhost only)");
-            if self.cfg.mcp {
-                ui.horizontal(|ui| {
-                    ui.label("port");
-                    ui.add(egui::DragValue::new(&mut self.cfg.mcp_port).range(1024..=65535));
-                    match (&self.mcp, self.mcp_failed) {
-                        (Some(_), _) => ui.label(egui::RichText::new("running").weak()),
-                        (None, Some(_)) => ui.label(egui::RichText::new("port not free").color(Color32::RED)),
-                        _ => ui.label(""),
-                    };
+            widgets::config_group(ui, "display", |ui| {
+                widgets::config_row(ui, "meters", |ui| {
+                    ui.checkbox(&mut self.cfg.meters, "resource meters")
+                        .on_hover_text("GPU time, VRAM and clip decoding per slot / effect, totals in the top bar");
                 });
-                ui.checkbox(&mut self.cfg.mcp_read_only, "read only (for shows)").on_hover_text("MCP may look, but not change anything");
-                let cmd = format!("claude mcp add --transport http videoping http://127.0.0.1:{}/mcp", self.cfg.mcp_port);
-                ui.add(egui::Label::new(egui::RichText::new(&cmd).monospace().size(10.0).weak()).truncate()).on_hover_text(format!("connect Claude Code (run once in a terminal):\n{cmd}"));
-                if self.mcp_failed.is_some_and(|p| p != self.cfg.mcp_port) {
-                    self.mcp_failed = None; // another port: try again
+            });
+            let mut add_to_finder = false;
+            widgets::config_group(ui, "recording", |ui| {
+                widgets::config_row(ui, "folder", |ui| {
+                    let hint = self.cfg.record_dir().display().to_string();
+                    ui.add(egui::TextEdit::singleline(&mut self.cfg.record_dir).hint_text(hint).desired_width(ui.available_width()));
+                });
+                let dir = self.cfg.record_dir();
+                if !self.s.finder_roots.contains(&dir) {
+                    widgets::config_row(ui, "", |ui| {
+                        add_to_finder = widgets::btn(ui, "add to finder").on_hover_text("show the recordings in the finder").clicked();
+                    });
                 }
-            }
-            let dir = self.cfg.record_dir();
-            if !self.s.finder_roots.contains(&dir) && widgets::btn(ui, "add to finder").on_hover_text("show the recordings in the finder").clicked() {
+            });
+            if add_to_finder {
+                let dir = self.cfg.record_dir();
                 let _ = std::fs::create_dir_all(&dir);
                 self.s.finder_roots.push(dir);
                 self.rescan_finder();
             }
+            widgets::config_group(ui, "MCP (AI control)", |ui| {
+                widgets::config_row(ui, "server", |ui| {
+                    ui.checkbox(&mut self.cfg.mcp, "on").on_hover_text("lets Claude Code and other MCP clients read and control videoping (localhost only)");
+                    if self.cfg.mcp {
+                        match (&self.mcp, self.mcp_failed) {
+                            (Some(_), _) => ui.label(egui::RichText::new("running").weak()),
+                            (None, Some(_)) => ui.label(egui::RichText::new("port not free").color(Color32::RED)),
+                            _ => ui.label(""),
+                        };
+                    }
+                });
+                if self.cfg.mcp {
+                    widgets::config_row(ui, "port", |ui| {
+                        ui.add(egui::DragValue::new(&mut self.cfg.mcp_port).range(1024..=65535));
+                    });
+                    widgets::config_row(ui, "for shows", |ui| {
+                        ui.checkbox(&mut self.cfg.mcp_read_only, "read only").on_hover_text("MCP may look, but not change anything");
+                    });
+                    let cmd = format!("claude mcp add --transport http videoping http://127.0.0.1:{}/mcp", self.cfg.mcp_port);
+                    widgets::config_row(ui, "connect", |ui| {
+                        ui.add(egui::Label::new(egui::RichText::new(&cmd).monospace().size(10.0).weak()).truncate())
+                            .on_hover_text(format!("connect Claude Code (run once in a terminal):\n{cmd}"));
+                    });
+                    if self.mcp_failed.is_some_and(|p| p != self.cfg.mcp_port) {
+                        self.mcp_failed = None; // another port: try again
+                    }
+                }
+            });
             if self.cfg != before && self.selftest.is_none() {
                 if let Err(e) = save_config(&self.cfg) {
                     self.set_status(e);

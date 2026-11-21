@@ -287,6 +287,12 @@ the prepare area uses two columns (see "layout of the tab live"):
   - ndi name
   - NDI library folder (folder with libndi.so.6, saved; empty = default places)
 
+## settings layout (output options, general config)
+- decided 2026-11-21: both are made of titled groups (thin frame, small grey title), labels in one column, controls aligned
+  - output options: picture (resolution, frame rate) · screen (screen, connected, output window, fullscreen) · NDI (send + status, name, library folder) · GPU (renders on, NVIDIA)
+  - general config: display (resource meters) · recording (folder, add to finder) · MCP (server + status, port, read only, connect command)
+- "NDI sending" is grey, not green (colors belong to the layers); errors stay red
+
 ## general config (fold open)
 - placed in column 2, below the output options
 - settings of the program itself, not of a session: own file `~/.config/videoping/config.json`; save / load / new do not change it

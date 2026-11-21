@@ -407,3 +407,35 @@ pub fn meter(ui: &mut Ui, level: u8, tip: &str) -> egui::Response {
     paint_meter(ui.painter(), rect, level);
     r.on_hover_text(tip)
 }
+
+/// Width of the label column in the config groups.
+pub const CONFIG_LABEL_W: f32 = 92.0;
+
+/// A titled group in the settings (output options, general config): a thin frame, a small grey
+/// title, then rows.
+pub fn config_group(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
+    ui.add_space(4.0);
+    egui::Frame::new()
+        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+        .corner_radius(BTN_RADIUS)
+        .inner_margin(egui::Margin::symmetric(8, 6))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(title).weak().size(BTN_TEXT));
+            ui.add_space(2.0);
+            add(ui);
+        });
+}
+
+/// One row of a config group: label in a fixed column (empty = continuation), then the controls.
+pub fn config_row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(vec2(CONFIG_LABEL_W, BTN.y), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.set_width(CONFIG_LABEL_W);
+            if !label.is_empty() {
+                ui.label(label);
+            }
+        });
+        add(ui);
+    });
+}
