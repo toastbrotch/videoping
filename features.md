@@ -313,7 +313,14 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
 - on top of it, in this order:
   1. registry (done)
   2. midi: bhoreal as a fixed preset with led feedback (below)
-  3. mcp server inside videoping (localhost http): list / read / set / trigger addresses, load files into slots, output or preview frame as image; every mcp change visible in the status line; switch "mcp read only / locked" for shows
+  3. mcp server inside videoping — built 2026-11-21:
+     - transport: mcp "streamable http" on 127.0.0.1 only, port 7466 (general config); plain json answers, no event stream; requests from a foreign web page (Origin header) are refused
+     - connect claude code once: `claude mcp add --transport http videoping http://127.0.0.1:7466/mcp`
+     - tools: state (overview: mixer, master, bpm, slots with effects, output effects, fps, gpu), list_addresses (address, kind, meaning; filter), get, set (number / true-false / choice; triggers without value), list_files (finder: clip / generator / effect / ndi), load_file (into a slot, default the first free one), add_effect (on a slot's instance or the output), frame (png of the output, the preview or a slot; width default 640), shader_errors, shader_info (a shader's parameters in videoping's numbering)
+     - tool calls are answered by the app at the next frame (frames are read on the gpu: scaled down, one small read)
+     - every change shows in the status line ("mcp: /layer/1/mix = 0.5"); "read only (for shows)" in the general config refuses all changes, reading still works
+     - general config: mcp server on/off (default on), port, read only, the claude code command to copy
+     - paths given to load_file / add_effect are stored absolute, like the finder does
   4. midifighter twister (midi learn and the "midi mapping" tab are done)
 - after the mcp server (decided 2026-11-21, both for later):
   - ai tab: a thin chat client inside videoping on the same tools as the mcp server
@@ -367,19 +374,26 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 | 6-8 | activate/deactivate effects of the clip in mixer-layer 1 / 2 / 3 (max 8 effects per clip) |
 
 - protocol (firmware bhoreal_slim_midi, docs table): pads send note on channel 1, note 0..63, press velocity 64, release velocity 0 (note on); leds: note on, velocity = hue on the firmware color wheel (velocity × 8 -> red -> green -> blue -> red), velocity 0 = off; the usb port name is "Arduino Leonardo" according to the docs
-  - pad order assumed: note = column × 8 + row (column from the left, row from the top) — to be checked on the hardware (the firmware does not say)
+  - pad order (checked on the hardware 2026-11-21 with test leds): the notes run row by row from the top left: note = row × 8 + column (note 0 top left, 1 to its right, 8 below it, 63 bottom right); the usb port shows as "Arduino Leonardo MIDI 1"
 - the leds can only show full brightness, no dimming (changed 2026-11-21, was "bright / dim"): plum (the accent) = "there, but not on"
   - layer colors as hue: layer 1 = #1B6898 (blue, velocity 72), layer 2 = #388E3C (green, 44), layer 3 = #C8640A (orange, 10), plum = 108
   - column 1: select pad in the layer color when that layer is selected, else off; layer on/off pad in the layer color when on, else off; blackout red when on; freeze cyan when on
   - columns 2-5: slot of the current page: live = color of its layer, loaded but not live = plum, empty = off
   - columns 6-8: effect pads: active = color of the layer, there but off = plum, no effect = off
+- leds are switched off on connect (startup, plugging in), when the device's profile changes, and on quit: every bound control plus, for the bhoreal, all 64 pads (profile field clear_notes; never above 63, the firmware does not range-check)
 - built-in profile "Bhoreal" of the generic midi engine (src/midi.rs), picked for ports named "bhoreal" or "leonardo"; tested with a virtual midi port (self-test), not yet with the real device
 - global blackout and global freeze: same as the master buttons in column 2
 - more than 32 instances: paging, the bhoreal shows the current page of the prepare grid
 
 ## midifighter twister (4x4 rotary encoders)
 
-decided 2026-11-21:
+- protocol (checked on the hardware 2026-11-21): encoders numbered row by row from the top left (top left = cc 0, top right = cc 3, bottom right = cc 15); turning: cc on channel 1, absolute 0..127; pushing: the same cc on channel 2, 127 = pressed, 0 = released; a cc sent to it on channel 1 sets the led ring
+- built-in profile "Midi Fighter Twister" (default layout, decided 2026-11-21):
+  - column 4, top-down: mix of layer 1, layer 2, layer 3, master brightness (absolute; the led ring shows the value, also after mouse changes, so turning never jumps)
+  - the other 12 encoders and the pushes: not decided yet (free for midi learn)
+- the earlier idea below (bank 1 = parameters of the selected effect) is not built yet:
+
+earlier idea, decided 2026-11-21:
 - bank 1: the 16 encoders = the first 16 parameters of the selected effect (or of the selected generator), relative mode
   - push an encoder = reset that parameter to its isf default (same as right click in the ui)
   - led ring = the value

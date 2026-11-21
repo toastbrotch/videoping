@@ -61,6 +61,9 @@ pub struct App {
     /// profile name being edited (profile index, text) and a delete waiting for "really?"
     midi_rename: Option<(usize, String)>,
     midi_confirm_delete: Option<usize>,
+    /// MCP server (None: off) and a port that failed to open (not retried every frame)
+    mcp: Option<crate::mcp::Server>,
+    mcp_failed: Option<u16>,
     /// MIDI engine (generic, profiles; None while it is being polled)
     midi: Option<crate::midi::Midi>,
     /// control registry: values at the last control_changes() call (change notifications)
@@ -302,6 +305,10 @@ impl App {
                     } else {
                         String::new()
                     },
+                    // MCP only when asked for: VIDEOPING_SELFTEST_MCP=<port> (_MCP_RO=1: read only)
+                    mcp: std::env::var_os("VIDEOPING_SELFTEST_MCP").is_some(),
+                    mcp_port: std::env::var("VIDEOPING_SELFTEST_MCP").ok().and_then(|p| p.parse().ok()).unwrap_or(crate::mcp::DEFAULT_PORT),
+                    mcp_read_only: std::env::var_os("VIDEOPING_SELFTEST_MCP_RO").is_some(),
                 }
             } else {
                 load_config()
@@ -328,6 +335,8 @@ impl App {
             midi_search: String::new(),
             midi_rename: None,
             midi_confirm_delete: None,
+            mcp: None,
+            mcp_failed: None,
             midi: Some(crate::midi::Midi::new()),
             control_snap: Default::default(),
             inst_clock: HashMap::new(),
@@ -461,6 +470,8 @@ impl App {
             m.poll(self);
             self.midi = Some(m);
         }
+        // MCP tool calls (they may read frames: the renderer is there from the second frame on)
+        self.mcp_poll(gl);
         let (w, h) = (self.s.output.width as i32, self.s.output.height as i32);
         if self.r.is_none() {
             use glow::HasContext;
@@ -1845,6 +1856,25 @@ impl App {
                 let hint = self.cfg.record_dir().display().to_string();
                 ui.add(egui::TextEdit::singleline(&mut self.cfg.record_dir).hint_text(hint).desired_width(ui.available_width()));
             });
+            ui.add_space(4.0);
+            ui.checkbox(&mut self.cfg.mcp, "MCP server").on_hover_text("lets Claude Code and other MCP clients read and control videoping (localhost only)");
+            if self.cfg.mcp {
+                ui.horizontal(|ui| {
+                    ui.label("port");
+                    ui.add(egui::DragValue::new(&mut self.cfg.mcp_port).range(1024..=65535));
+                    match (&self.mcp, self.mcp_failed) {
+                        (Some(_), _) => ui.label(egui::RichText::new("running").weak()),
+                        (None, Some(_)) => ui.label(egui::RichText::new("port not free").color(Color32::RED)),
+                        _ => ui.label(""),
+                    };
+                });
+                ui.checkbox(&mut self.cfg.mcp_read_only, "read only (for shows)").on_hover_text("MCP may look, but not change anything");
+                let cmd = format!("claude mcp add --transport http videoping http://127.0.0.1:{}/mcp", self.cfg.mcp_port);
+                ui.add(egui::Label::new(egui::RichText::new(&cmd).monospace().size(10.0).weak()).truncate()).on_hover_text(format!("connect Claude Code (run once in a terminal):\n{cmd}"));
+                if self.mcp_failed.is_some_and(|p| p != self.cfg.mcp_port) {
+                    self.mcp_failed = None; // another port: try again
+                }
+            }
             let dir = self.cfg.record_dir();
             if !self.s.finder_roots.contains(&dir) && widgets::btn(ui, "add to finder").on_hover_text("show the recordings in the finder").clicked() {
                 let _ = std::fs::create_dir_all(&dir);
@@ -2170,6 +2200,8 @@ impl App {
 
 #[path = "midi_tab.rs"]
 mod midi_tab;
+#[path = "mcp_tools.rs"]
+mod mcp_tools;
 
 /// Top-level tabs (mapping, shader editor and sequencer later).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2383,9 +2415,10 @@ impl eframe::App for App {
         if self.selftest.is_none() {
             let _ = save_session(&self.s, &self.autosave_path);
         }
-        // midi profile changes of the last half second
+        // midi profile changes of the last half second; the controller leds off
         if let Some(m) = self.midi.as_mut() {
             m.flush();
+            m.shutdown();
         }
         if let (Some(r), Some(gl)) = (self.r.as_mut(), gl) {
             r.ndi = None;
@@ -2608,8 +2641,9 @@ impl App {
             }
             let leds: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>> = Default::default();
             let l2 = leds.clone();
-            let out = midir::MidiOutput::new("bhoreal-selftest-pads").and_then(|o| o.create_virtual("Bhoreal selftest").map_err(|e| e.kind()).map_err(|_| midir::InitError));
-            let inp = midir::MidiInput::new("bhoreal-selftest-leds").ok().and_then(|i| {
+            // both virtual ports under one name, like a real device (its leds are found by name)
+            let out = midir::MidiOutput::new("bhoreal-selftest").and_then(|o| o.create_virtual("Bhoreal selftest").map_err(|e| e.kind()).map_err(|_| midir::InitError));
+            let inp = midir::MidiInput::new("bhoreal-selftest").ok().and_then(|i| {
                 i.create_virtual(
                     "Bhoreal selftest",
                     move |_, b, _| {
@@ -2638,9 +2672,13 @@ impl App {
         if sim.step == 0 && !connected {
             return; // wait for the port scan (every 2 s)
         }
-        let dup_note = 8 + dup.unwrap_or(0) as u8;
+        // pads by position (column, row), slot i of the page sits in column 1 + i / 8, row i % 8
+        use crate::midi::bhoreal_note as pad;
+        let slot_pad = |i: usize| pad(1 + (i / 8) as u8, (i % 8) as u8);
+        let dup_note = slot_pad(dup.unwrap_or(0));
+        let (sel_l3, blackout, freeze, l2_fx1, l2_fx3, l1_fx1) = (pad(0, 2), pad(0, 6), pad(0, 7), pad(6, 0), pad(6, 2), pad(5, 0));
         // pad presses (press / release on consecutive frames, like a finger)
-        let seq: [(u32, u8, u8); 8] = [(1, 2, 64), (2, 2, 0), (3, dup_note, 64), (4, dup_note, 0), (5, 6, 64), (6, 6, 0), (7, 48, 64), (8, 48, 0)];
+        let seq: [(u32, u8, u8); 8] = [(1, sel_l3, 64), (2, sel_l3, 0), (3, dup_note, 64), (4, dup_note, 0), (5, blackout, 64), (6, blackout, 0), (7, l2_fx1, 64), (8, l2_fx1, 0)];
         if let Some(&(_, note, vel)) = seq.iter().find(|x| x.0 == sim.step) {
             let _ = sim.out.send(&[0x90, note, vel]);
         }
@@ -2660,7 +2698,7 @@ impl App {
             );
             eprintln!(
                 "selftest midi: leds: L1 select {:?} (0), L3 select {:?} (orange 10), blackout {:?} (red 1), freeze {:?} (0), slot 1 {:?} (blue 72), copy {:?} (orange 10), clip slot 9 {:?} (green 44), empty slot 32 {:?} (0), L2 fx1 {:?} (plum 108), L2 fx3 {:?} (0), L1 fx1 {:?} (0); {} leds received",
-                led(0), led(2), led(6), led(7), led(8), led(dup_note), led(16), led(39), led(48), led(50), led(40), leds.len()
+                led(pad(0, 0)), led(sel_l3), led(blackout), led(freeze), led(slot_pad(0)), led(dup_note), led(slot_pad(8)), led(slot_pad(31)), led(l2_fx1), led(l2_fx3), led(l1_fx1), leds.len()
             );
         }
         // learn: cc 20 of the virtual device -> /master/freeze, then use it
@@ -2835,7 +2873,9 @@ impl App {
             t.prep0 = self.prepare_renders;
         }
         // a longer test recording (VIDEOPING_SELFTEST_REC=<seconds>) keeps the self-test open
-        let close_at = std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v + 4.0).unwrap_or(0.0).max(6.5);
+        let close_at = std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v + 4.0).unwrap_or(0.0).max(6.5)
+            // VIDEOPING_SELFTEST_STAY=<seconds>: stay open (e.g. for MCP calls from outside)
+            .max(std::env::var("VIDEOPING_SELFTEST_STAY").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0));
         if secs > close_at && !t.closing {
             t.closing = true;
             let (v0, u0) = t.at2s.unwrap_or((0, 0));

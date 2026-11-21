@@ -283,6 +283,31 @@ impl Renderer {
         self.shader(gl, path).info.as_ref()
     }
 
+    /// Every loaded shader that does not compile, with its error (MCP).
+    pub fn shader_errors(&self) -> Vec<(PathBuf, String)> {
+        let mut v: Vec<(PathBuf, String)> = self.shaders.iter().filter_map(|(p, s)| s.error.clone().map(|e| (p.clone(), e))).collect();
+        v.sort();
+        v
+    }
+
+    /// A downscaled copy of a texture (src_w x src_h, bottom-up) as RGBA rows, top row first:
+    /// scaled on the GPU, then one small synchronous read (MCP "frame").
+    pub fn snapshot(&mut self, gl: &Gl, tex: glow::Texture, src_w: i32, src_h: i32, width: i32) -> (i32, i32, Vec<u8>) {
+        let w = width.clamp(16, src_w.max(16));
+        let h = ((w as f32 * src_h as f32 / src_w.max(1) as f32).round() as i32).max(1);
+        let t = Target::new(gl, w, h);
+        self.b.blit(gl, tex, src_w, src_h, &t, true);
+        let mut buf = vec![0u8; (w * h * 4) as usize];
+        unsafe {
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(t.fbo));
+            gl.read_pixels(0, 0, w, h, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(Some(&mut buf)));
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+        }
+        t.delete(gl);
+        reset_state(gl);
+        (w, h, buf)
+    }
+
     pub fn shader_error(&self, path: &Path) -> Option<&str> {
         self.shaders.get(path).and_then(|s| s.error.as_deref())
     }

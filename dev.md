@@ -71,6 +71,8 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_L1AMOUNT=<0..100>` | mix of layer 1 in % (luma fade check with `_L1MIX=lk\|ilk`) |
 | `VIDEOPING_SELFTEST_MIDI=1` | a virtual "Bhoreal selftest" MIDI port (ALSA) presses pads (select L3, load the copy of the generator, blackout, effect off), the LED feedback is checked, then cc 20 is learned onto /master/freeze and used; the mouse script is off |
 | `VIDEOPING_SELFTEST_TAB=midi` | start in the midi mapping tab (screenshot of the tab; with `_MIDI` the virtual device is selected) |
+| `VIDEOPING_SELFTEST_MCP=<port>` | MCP server on that port (otherwise off in the self-test); `_MCP_RO=1`: read only |
+| `VIDEOPING_SELFTEST_STAY=<seconds>` | keep the self-test open that long (for calls from outside, e.g. `scripts/mcp-test.sh <port> <outdir>`) |
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
@@ -139,6 +141,9 @@ src/
   ndi.rs       NDI: libndi.so loaded once at runtime; sender, finder (discovery), receiver (one thread each)
   control.rs   control registry: addresses (/layer/2/mix, /slot/5/load, /slot/9/fx/1/param/2 ...)
                list / get / set / snapshot+changes; the base for MIDI, MCP (and OSC); unit tested
+  mcp.rs       MCP server: streamable HTTP on 127.0.0.1 (tiny_http thread), JSON-RPC (initialize,
+               tools/list, tools/call), tool definitions; tool calls go to the app through a channel
+  mcp_tools.rs the MCP tools, answered by the app at the next frame (child module of app)
   midi_tab.rs  the tab "midi mapping" (devices, bindings table, addresses + learn); child module of app
   midi.rs      MIDI engine: profiles of bindings (MIDI message <-> control address), modes, LED
                feedback, port scan every 2 s; built-in Bhoreal profile; unit tested

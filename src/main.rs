@@ -4,6 +4,7 @@ mod app;
 mod control;
 mod gfx;
 mod isf;
+mod mcp;
 mod meter;
 mod midi;
 mod ndi;

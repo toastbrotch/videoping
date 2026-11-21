@@ -380,11 +380,23 @@ pub struct Config {
     /// folder for recordings (empty = ~/Videos/videoping)
     #[serde(default)]
     pub record_dir: String,
+    /// MCP server on localhost (Claude Code and other MCP clients control videoping)
+    #[serde(default = "yes")]
+    pub mcp: bool,
+    #[serde(default = "mcp_port")]
+    pub mcp_port: u16,
+    /// MCP may read but not change anything (for shows)
+    #[serde(default)]
+    pub mcp_read_only: bool,
+}
+
+fn mcp_port() -> u16 {
+    7466
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { meters: true, record_dir: String::new() }
+        Config { meters: true, record_dir: String::new(), mcp: true, mcp_port: mcp_port(), mcp_read_only: false }
     }
 }
 
