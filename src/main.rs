@@ -46,6 +46,13 @@ fn maybe_restart_on_nvidia() {
     eprintln!("nvidia: restart failed: {err}");
 }
 
+/// Window icon: the v2 (glitch) logo, built into the binary. Wayland desktops take the icon from
+/// the installed videoping.desktop / icon theme instead (see install.md).
+pub(crate) fn app_icon() -> std::sync::Arc<egui::IconData> {
+    let png = include_bytes!("../docs/logo/videoping-v2-icon-256.png");
+    std::sync::Arc::new(eframe::icon_data::from_png_bytes(png).unwrap_or_default())
+}
+
 fn main() -> eframe::Result {
     maybe_restart_on_nvidia();
     if let Err(e) = video::init() {
@@ -59,6 +66,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("videoping")
             .with_app_id("videoping")
+            .with_icon(app_icon())
             .with_maximized(true)
             .with_min_inner_size([1000.0, 600.0]),
         // the self-test must not touch the stored window state / ui layout

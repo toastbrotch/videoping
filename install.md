@@ -1,3 +1,5 @@
+<img src="docs/logo/videoping-v2-logo.png" alt="videoping" width="480">
+
 install videoping
 =================
 
@@ -115,6 +117,24 @@ cargo build --release
 install -Dm755 target/release/videoping ~/.local/bin/videoping
 ```
 
+Launcher entry and icon (so videoping shows up in the app menu / dock with its logo; on Wayland the
+window icon also comes from here):
+
+```sh
+install -Dm644 packaging/videoping.desktop ~/.local/share/applications/videoping.desktop
+for n in 512 256 128 64 48; do
+  install -Dm644 docs/logo/videoping-v2-icon-$n.png ~/.local/share/icons/hicolor/${n}x${n}/apps/videoping.png
+done
+# 32 and 16 px: the calm v1 logo (the glitch version turns into mud that small)
+install -Dm644 docs/logo/videoping-icon-32.png ~/.local/share/icons/hicolor/32x32/apps/videoping.png
+install -Dm644 docs/logo/videoping-icon-16.png ~/.local/share/icons/hicolor/16x16/apps/videoping.png
+install -Dm644 docs/logo/videoping-v2-icon.svg ~/.local/share/icons/hicolor/scalable/apps/videoping.svg
+gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
+```
+
+The desktop entry starts `videoping` from `~/.local/bin`. If that folder is not in your `PATH`, put
+the full path into `Exec=` in the installed file.
+
 Run it from the folder that holds your clips/shaders, or add folders in the finder
 (column 1 → "folders").
 
@@ -205,5 +225,5 @@ Notes:
 
 # 5. using videoping
 
-See the [manual](manual.md): concept, a tour of the screen, playing a set, effects, output and
+See the [manual](manual.html) (open it in a browser): concept, a tour of the screen, playing a set, effects, output and
 recording, performance, files and settings, troubleshooting.

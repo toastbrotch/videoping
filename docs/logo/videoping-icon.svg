@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512">
+  <title>icon</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <path id="background" d="M96 0 L416 0 C469.019 0 512 42.981 512 96 L512 416 C512 469.019 469.019 512 416 512 L96 512 C42.981 512 0 469.019 0 416 L0 96 C0 42.981 42.981 0 96 0 Z" fill="#141414"/>
+    <path id="wave_L1" data-name="wave L1" d="M220.7 182.5 C242.409 200.74 254.944 227.645 254.944 256 C254.944 284.355 242.409 311.26 220.7 329.5" fill="none" stroke="#1b6898" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+    <path id="wave_L2" data-name="wave L2" d="M261.8 133.4 C298.053 163.8 318.993 208.687 318.993 256 C318.993 303.313 298.053 348.2 261.8 378.6" fill="none" stroke="#388e3c" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+    <path id="wave_L3" data-name="wave L3" d="M303 84.4 C353.726 126.961 383.023 189.784 383.023 256 C383.023 322.216 353.726 385.039 303 427.6" fill="none" stroke="#c8640a" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+    <polygon id="source__play_" data-name="source (play)" points="124,206 124,306 200,256" fill="#8b4a87" stroke="#8b4a87" stroke-width="22" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -12,6 +12,26 @@ videoping is a live vjing application, 5 columns, all column-borders are moveabl
 - transport rows: a visible gap (10 px) between the groups: play directions | loop / once / bounce | bpm + speed + ½x 2x
 - mix-type + "Ch R G B" stay on one line when there is room, otherwise "Ch R G B" wraps to its own line (right aligned)
 
+# logo
+- mark: a plum play triangle (▶, the video / live source) sending out three "ping" waves in the three layer colors (blue, green, orange from inside out) = a live signal going out, mixed from 3 layers
+- connected to videopong.net (vj footage sharing) only by name: no ping-pong ball or paddles, the logo is about the live part
+- wordmark: "videoping" in Inter Semi Bold, lowercase, "video" light grey #e6e6e6, "ping" plum #8B4A87
+- icon: the mark on a dark rounded square (#141414, like the app); still readable at 32 px
+- files in docs/logo/: videoping-icon.svg / -512 / -128 / -32.png, videoping-logo.svg / .png (lockup, text as outlines), videoping-logo.vectorcraft (editable source, made with VectorCraft)
+- v2 "glitch" (same mark, broken like a damaged video signal): files videoping-v2-icon.svg / -512 / -128 / -32.png, videoping-v2-logo.svg / .png
+  - displacement: 4 horizontal bands of the mark cut out and shifted sideways (tearing / datamosh)
+  - channel split: ghost copies of the play triangle (and of "ping" in the lockup) offset left in blue and right in orange, like the R G B switches drifting apart
+  - scanlines over the icon (20 %)
+  - no displacement band through the wordmark: at the top / bottom of the letters the shifted curves read as strike lines, the word stays readable
+  - large sizes only (splash, manual, posters): at 32 px the glitch turns into mud, so window / taskbar icon stays v1
+- all four artboards (icon, lockup, icon v2, lockup v2) are in docs/logo/videoping-logo.vectorcraft
+- v2 is the official logo; where it is used:
+  - window icon of videoping and of the output window (built into the binary: docs/logo/videoping-v2-icon-256.png)
+  - launcher / dock icon: packaging/videoping.desktop (app id "videoping") + icon theme in ~/.local/share/icons/hicolor: v2 from 48 px up and scalable, v1 for 16 and 32 px (install.md); on Wayland the window icon comes from there
+  - manual.html: v2 lockup as page header, v2 icon in the table of contents, favicon (v1 32 px for the browser tab, v2 128 px)
+  - install.md: v2 lockup on top
+  - page background of the manual = #141414, the same as the app and the logo background, so the lockup has no visible box
+
 # tabs
 
 the ui has top-level tabs:
@@ -32,7 +52,7 @@ everything below belongs to the tab "live".
 | column | content |
 |---|---|
 | 1 finder | finder preview, finder |
-| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, patch-bay, output options |
+| 2 prepare grid | 4x8 slot grid, below it: master (blackout, freeze, brightness), global bpm tapper, record, patch-bay, output options, general config |
 | 3 prepare detail | prepare preview pinned on top, below it (scrolls): clip interface, effect stack; default width ~30% of the window |
 | 4 mixer + output | main output preview pinned on top, below it (scrolls): mixer (3 layers), output effects; takes the remaining width |
 
@@ -203,6 +223,15 @@ the prepare area uses two columns (see "layout of the tab live"):
     - also when clicking one of the layer's controls (the controls still do their own action)
 - mark the selected layer
 
+## record
+- own box in column 2, below bpm (above the patch-bay), directly visible
+- REC button: records the output (after master, the same picture as NDI) to a file
+  - while recording: "● REC" (red) plus running time, file size and resource meter; hover: path, frames, dropped frames, encoder
+  - the target folder is not shown in the box (only in the REC hover); it is set in the general config (recording folder)
+  - files are named `videoping-YYYY-MM-DD_HH-MM-SS.mp4`
+  - keeps recording through new / load; ends when the output resolution changes; finished properly on quit
+  - disabled (with the reason on hover) when no hardware encoder works
+
 ## patch-bay for videosignals
 
 - placed in column 2, below the prepare grid (under master and bpm)
@@ -229,6 +258,7 @@ visuals:
 
 ## global bpm tabber
 - placed in column 2, below the prepare grid (under master)
+- all on one line: TAP, 4 beat dots, bpm slider (fills the rest; "bpm" on hover), ½x, 2x
 - bpm is always an integer (tap, slider and ½x/2x round to whole bpm)
 - tap button sets the bpm
 - bpm slider: change the bpm globally by hand (e.g. slow everything down), tap and slider set the same value
@@ -239,17 +269,13 @@ visuals:
 
 ## master (blackout, freeze, brightness)
 - one group in column 2, below the prepare grid, directly visible, no foldout
+- all on one line: BLACKOUT, FREEZE, brightness slider (fills the rest of the line; no text label, "brightness" on hover)
 - global blackout button
 - global freeze button
 - global brightness slider (0-100%) next to them
   - during blackout the slider shows 0 %; moving it up from 0 ends the blackout and sets the brightness -> fade in from black
   - ending the blackout with the button restores the brightness from before
 - all three act at the very end (after the output effects), for NDI and screen output
-- REC button next to FREEZE: records the output (after master, the same picture as NDI) to a file
-  - while recording: "● REC" (red) plus running time and file size; hover: path, frames, dropped frames, encoder, GPU time
-  - files go to the recording folder (general config), named `videoping-YYYY-MM-DD_HH-MM-SS.mp4`
-  - keeps recording through new / load; ends when the output resolution changes; finished properly on quit
-  - disabled (with the reason on hover) when no hardware encoder works
 
 ## output effects (layering top-down)
 - multiple effects, they work exactly like the effects in the prepare lane:
@@ -389,8 +415,8 @@ visuals:
   X11 (XWayland) 60 fps on both but the ui is upscaled (blurry) on the HiDPI panel — open decision
 
 ## documentation
-- features.md = spec (decisions), manual.md = end-user manual (concept, tour with screenshots in docs/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
-- user-visible changes go into manual.md in the same step as features.md
+- features.md = spec (decisions), manual.html = end-user manual as one HTML page (dark like videoping, table of contents; concept, tour with screenshots in docs/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
+- user-visible changes go into manual.html in the same step as features.md
 
 ## platform
 - Linux only for now (no Windows / macOS builds). The code still has Linux-specific bits (libndi.so names / paths, DejaVu font paths); a port would need those plus native CI builds.

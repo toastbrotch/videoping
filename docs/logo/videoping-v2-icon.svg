@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <clipPath id="clip-path-1">
+      <path d="M0 148 L512 148 L512 170 L0 170 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-2">
+      <path d="M0 252 L512 252 L512 278 L0 278 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-3">
+      <path d="M0 326 L512 326 L512 334 L0 334 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-4">
+      <path d="M0 372 L512 372 L512 392 L0 392 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-5">
+      <path d="M96 0 L416 0 C469.019 0 512 42.981 512 96 L512 416 C512 469.019 469.019 512 416 512 L96 512 C42.981 512 0 469.019 0 416 L0 96 C0 42.981 42.981 0 96 0 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-6">
+      <path d="M503.25 111 L887.25 111 L887.25 127.5 L503.25 127.5 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-7">
+      <path d="M503.25 189 L887.25 189 L887.25 208.5 L503.25 208.5 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-8">
+      <path d="M503.25 244.5 L887.25 244.5 L887.25 250.5 L503.25 250.5 Z"/>
+    </clipPath>
+    <clipPath id="clip-path-9">
+      <path d="M503.25 279 L887.25 279 L887.25 294 L503.25 294 Z"/>
+    </clipPath>
+  </defs>
+  <title>icon v2 glitch</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <path id="v2_background" data-name="v2 background" d="M96 0 L416 0 C469.019 0 512 42.981 512 96 L512 416 C512 469.019 469.019 512 416 512 L96 512 C42.981 512 0 469.019 0 416 L0 96 C0 42.981 42.981 0 96 0 Z" fill="#141414"/>
+    <g>
+      <g>
+        <polygon id="v2_ghost_blue" data-name="v2 ghost blue" points="113,206 113,306 189,256" fill="#1b6898" stroke="#1b6898" stroke-width="22" stroke-linejoin="round"/>
+        <polygon id="v2_ghost_orange" data-name="v2 ghost orange" points="135,206 135,306 211,256" fill="#c8640a" stroke="#c8640a" stroke-width="22" stroke-linejoin="round"/>
+        <polygon id="v2_play" data-name="v2 play" points="124,206 124,306 200,256" fill="#8b4a87" stroke="#8b4a87" stroke-width="22" stroke-linejoin="round"/>
+        <path id="v2_wave_L1" data-name="v2 wave L1" d="M220.7 182.5 C242.409 200.74 254.944 227.645 254.944 256 C254.944 284.355 242.409 311.26 220.7 329.5" fill="none" stroke="#1b6898" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+        <path id="v2_wave_L2" data-name="v2 wave L2" d="M261.8 133.4 C298.053 163.8 318.993 208.687 318.993 256 C318.993 303.313 298.053 348.2 261.8 378.6" fill="none" stroke="#388e3c" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+        <path id="v2_wave_L3" data-name="v2 wave L3" d="M303 84.4 C353.726 126.961 383.023 189.784 383.023 256 C383.023 322.216 353.726 385.039 303 427.6" fill="none" stroke="#c8640a" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+      </g>
+      <rect id="cut_A" data-name="cut A" x="0" y="148" width="512" height="22" fill="#141414"/>
+      <g clip-path="url(#clip-path-1)">
+        <g>
+          <polygon id="v2_ghost_blue-2" data-name="v2 ghost blue" points="141,206 141,306 217,256" fill="#1b6898" stroke="#1b6898" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-2" data-name="v2 ghost orange" points="163,206 163,306 239,256" fill="#c8640a" stroke="#c8640a" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_play-2" data-name="v2 play" points="152,206 152,306 228,256" fill="#8b4a87" stroke="#8b4a87" stroke-width="22" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-2" data-name="v2 wave L1" d="M248.7 182.5 C270.409 200.74 282.944 227.645 282.944 256 C282.944 284.355 270.409 311.26 248.7 329.5" fill="none" stroke="#1b6898" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-2" data-name="v2 wave L2" d="M289.8 133.4 C326.053 163.8 346.993 208.687 346.993 256 C346.993 303.313 326.053 348.2 289.8 378.6" fill="none" stroke="#388e3c" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-2" data-name="v2 wave L3" d="M331 84.4 C381.726 126.961 411.023 189.784 411.023 256 C411.023 322.216 381.726 385.039 331 427.6" fill="none" stroke="#c8640a" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+      <rect id="cut_B" data-name="cut B" x="0" y="252" width="512" height="26" fill="#141414"/>
+      <g clip-path="url(#clip-path-2)">
+        <g>
+          <polygon id="v2_ghost_blue-3" data-name="v2 ghost blue" points="87,206 87,306 163,256" fill="#1b6898" stroke="#1b6898" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-3" data-name="v2 ghost orange" points="109,206 109,306 185,256" fill="#c8640a" stroke="#c8640a" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_play-3" data-name="v2 play" points="98,206 98,306 174,256" fill="#8b4a87" stroke="#8b4a87" stroke-width="22" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-3" data-name="v2 wave L1" d="M194.7 182.5 C216.409 200.74 228.944 227.645 228.944 256 C228.944 284.355 216.409 311.26 194.7 329.5" fill="none" stroke="#1b6898" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-3" data-name="v2 wave L2" d="M235.8 133.4 C272.053 163.8 292.993 208.687 292.993 256 C292.993 303.313 272.053 348.2 235.8 378.6" fill="none" stroke="#388e3c" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-3" data-name="v2 wave L3" d="M277 84.4 C327.726 126.961 357.023 189.784 357.023 256 C357.023 322.216 327.726 385.039 277 427.6" fill="none" stroke="#c8640a" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+      <rect id="cut_C" data-name="cut C" x="0" y="326" width="512" height="8" fill="#141414"/>
+      <g clip-path="url(#clip-path-3)">
+        <g>
+          <polygon id="v2_ghost_blue-4" data-name="v2 ghost blue" points="129,206 129,306 205,256" fill="#1b6898" stroke="#1b6898" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-4" data-name="v2 ghost orange" points="151,206 151,306 227,256" fill="#c8640a" stroke="#c8640a" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_play-4" data-name="v2 play" points="140,206 140,306 216,256" fill="#8b4a87" stroke="#8b4a87" stroke-width="22" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-4" data-name="v2 wave L1" d="M236.7 182.5 C258.409 200.74 270.944 227.645 270.944 256 C270.944 284.355 258.409 311.26 236.7 329.5" fill="none" stroke="#1b6898" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-4" data-name="v2 wave L2" d="M277.8 133.4 C314.053 163.8 334.993 208.687 334.993 256 C334.993 303.313 314.053 348.2 277.8 378.6" fill="none" stroke="#388e3c" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-4" data-name="v2 wave L3" d="M319 84.4 C369.726 126.961 399.023 189.784 399.023 256 C399.023 322.216 369.726 385.039 319 427.6" fill="none" stroke="#c8640a" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+      <rect id="cut_D" data-name="cut D" x="0" y="372" width="512" height="20" fill="#141414"/>
+      <g clip-path="url(#clip-path-4)">
+        <g>
+          <polygon id="v2_ghost_blue-5" data-name="v2 ghost blue" points="157,206 157,306 233,256" fill="#1b6898" stroke="#1b6898" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-5" data-name="v2 ghost orange" points="179,206 179,306 255,256" fill="#c8640a" stroke="#c8640a" stroke-width="22" stroke-linejoin="round"/>
+          <polygon id="v2_play-5" data-name="v2 play" points="168,206 168,306 244,256" fill="#8b4a87" stroke="#8b4a87" stroke-width="22" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-5" data-name="v2 wave L1" d="M264.7 182.5 C286.409 200.74 298.944 227.645 298.944 256 C298.944 284.355 286.409 311.26 264.7 329.5" fill="none" stroke="#1b6898" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-5" data-name="v2 wave L2" d="M305.8 133.4 C342.053 163.8 362.993 208.687 362.993 256 C362.993 303.313 342.053 348.2 305.8 378.6" fill="none" stroke="#388e3c" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-5" data-name="v2 wave L3" d="M347 84.4 C397.726 126.961 427.023 189.784 427.023 256 C427.023 322.216 397.726 385.039 347 427.6" fill="none" stroke="#c8640a" stroke-width="34" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+    </g>
+    <g clip-path="url(#clip-path-5)">
+      <path id="scanlines" d="M0 3 L512 3 M0 9 L512 9 M0 15 L512 15 M0 21 L512 21 M0 27 L512 27 M0 33 L512 33 M0 39 L512 39 M0 45 L512 45 M0 51 L512 51 M0 57 L512 57 M0 63 L512 63 M0 69 L512 69 M0 75 L512 75 M0 81 L512 81 M0 87 L512 87 M0 93 L512 93 M0 99 L512 99 M0 105 L512 105 M0 111 L512 111 M0 117 L512 117 M0 123 L512 123 M0 129 L512 129 M0 135 L512 135 M0 141 L512 141 M0 147 L512 147 M0 153 L512 153 M0 159 L512 159 M0 165 L512 165 M0 171 L512 171 M0 177 L512 177 M0 183 L512 183 M0 189 L512 189 M0 195 L512 195 M0 201 L512 201 M0 207 L512 207 M0 213 L512 213 M0 219 L512 219 M0 225 L512 225 M0 231 L512 231 M0 237 L512 237 M0 243 L512 243 M0 249 L512 249 M0 255 L512 255 M0 261 L512 261 M0 267 L512 267 M0 273 L512 273 M0 279 L512 279 M0 285 L512 285 M0 291 L512 291 M0 297 L512 297 M0 303 L512 303 M0 309 L512 309 M0 315 L512 315 M0 321 L512 321 M0 327 L512 327 M0 333 L512 333 M0 339 L512 339 M0 345 L512 345 M0 351 L512 351 M0 357 L512 357 M0 363 L512 363 M0 369 L512 369 M0 375 L512 375 M0 381 L512 381 M0 387 L512 387 M0 393 L512 393 M0 399 L512 399 M0 405 L512 405 M0 411 L512 411 M0 417 L512 417 M0 423 L512 423 M0 429 L512 429 M0 435 L512 435 M0 441 L512 441 M0 447 L512 447 M0 453 L512 453 M0 459 L512 459 M0 465 L512 465 M0 471 L512 471 M0 477 L512 477 M0 483 L512 483 M0 489 L512 489 M0 495 L512 495 M0 501 L512 501 M0 507 L512 507" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10" opacity="0.2"/>
+    </g>
+    <g>
+      <rect id="cut_A-2" data-name="cut A" x="503.25" y="111" width="384" height="16.5" fill="#141414"/>
+      <g clip-path="url(#clip-path-6)">
+        <g>
+          <polygon id="v2_ghost_blue-6" data-name="v2 ghost blue" points="609,154.5 609,229.5 666,192" fill="#1b6898" stroke="#1b6898" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-6" data-name="v2 ghost orange" points="625.5,154.5 625.5,229.5 682.5,192" fill="#c8640a" stroke="#c8640a" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_play-6" data-name="v2 play" points="617.25,154.5 617.25,229.5 674.25,192" fill="#8b4a87" stroke="#8b4a87" stroke-width="16.5" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-6" data-name="v2 wave L1" d="M689.775 136.875 C706.057 150.555 715.458 170.734 715.458 192 C715.458 213.266 706.057 233.445 689.775 247.125" fill="none" stroke="#1b6898" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-6" data-name="v2 wave L2" d="M720.6 100.05 C747.79 122.85 763.495 156.515 763.495 192 C763.495 227.485 747.79 261.15 720.6 283.95" fill="none" stroke="#388e3c" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-6" data-name="v2 wave L3" d="M751.5 63.3 C789.545 95.221 811.517 142.338 811.517 192 C811.517 241.662 789.545 288.779 751.5 320.7" fill="none" stroke="#c8640a" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+      <rect id="cut_B-2" data-name="cut B" x="503.25" y="189" width="384" height="19.5" fill="#141414"/>
+      <g clip-path="url(#clip-path-7)">
+        <g>
+          <polygon id="v2_ghost_blue-7" data-name="v2 ghost blue" points="568.5,154.5 568.5,229.5 625.5,192" fill="#1b6898" stroke="#1b6898" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-7" data-name="v2 ghost orange" points="585,154.5 585,229.5 642,192" fill="#c8640a" stroke="#c8640a" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_play-7" data-name="v2 play" points="576.75,154.5 576.75,229.5 633.75,192" fill="#8b4a87" stroke="#8b4a87" stroke-width="16.5" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-7" data-name="v2 wave L1" d="M649.275 136.875 C665.557 150.555 674.958 170.734 674.958 192 C674.958 213.266 665.557 233.445 649.275 247.125" fill="none" stroke="#1b6898" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-7" data-name="v2 wave L2" d="M680.1 100.05 C707.29 122.85 722.995 156.515 722.995 192 C722.995 227.485 707.29 261.15 680.1 283.95" fill="none" stroke="#388e3c" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-7" data-name="v2 wave L3" d="M711 63.3 C749.045 95.221 771.017 142.338 771.017 192 C771.017 241.662 749.045 288.779 711 320.7" fill="none" stroke="#c8640a" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+      <rect id="cut_C-2" data-name="cut C" x="503.25" y="244.5" width="384" height="6" fill="#141414"/>
+      <g clip-path="url(#clip-path-8)">
+        <g>
+          <polygon id="v2_ghost_blue-8" data-name="v2 ghost blue" points="600,154.5 600,229.5 657,192" fill="#1b6898" stroke="#1b6898" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-8" data-name="v2 ghost orange" points="616.5,154.5 616.5,229.5 673.5,192" fill="#c8640a" stroke="#c8640a" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_play-8" data-name="v2 play" points="608.25,154.5 608.25,229.5 665.25,192" fill="#8b4a87" stroke="#8b4a87" stroke-width="16.5" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-8" data-name="v2 wave L1" d="M680.775 136.875 C697.057 150.555 706.458 170.734 706.458 192 C706.458 213.266 697.057 233.445 680.775 247.125" fill="none" stroke="#1b6898" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-8" data-name="v2 wave L2" d="M711.6 100.05 C738.79 122.85 754.495 156.515 754.495 192 C754.495 227.485 738.79 261.15 711.6 283.95" fill="none" stroke="#388e3c" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-8" data-name="v2 wave L3" d="M742.5 63.3 C780.545 95.221 802.517 142.338 802.517 192 C802.517 241.662 780.545 288.779 742.5 320.7" fill="none" stroke="#c8640a" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+      <rect id="cut_D-2" data-name="cut D" x="503.25" y="279" width="384" height="15" fill="#141414"/>
+      <g clip-path="url(#clip-path-9)">
+        <g>
+          <polygon id="v2_ghost_blue-9" data-name="v2 ghost blue" points="621,154.5 621,229.5 678,192" fill="#1b6898" stroke="#1b6898" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_ghost_orange-9" data-name="v2 ghost orange" points="637.5,154.5 637.5,229.5 694.5,192" fill="#c8640a" stroke="#c8640a" stroke-width="16.5" stroke-linejoin="round"/>
+          <polygon id="v2_play-9" data-name="v2 play" points="629.25,154.5 629.25,229.5 686.25,192" fill="#8b4a87" stroke="#8b4a87" stroke-width="16.5" stroke-linejoin="round"/>
+          <path id="v2_wave_L1-9" data-name="v2 wave L1" d="M701.775 136.875 C718.057 150.555 727.458 170.734 727.458 192 C727.458 213.266 718.057 233.445 701.775 247.125" fill="none" stroke="#1b6898" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L2-9" data-name="v2 wave L2" d="M732.6 100.05 C759.79 122.85 775.495 156.515 775.495 192 C775.495 227.485 759.79 261.15 732.6 283.95" fill="none" stroke="#388e3c" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+          <path id="v2_wave_L3-9" data-name="v2 wave L3" d="M763.5 63.3 C801.545 95.221 823.517 142.338 823.517 192 C823.517 241.662 801.545 288.779 763.5 320.7" fill="none" stroke="#c8640a" stroke-width="25.5" stroke-linecap="round" stroke-miterlimit="10"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

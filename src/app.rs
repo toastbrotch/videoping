@@ -269,7 +269,13 @@ impl App {
             cfg: if std::env::var_os("VIDEOPING_SELFTEST").is_some() {
                 Config {
                     meters: std::env::var_os("VIDEOPING_SELFTEST_NOMETERS").is_none(),
-                    record_dir: std::env::var("VIDEOPING_SELFTEST").unwrap_or_default(),
+                    // the self-test folder only when the self-test records; otherwise the default
+                    // (shown in the record box, nothing is written there)
+                    record_dir: if std::env::var_os("VIDEOPING_SELFTEST_REC").is_some() {
+                        std::env::var("VIDEOPING_SELFTEST").unwrap_or_default()
+                    } else {
+                        String::new()
+                    },
                 }
             } else {
                 load_config()
@@ -997,6 +1003,9 @@ impl App {
             self.section_bpm(ui);
             ui.add_space(6.0);
             ui.separator();
+            self.section_record(ui);
+            ui.add_space(6.0);
+            ui.separator();
             self.section_patchbay(ui);
             ui.add_space(6.0);
             ui.separator();
@@ -1543,6 +1552,7 @@ impl App {
     /// bpm tapper (below the prepare grid)
     fn section_bpm(&mut self, ui: &mut Ui) {
         ui.label("bpm");
+        // one line: TAP, beat dots, bpm slider (takes the rest), ½x 2x
         ui.horizontal(|ui| {
             if ui.add(egui::Button::new(egui::RichText::new("TAP").strong()).min_size(vec2(56.0, 28.0))).clicked() {
                 self.tap();
@@ -1555,11 +1565,9 @@ impl App {
                 let c = if on { ACCENT.gamma_multiply(1.0 - frac * 0.7) } else { Color32::from_gray(50) };
                 ui.painter().circle_filled(rect.center(), 5.0, c);
             }
-        });
-        ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut self.s.bpm, 20.0..=300.0).step_by(1.0).fixed_decimals(0).text("bpm"));
-        });
-        ui.horizontal(|ui| {
+            let gap = ui.spacing().item_spacing.x;
+            ui.spacing_mut().slider_width = fill_slider_width(ui, 2.0 * (widgets::BTN.x + gap));
+            ui.add(egui::Slider::new(&mut self.s.bpm, 20.0..=300.0).step_by(1.0).fixed_decimals(0)).on_hover_text("bpm");
             if widgets::btn(ui, "½x").clicked() {
                 self.s.bpm = (self.s.bpm * 0.5).round().max(20.0);
             }
@@ -1572,6 +1580,7 @@ impl App {
     /// master: blackout, freeze, brightness (below the prepare grid)
     fn section_master(&mut self, ui: &mut Ui) {
         ui.label("master");
+        // one line: BLACKOUT, FREEZE, brightness slider (takes the rest)
         ui.horizontal(|ui| {
             let m = &mut self.s.master;
             let bo = if m.blackout { Color32::from_rgb(200, 30, 30) } else { ui.visuals().widgets.inactive.weak_bg_fill };
@@ -1582,26 +1591,32 @@ impl App {
             if ui.add(egui::Button::new(egui::RichText::new("FREEZE").strong()).fill(fz).min_size(vec2(70.0, 28.0))).clicked() {
                 m.freeze = !m.freeze;
             }
-            self.rec_button(ui);
-        });
-        // during blackout the slider shows 0 %; pulling it up ends the blackout -> fade in from black
-        let m = &mut self.s.master;
-        let mut v = if m.blackout { 0.0 } else { m.brightness };
-        let r = widgets::percent_slider(ui, &mut v, "brightness");
-        if let Some(t) = self.selftest.as_mut() {
-            t.brightness_slider = Some(r.rect);
-        }
-        let m = &mut self.s.master;
-        if r.changed() {
-            if m.blackout {
-                if v > 0.0 {
-                    m.blackout = false;
+            // during blackout the slider shows 0 %; pulling it up ends the blackout -> fade in from black
+            let mut v = if m.blackout { 0.0 } else { m.brightness };
+            ui.spacing_mut().slider_width = fill_slider_width(ui, 0.0);
+            let r = widgets::percent_slider(ui, &mut v, "").on_hover_text("brightness");
+            if let Some(t) = self.selftest.as_mut() {
+                // the bar part only (without the value field)
+                t.brightness_slider = Some(Rect::from_min_size(r.rect.min, vec2(ui.spacing().slider_width, r.rect.height())));
+            }
+            let m = &mut self.s.master;
+            if r.changed() {
+                if m.blackout {
+                    if v > 0.0 {
+                        m.blackout = false;
+                        m.brightness = v;
+                    }
+                } else {
                     m.brightness = v;
                 }
-            } else {
-                m.brightness = v;
             }
-        }
+        });
+    }
+
+    /// Record box (column 2, below bpm): REC with time, size and meter (the folder is in the REC hover).
+    fn section_record(&mut self, ui: &mut Ui) {
+        ui.label("record");
+        ui.horizontal(|ui| self.rec_button(ui));
     }
 
     /// REC: records the output (after master) to an H.264 mp4 in the recording folder.
@@ -1799,7 +1814,10 @@ impl App {
         let mut close = false;
         let mut toggle_fs = false;
         let screen = self.s.output.screen;
-        let mut builder = egui::ViewportBuilder::default().with_title("videoping output").with_inner_size([960.0, 540.0]);
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title("videoping output")
+            .with_icon(crate::app_icon())
+            .with_inner_size([960.0, 540.0]);
         builder = if fullscreen { builder.with_monitor(screen) } else { builder.with_fullscreen(false) };
         ctx.show_viewport_immediate(
             vid,
@@ -1969,6 +1987,12 @@ pub fn nvidia_available() -> bool {
 
 /// Width for a text field followed by a button of width `button_w` on the same line, so the line
 /// never gets wider than the column (a too-wide line makes a resizable panel grow by itself).
+/// Slider bar width so that bar + value field + `after` (widgets right of it) fill the rest of the line.
+fn fill_slider_width(ui: &Ui, after: f32) -> f32 {
+    let value_field = ui.spacing().interact_size.x + 8.0;
+    (ui.available_width() - value_field - ui.spacing().item_spacing.x - after - 2.0).max(40.0)
+}
+
 fn field_width(ui: &Ui, button_w: f32) -> f32 {
     (ui.available_width() - button_w - ui.spacing().item_spacing.x - ui.spacing().button_padding.x * 2.0 - 2.0).max(40.0)
 }
@@ -2101,9 +2125,8 @@ impl eframe::App for App {
             if t.drag_step > 31 {
                 return;
             }
-            let rail = ctx.global_style().spacing.slider_width;
             if let Some(r) = t.brightness_slider {
-                let p = egui::pos2(r.left() + rail * 0.4, r.center().y);
+                let p = egui::pos2(r.left() + r.width() * 0.4, r.center().y);
                 let btn = |pressed| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
                 match t.drag_step {
                     27 => self.s.master.blackout = true,

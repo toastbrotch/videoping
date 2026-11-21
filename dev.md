@@ -59,7 +59,7 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_EFFECT=<fs>` | first (open) clip effect of the self-test (default `isf-effect/gameboy-camera.fs`) |
 | `VIDEOPING_SELFTEST_RESET=1` | change the first parameter of the first clip effect, right click its row, print value before / after (expected: default) |
 | `VIDEOPING_SELFTEST_NOMETERS=1` | self-test with the resource meters off (overhead comparison: `time` both runs); with meters on, the self-test prints the meter of each instance |
-| `VIDEOPING_SELFTEST_REC=<seconds>` | record from 1.5 s to the given time (default 4) into the self-test folder; the self-test stays open until then; check the file with `cargo run --release --example transport_test -- <file>` |
+| `VIDEOPING_SELFTEST_REC=<seconds>` | record from 1.5 s to the given time (default 4) into the self-test folder (without it the recording folder is the default and nothing is recorded); the self-test stays open until then; check the file with `cargo run --release --example transport_test -- <file>` |
 | `VIDEOPING_SELFTEST_REC_OFF=1` | same timing without recording (CPU comparison) |
 | `VIDEOPING_SELFTEST_PREPARE=<generator.fs>` | put that generator into slot 3 and select it (not live): prepare priority test, prints its renders per second |
 | `VIDEOPING_SELFTEST_NOPRIORITY=1` | old behaviour for comparison: prepare work every frame |
@@ -90,8 +90,10 @@ cargo run --example ndi_loop_test -- [ndi lib dir] # NDI loopback: send, discove
 | file | for whom |
 |---|---|
 | `features.md` | the spec: every design decision, thresholds, measurements, open points |
-| `manual.md` | end users: how to play with videoping (screenshots in `docs/`) |
+| `manual.html` | end users: how to play with videoping; one self-contained HTML page (styles inline), screenshots in `docs/`; open it in a browser |
 | `install.md` | installation only |
+| `docs/logo/` | the logo (v1 calm, v2 glitch = official): SVG, PNG sizes, editable `videoping-logo.vectorcraft` (VectorCraft) |
+| `packaging/videoping.desktop` | launcher entry; icons and install commands in install.md |
 | `dev.md` | this file |
 
 Screenshots for the manual come from the self-test (it uses only the repo shaders and the test clip
@@ -99,10 +101,10 @@ in the finder, and clears the status line before the screenshot):
 
 ```sh
 S=/tmp/vp-docs; mkdir -p $S; cp <testclip.mp4> $S/testclip.mp4
-VIDEOPING_SELFTEST=$S VIDEOPING_SELFTEST_REC=8 ./target/release/videoping
+VIDEOPING_SELFTEST=$S ./target/release/videoping   # no REC: the record box shows the default folder
 U=$S/ui_3000x1818.rgba   # size depends on the screen
 c(){ ffmpeg -y -f rawvideo -pix_fmt rgba -s 3000x1818 -i $U -vf "$1" docs/$2; }
-c "scale=1500:-1,split[a][b];[a]palettegen=max_colors=160[p];[b][p]paletteuse=dither=none" overview.png
+c "scale=1500:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160[p];[b][p]paletteuse=dither=none" overview.png
 c "crop=1300:36:1700:0" topbar.png
 c "crop=390:1300:0:36" finder.png
 c "crop=620:1440:392:36" prepare.png

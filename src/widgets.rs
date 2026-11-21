@@ -10,7 +10,9 @@ pub const ACCENT: Color32 = Color32::from_rgb(0x8B, 0x4A, 0x87);
 /// 0..1 value shown and edited as integer percent 0..100.
 pub fn percent_slider(ui: &mut Ui, v: &mut f32, label: &str) -> egui::Response {
     let mut pct = (*v * 100.0).round();
-    let r = ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).step_by(1.0).fixed_decimals(0).suffix(" %").text(label));
+    let slider = egui::Slider::new(&mut pct, 0.0..=100.0).step_by(1.0).fixed_decimals(0).suffix(" %");
+    // empty label: no text (and no gap) after the value
+    let r = ui.add(if label.is_empty() { slider } else { slider.text(label) });
     if r.changed() {
         *v = pct / 100.0;
     }

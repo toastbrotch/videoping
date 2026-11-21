@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=videoping
+GenericName=VJ tool
+Comment=Live video mixing: clips, ISF shaders and NDI on 3 layers
+Exec=videoping
+Icon=videoping
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=videoping
