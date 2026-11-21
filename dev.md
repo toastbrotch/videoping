@@ -63,6 +63,7 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_REC_OFF=1` | same timing without recording (CPU comparison) |
 | `VIDEOPING_SELFTEST_PREPARE=<generator.fs>` | put that generator into slot 3 and select it (not live): prepare priority test, prints its renders per second |
 | `VIDEOPING_SELFTEST_NOPRIORITY=1` | old behaviour for comparison: prepare work every frame |
+| `VIDEOPING_SELFTEST_L1MIX=a\|lk\|ilk\|ad` | mix-type of layer 1 (the generator over the clip; default lk), check the result in `out_*.rgba` |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
 | `VIDEOPING_SELFTEST_FX=1` | instead of the default input script: drags the first clip effect by its "≡" handle onto the output effects and prints the effect counts before / after |

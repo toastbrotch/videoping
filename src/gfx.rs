@@ -295,10 +295,16 @@ void main() {
     vec4 b = texture(bottom, uv);
     vec4 t = texture(top, uv);
     float l = dot(t.rgb, vec3(0.299, 0.587, 0.114));
+    // luma key: dark parts of the top become transparent (black -> 0, from l = 0.35 fully visible)
+    // inverted luma key: the same key on the inverted luma, so bright parts become transparent
+    // (white -> 0, up to l = 0.65 fully visible) -- not the inverted matte of the luma key, which
+    // would also throw away all mid tones
+    float key = smoothstep(0.05, 0.35, l);
+    float inv_key = smoothstep(0.05, 0.35, 1.0 - l);
     vec3 r;
     if (mixType == 0)      r = mix(b.rgb, t.rgb, t.a * amount);
-    else if (mixType == 1) r = mix(b.rgb, t.rgb, smoothstep(0.05, 0.35, l) * amount);
-    else if (mixType == 2) r = mix(b.rgb, t.rgb, (1.0 - smoothstep(0.05, 0.35, l)) * amount);
+    else if (mixType == 1) r = mix(b.rgb, t.rgb, key * t.a * amount);
+    else if (mixType == 2) r = mix(b.rgb, t.rgb, inv_key * t.a * amount);
     else                   r = b.rgb + t.rgb * amount;
     r = mix(b.rgb, r, rgb);
     o = vec4(clamp(r, 0.0, 1.0), 1.0);

@@ -202,6 +202,13 @@ the prepare area uses two columns (see "layout of the tab live"):
 - 3 layers (layering top-down)
   - each has mix-type (alpha, lumakey, inverslumakey, add)
     - only these 4 mix-types everywhere (no lighten, darken, difference etc.)
+    - definitions (top = the layer / effect result, l = its luma, BT.601):
+      - alpha: crossfade, weight = top alpha × mix
+      - lumakey: dark parts transparent, weight = smoothstep(0.05, 0.35, l) × alpha × mix (black gone, from l = 0.35 fully visible)
+      - inverse lumakey: the same key on the inverted luma, bright parts transparent, weight = smoothstep(0.05, 0.35, 1 − l) × alpha × mix (white gone, up to l = 0.65 fully visible)
+        - not the inverted matte of the lumakey (1 − key): that also removed all mid tones (fixed 2026-11-21)
+      - add: bottom + top × mix
+    - the key thresholds are fixed for now (no threshold / softness control)
   - mix percentage
     - shown as 0-100 % everywhere (mixer layers, effects, output effects; brightness too)
   - r, g, b channel

@@ -2366,7 +2366,12 @@ fn selftest_session(t: &SelfTest) -> Session {
         seed: rng.next_f32(),
     });
     s.layers[0].instance = Some(gen_id);
-    s.layers[0].mix.mix_type = MixType::LumaKey;
+    s.layers[0].mix.mix_type = match std::env::var("VIDEOPING_SELFTEST_L1MIX").as_deref() {
+        Ok("ilk") => MixType::InvLumaKey,
+        Ok("a") => MixType::Alpha,
+        Ok("ad") => MixType::Add,
+        _ => MixType::LumaKey,
+    };
     s.layers[1].instance = Some(clip_id);
     s.selected_instance = Some(clip_id);
     // finder: only the repo shaders and the self-test folder (no private files in screenshots)
