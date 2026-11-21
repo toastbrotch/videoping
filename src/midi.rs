@@ -195,14 +195,23 @@ pub struct Midi {
     /// what the last learn did (shown in the tab)
     pub learned: Option<String>,
     pub last_hit: Option<Hit>,
-    /// profiles changed since they were loaded / saved (by name)
-    pub dirty: std::collections::HashSet<String>,
+    /// profiles changed and not written yet (by name); written ~0.5 s after the last change
+    dirty: std::collections::HashSet<String>,
+    dirty_since: Option<Instant>,
+    /// where profiles are kept (None: nowhere, e.g. the self-test)
+    dir: Option<std::path::PathBuf>,
 }
 
 impl Midi {
+    /// Profiles from ~/.config/videoping/midi (the self-test keeps them in memory only).
     pub fn new() -> Midi {
+        let dir = if std::env::var_os("VIDEOPING_SELFTEST").is_some() { None } else { Some(profiles_dir()) };
+        Midi::with_dir(dir)
+    }
+
+    pub fn with_dir(dir: Option<std::path::PathBuf>) -> Midi {
         Midi {
-            profiles: load_profiles(),
+            profiles: load_profiles(dir.as_deref()),
             devices: vec![],
             queue: Default::default(),
             next_id: 1,
@@ -214,6 +223,8 @@ impl Midi {
             learned: None,
             last_hit: None,
             dirty: Default::default(),
+            dirty_since: None,
+            dir,
         }
     }
 
@@ -235,15 +246,55 @@ impl Midi {
         self.devices.iter().find(|d| d.port == port).and_then(|d| d.profile)
     }
 
-    /// Use profile `pi` (None: none) for this port; the profile then also matches the port's
-    /// device name next time.
+    /// The folder the profiles are saved in (for the hint in the tab).
+    pub fn dir(&self) -> Option<&std::path::Path> {
+        self.dir.as_deref()
+    }
+
+    fn changed(&mut self, pi: usize) {
+        self.dirty.insert(self.profiles[pi].name.clone());
+        self.dirty_since = Some(Instant::now());
+        for d in &mut self.devices {
+            if d.profile == Some(pi) {
+                d.sent.clear();
+            }
+        }
+    }
+
+    /// Write changed profiles (called from poll, 0.5 s after the last change, and on quit).
+    pub fn flush(&mut self) {
+        let Some(dir) = self.dir.clone() else {
+            self.dirty.clear();
+            return;
+        };
+        for name in std::mem::take(&mut self.dirty) {
+            let Some(p) = self.profiles.iter().find(|p| p.name == name) else { continue };
+            let r = std::fs::create_dir_all(&dir)
+                .map_err(|e| e.to_string())
+                .and_then(|_| serde_json::to_string_pretty(p).map_err(|e| e.to_string()))
+                .and_then(|txt| std::fs::write(dir.join(format!("{}.json", file_name(&p.name))), txt).map_err(|e| e.to_string()));
+            if let Err(e) = r {
+                self.error = Some(format!("midi profile {name}: {e}"));
+            }
+        }
+        self.dirty_since = None;
+    }
+
+    /// Use profile `pi` (None: none) for this port. The device name moves to that profile, so it
+    /// is picked automatically next time (one profile per device name).
     pub fn set_device_profile(&mut self, port: &str, pi: Option<usize>) {
-        if let Some(i) = pi {
-            let base = port_base(port);
-            let p = &mut self.profiles[i];
-            if !p.matches(port) {
-                p.ports.push(base);
-                self.dirty.insert(p.name.clone());
+        let base = port_base(port);
+        let low = port.to_lowercase();
+        for i in 0..self.profiles.len() {
+            let before = self.profiles[i].ports.len();
+            if Some(i) != pi {
+                // everything in other profiles that would match this device goes
+                self.profiles[i].ports.retain(|m| !low.contains(&m.to_lowercase()));
+            } else if !self.profiles[i].matches(port) {
+                self.profiles[i].ports.push(base.clone());
+            }
+            if self.profiles[i].ports.len() != before {
+                self.changed(i);
             }
         }
         if let Some(d) = self.devices.iter_mut().find(|d| d.port == port) {
@@ -252,43 +303,84 @@ impl Midi {
         }
     }
 
-    /// Edit a profile (bindings, ports); the leds are refreshed.
+    /// Edit a profile (bindings, ports); saved automatically, the leds are refreshed.
     pub fn edit_profile(&mut self, pi: usize, f: impl FnOnce(&mut Profile)) {
         let before = self.profiles[pi].clone();
         f(&mut self.profiles[pi]);
         if self.profiles[pi] != before {
-            self.dirty.insert(self.profiles[pi].name.clone());
-            for d in &mut self.devices {
-                if d.profile == Some(pi) {
-                    d.sent.clear();
-                }
-            }
+            self.changed(pi);
         }
     }
 
-    /// A new empty profile for this port (named after the device).
-    pub fn new_profile(&mut self, port: &str) -> usize {
-        let mut name = port_base(port);
-        while self.profiles.iter().any(|p| p.name == name) {
-            name.push('+');
+    fn unique_name(&self, base: &str) -> String {
+        let base = if base.trim().is_empty() { "profile" } else { base.trim() };
+        if !self.profiles.iter().any(|p| p.name == base) {
+            return base.to_string();
         }
-        self.profiles.push(Profile { name: name.clone(), ports: vec![port_base(port)], bindings: vec![] });
-        self.dirty.insert(name);
+        (2..).map(|n| format!("{base} {n}")).find(|n| !self.profiles.iter().any(|p| &p.name == n)).unwrap()
+    }
+
+    /// A new empty profile for this port (named after the device), used for it from now on.
+    pub fn new_profile(&mut self, port: &str) -> usize {
+        let name = self.unique_name(&port_base(port));
+        self.profiles.push(Profile { name, ports: vec![], bindings: vec![] });
         let pi = self.profiles.len() - 1;
+        self.changed(pi);
         self.set_device_profile(port, Some(pi));
         pi
     }
 
-    /// Save to ~/.config/videoping/midi/<name>.json
-    pub fn save_profile(&mut self, pi: usize) -> Result<std::path::PathBuf, String> {
-        let p = &self.profiles[pi];
-        let dir = profiles_dir();
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let path = dir.join(format!("{}.json", file_name(&p.name)));
-        let txt = serde_json::to_string_pretty(p).map_err(|e| e.to_string())?;
-        std::fs::write(&path, txt).map_err(|e| format!("{}: {e}", path.display()))?;
+    /// A copy ("Bhoreal 2"), not matched to any device yet (choose it in the device dropdown).
+    pub fn duplicate_profile(&mut self, pi: usize) -> usize {
+        let mut p = self.profiles[pi].clone();
+        p.name = self.unique_name(&p.name);
+        p.ports.clear();
+        self.profiles.push(p);
+        let ni = self.profiles.len() - 1;
+        self.changed(ni);
+        ni
+    }
+
+    /// Rename (not a built-in: duplicate it instead). The old file is removed.
+    pub fn rename_profile(&mut self, pi: usize, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("a profile needs a name".into());
+        }
+        if self.is_builtin(pi) {
+            return Err("a built-in profile keeps its name: duplicate it to make your own".into());
+        }
+        if self.profiles.iter().enumerate().any(|(i, p)| i != pi && p.name == name) {
+            return Err(format!("there is already a profile \"{name}\""));
+        }
+        let old = std::mem::replace(&mut self.profiles[pi].name, name.to_string());
+        if let Some(dir) = &self.dir {
+            let _ = std::fs::remove_file(dir.join(format!("{}.json", file_name(&old))));
+        }
+        self.dirty.remove(&old);
+        self.changed(pi);
+        Ok(())
+    }
+
+    /// Delete (not a built-in); devices that used it have no profile then.
+    pub fn delete_profile(&mut self, pi: usize) -> Result<(), String> {
+        if self.is_builtin(pi) {
+            return Err("a built-in profile can not be deleted (\"built-in\" restores it)".into());
+        }
+        let p = self.profiles.remove(pi);
+        if let Some(dir) = &self.dir {
+            let _ = std::fs::remove_file(dir.join(format!("{}.json", file_name(&p.name))));
+        }
         self.dirty.remove(&p.name);
-        Ok(path)
+        for d in &mut self.devices {
+            d.profile = match d.profile {
+                Some(i) if i == pi => None,
+                Some(i) if i > pi => Some(i - 1),
+                x => x,
+            };
+            d.sent.clear();
+        }
+        Ok(())
     }
 
     pub fn is_builtin(&self, pi: usize) -> bool {
@@ -299,7 +391,9 @@ impl Midi {
     pub fn revert_profile(&mut self, pi: usize) {
         let name = self.profiles[pi].name.clone();
         if let Some(b) = builtin_profiles().into_iter().find(|b| b.name == name) {
-            let _ = std::fs::remove_file(profiles_dir().join(format!("{}.json", file_name(&name))));
+            if let Some(dir) = &self.dir {
+                let _ = std::fs::remove_file(dir.join(format!("{}.json", file_name(&name))));
+            }
             self.profiles[pi] = b;
             self.dirty.remove(&name);
             for d in &mut self.devices {
@@ -383,6 +477,9 @@ impl Midi {
     /// Once per video frame: scan ports, apply queued messages, send changed feedback.
     pub fn poll(&mut self, t: &mut impl Target) {
         self.scan();
+        if self.dirty_since.is_some_and(|d| d.elapsed().as_secs_f32() > 0.5) {
+            self.flush();
+        }
         let msgs: Vec<(u64, Vec<u8>)> = self.queue.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
         for (id, bytes) in msgs {
             self.handle(id, &bytes, t);
@@ -543,22 +640,20 @@ fn profiles_dir() -> std::path::PathBuf {
     dirs::config_dir().unwrap_or_else(|| ".".into()).join("videoping").join("midi")
 }
 
-/// Built-in profiles, replaced by user profiles of the same name from ~/.config/videoping/midi.
-fn load_profiles() -> Vec<Profile> {
+/// Built-in profiles, replaced by user profiles of the same name from `dir` (sorted by name).
+fn load_profiles(dir: Option<&std::path::Path>) -> Vec<Profile> {
     let mut v = builtin_profiles();
-    if std::env::var_os("VIDEOPING_SELFTEST").is_some() {
-        return v; // the self-test uses the built-in profiles only
-    }
-    if let Ok(rd) = std::fs::read_dir(profiles_dir()) {
-        for e in rd.flatten() {
-            let Ok(txt) = std::fs::read_to_string(e.path()) else { continue };
-            match serde_json::from_str::<Profile>(&txt) {
-                Ok(p) => match v.iter().position(|b| b.name == p.name) {
-                    Some(i) => v[i] = p,
-                    None => v.push(p),
-                },
-                Err(err) => eprintln!("midi: {}: {err}", e.path().display()),
-            }
+    let Some(dir) = dir else { return v };
+    let mut files: Vec<_> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
+    files.sort();
+    for f in files {
+        let Ok(txt) = std::fs::read_to_string(&f) else { continue };
+        match serde_json::from_str::<Profile>(&txt) {
+            Ok(p) => match v.iter().position(|b| b.name == p.name) {
+                Some(i) => v[i] = p,
+                None => v.push(p),
+            },
+            Err(err) => eprintln!("midi: {}: {err}", f.display()),
         }
     }
     v
@@ -646,6 +741,42 @@ mod tests {
         send(&mut f, [0xB1, 4, 65]); // other channel: no binding
         assert_eq!(f.get("/r"), Some(Value::Num(1.01)));
         assert!(parse(&[0xF8]).is_none(), "clock / short messages ignored");
+    }
+
+    #[test]
+    fn profiles_saved_renamed_deleted() {
+        let dir = std::env::temp_dir().join(format!("videoping-midi-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut m = Midi::with_dir(Some(dir.clone()));
+        let b = m.profiles().iter().position(|p| p.name == "Bhoreal").unwrap();
+        // a copy, renamed, edited: written automatically
+        let c = m.duplicate_profile(b);
+        assert_eq!(m.profiles()[c].name, "Bhoreal 2");
+        assert!(m.profiles()[c].ports.is_empty(), "a copy matches no device until chosen");
+        m.rename_profile(c, "club").unwrap();
+        m.edit_profile(c, |p| p.bindings.truncate(3));
+        assert!(m.rename_profile(b, "x").is_err(), "built-ins keep their name");
+        assert!(m.rename_profile(c, "Bhoreal").is_err(), "no duplicate names");
+        m.flush();
+        assert!(dir.join("club.json").exists());
+        assert!(!dir.join("Bhoreal_2.json").exists(), "the old name's file is gone");
+        // loaded again from the folder
+        let m2 = Midi::with_dir(Some(dir.clone()));
+        let club = m2.profiles().iter().find(|p| p.name == "club").unwrap();
+        assert_eq!(club.bindings.len(), 3);
+        // choosing a profile for a device moves the device name to it
+        let mut m3 = Midi::with_dir(Some(dir.clone()));
+        let ci = m3.profiles().iter().position(|p| p.name == "club").unwrap();
+        m3.set_device_profile("Arduino Leonardo:Arduino Leonardo MIDI 1 20:0", Some(ci));
+        assert!(m3.profiles()[ci].matches("Arduino Leonardo:x"));
+        let bi = m3.profiles().iter().position(|p| p.name == "Bhoreal").unwrap();
+        assert!(!m3.profiles()[bi].matches("Arduino Leonardo:x"), "only one profile per device name");
+        // delete
+        assert!(m3.delete_profile(bi).is_err(), "built-ins can not be deleted");
+        let ci = m3.profiles().iter().position(|p| p.name == "club").unwrap();
+        m3.delete_profile(ci).unwrap();
+        assert!(!dir.join("club.json").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

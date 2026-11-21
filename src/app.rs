@@ -58,6 +58,9 @@ pub struct App {
     midi_sel_port: Option<String>,
     midi_sel_addr: Option<String>,
     midi_search: String,
+    /// profile name being edited (profile index, text) and a delete waiting for "really?"
+    midi_rename: Option<(usize, String)>,
+    midi_confirm_delete: Option<usize>,
     /// MIDI engine (generic, profiles; None while it is being polled)
     midi: Option<crate::midi::Midi>,
     /// control registry: values at the last control_changes() call (change notifications)
@@ -323,6 +326,8 @@ impl App {
             midi_sel_port: None,
             midi_sel_addr: None,
             midi_search: String::new(),
+            midi_rename: None,
+            midi_confirm_delete: None,
             midi: Some(crate::midi::Midi::new()),
             control_snap: Default::default(),
             inst_clock: HashMap::new(),
@@ -2377,6 +2382,10 @@ impl eframe::App for App {
     fn on_exit(&mut self, gl: Option<&glow::Context>) {
         if self.selftest.is_none() {
             let _ = save_session(&self.s, &self.autosave_path);
+        }
+        // midi profile changes of the last half second
+        if let Some(m) = self.midi.as_mut() {
+            m.flush();
         }
         if let (Some(r), Some(gl)) = (self.r.as_mut(), gl) {
             r.ndi = None;

@@ -37,10 +37,12 @@ videoping is a live vjing application, 5 columns, all column-borders are moveabl
 the ui has top-level tabs:
 
 - **live**: everything described below — the default tab
+- **midi mapping**: built (see "midi mapping")
+- planned, in this order (decided 2026-11-21): first the mcp server (no tab), then:
+  - **ai** (later): chat with an llm of choice inside videoping, using the same tools as the mcp server
+  - **shader editor** (later), with ai
 - later (not planned yet):
   - mapping
-  - shader editor
-  - midi mapping
   - sequencer
 
 everything below belongs to the tab "live".
@@ -312,7 +314,13 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
   1. registry (done)
   2. midi: bhoreal as a fixed preset with led feedback (below)
   3. mcp server inside videoping (localhost http): list / read / set / trigger addresses, load files into slots, output or preview frame as image; every mcp change visible in the status line; switch "mcp read only / locked" for shows
-  4. midifighter twister, midi learn (later the "midi mapping" tab)
+  4. midifighter twister (midi learn and the "midi mapping" tab are done)
+- after the mcp server (decided 2026-11-21, both for later):
+  - ai tab: a thin chat client inside videoping on the same tools as the mcp server
+    - provider + model setting (anthropic, openai-compatible incl. local ollama / lm studio), api key in the general config
+    - every tool call visible (what the ai changed), undo; "ask before applying" for shows; output / preview frames as images when the model supports them
+    - caveats: local models are often weak at tool use; the key lives in a config file; every message costs api usage; for playing live the controller stays faster
+  - shader editor tab, with ai: write / change isf shaders inside videoping with a live preview (hot reload), the ai sees the output frame and the compile errors
 - midi must feel instant: input on its own thread, applied at the start of the next video frame, not through the ui
 - mcp use cases (most useful first): writing shaders with claude live (hot reload + look at the output frame), preparing sets, asking / debugging (state, resource meters), playing via an agent (least)
 - open: osc on the same registry (touchosc etc.)?
@@ -325,8 +333,13 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
   - modes: trigger (press = fire once), toggle (press = on/off), momentary (on while held), absolute (cc 0-127 -> the address range), relative (endless encoder: +/- steps)
   - feedback to the controller from the registry change notifications (leds show the true state, also after mouse changes): toggle / trigger -> velocity per state, choice -> velocity per value (e.g. slot state empty / loaded / L1 / L2 / L3 -> bhoreal colors), range -> value back as cc (twister rings)
   - relative targets in the registry for controllers: /page/slot/N (slot N of the current page, the bhoreal follows the page), /layer/N/fx/K/... (what is loaded in layer N), /sel/... (the selected instance; /sel/param/#n = its n-th parameter)
-- profiles: one per controller, picked automatically by midi port name; bhoreal and twister ship built in, editable, "save" keeps your own version
+- profiles: one per controller, picked automatically by midi port name; bhoreal and twister ship built in, editable
   - stored in the general config (~/.config/videoping/midi/<profile>.json), not in the session: a controller mapping is setup, like the output options
+  - decided 2026-11-21: saved automatically (0.5 s after the last change and on quit), no save button, nothing is lost
+  - all files in the folder are loaded at start; a file with the name of a built-in replaces it
+  - profile bar in the tab: name (rename: type + Enter; built-ins keep their name), new (empty, for the selected device), duplicate (a copy not matched to any device yet), delete (asks "really delete?"; built-ins can not be deleted), built-in (back to the original, removes your file)
+  - choosing a profile for a device in the dropdown moves the device name to that profile (one profile per device name), so it is picked automatically next time; switching between variants (Bhoreal / Bhoreal club) = the dropdown
+  - import / export: later; the files are plain json in the folder shown in the tab
 - tab "midi mapping":
   - devices: midi inputs / outputs (alsa), on/off, profile, activity light, monitor of the last incoming messages
   - bindings of the selected device: control, mode, target address, feedback
@@ -335,7 +348,7 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 - the tab as built (2026-11-21):
   - top bar: "live" and "midi mapping" switch the tab; the output keeps rendering in every tab
   - left: every midi input (except videoping's own ports and "Midi Through"), activity light, profile per device (dropdown: none / any profile; choosing one makes that profile also match the device name next time), monitor of the last messages
-  - middle: the bindings of the selected device's profile: control (channel, note / cc), mode (dropdown), target address (editable; "←" takes the address chosen on the right), feedback (off / on values editable), × to remove; the row of the control just moved lights up in the accent color; "● not saved", save (~/.config/videoping/midi/<profile>.json), "built-in" (back to the built-in version)
+  - middle: the bindings of the selected device's profile: control (channel, note / cc), mode (dropdown), target address (editable; "←" takes the address chosen on the right), feedback (off / on values editable), × to remove; the row of the control just moved lights up in the accent color; above it the profile bar (see profiles)
   - right: the writable addresses (searchable) with their range and their meaning in words; a foldable "what the addresses mean" legend; learn: choose an address, press learn, move a control
   - a target that does not exist right now (no such effect in that layer, empty slot) shows "not there now"; hover on a target shows what it is
   - learn picks the mode from the address: trigger / toggle for buttons, cc on a range -> absolute (fader / knob) or relative (an encoder step: value 1, 63, 65 or 127); a button on a range is refused; a learned control replaces an older binding of the same control

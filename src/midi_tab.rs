@@ -166,22 +166,62 @@ impl App {
                 return;
             };
             let name = m.profiles()[pi].name.clone();
+            let builtin = m.is_builtin(pi);
+            // profile bar: name (rename), new, duplicate, delete / built-in
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(format!("profile {name}")).strong());
-                if m.dirty.contains(&name) {
-                    ui.label(egui::RichText::new("● not saved").weak());
-                }
-                if widgets::btn(ui, "save").on_hover_text("~/.config/videoping/midi/").clicked() {
-                    match m.save_profile(pi) {
-                        Ok(p) => self.set_status(format!("saved {}", p.display())),
-                        Err(e) => self.set_status(e),
+                ui.label(egui::RichText::new("profile").weak());
+                if builtin {
+                    ui.label(egui::RichText::new(&name).strong()).on_hover_text("a built-in profile keeps its name: duplicate it to make your own");
+                } else {
+                    let buf = match &mut self.midi_rename {
+                        Some((i, b)) if *i == pi => b,
+                        _ => {
+                            self.midi_rename = Some((pi, name.clone()));
+                            &mut self.midi_rename.as_mut().unwrap().1
+                        }
+                    };
+                    let r = ui.add(egui::TextEdit::singleline(buf).desired_width(160.0)).on_hover_text("rename: type and press Enter");
+                    if r.lost_focus() && *buf != name {
+                        let new = buf.clone();
+                        if let Err(e) = m.rename_profile(pi, &new) {
+                            self.set_status(e);
+                        }
+                        self.midi_rename = None;
                     }
                 }
-                if m.is_builtin(pi) && widgets::btn(ui, "built-in").on_hover_text("back to the built-in version of this profile").clicked() {
-                    m.revert_profile(pi);
+                ui.add_space(8.0);
+                if widgets::btn(ui, "new").on_hover_text("a new empty profile for this device").clicked() {
+                    m.new_profile(&port);
+                    self.midi_rename = None;
+                }
+                if widgets::btn(ui, "duplicate").on_hover_text("a copy of this profile; choose it for a device in the dropdown on the left").clicked() {
+                    let c = m.duplicate_profile(pi);
+                    self.set_status(format!("copied to \"{}\"", m.profiles()[c].name));
+                }
+                if builtin {
+                    if widgets::btn(ui, "built-in").on_hover_text("back to the built-in version of this profile (your changes are gone)").clicked() {
+                        m.revert_profile(pi);
+                    }
+                } else if self.midi_confirm_delete == Some(pi) {
+                    if widgets::choice(ui, true, "really delete?").clicked() {
+                        if let Err(e) = m.delete_profile(pi) {
+                            self.set_status(e);
+                        }
+                        self.midi_confirm_delete = None;
+                        self.midi_rename = None;
+                    }
+                    if widgets::btn(ui, "keep").clicked() {
+                        self.midi_confirm_delete = None;
+                    }
+                } else if widgets::btn(ui, "delete").clicked() {
+                    self.midi_confirm_delete = Some(pi);
                 }
             });
+            if let Some(dir) = m.dir() {
+                ui.label(egui::RichText::new(format!("changes are saved automatically in {}", dir.display())).weak().size(11.0));
+            }
             ui.add_space(4.0);
+            let Some(pi) = m.device_profile(&port) else { return };
             let mut b = m.profiles()[pi].bindings.clone();
             let mut remove = None;
             let hit = m.last_hit.clone().filter(|h| h.port == port && h.at.elapsed().as_secs_f32() < 0.6);

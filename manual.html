@@ -431,9 +431,17 @@ tab <span class="b on">midi mapping</span> (top bar).</p>
   <li><b>Learn</b> (right): choose what to control in the list (search helps, e.g. "blackout" or
     "layer/2"), press <span class="b">learn</span>, move a control on the controller: done. The mode is
     guessed (a button on an on / off, a fader or encoder on a range); change it in the table if needed.</li>
-  <li>Changes are marked "● not saved": <span class="b">save</span> keeps the profile
-    (<code>~/.config/videoping/midi/</code>), <span class="b">built-in</span> brings back the original
-    Bhoreal profile. Profiles are part of your setup, not of a session.</li>
+  <li><b>Profiles</b> are saved automatically in <code>~/.config/videoping/midi/</code> (one file per
+    profile). They are part of your setup, not of a session. Above the table:
+    <ul>
+      <li>the name: type a new one and press Enter to rename (the built-in Bhoreal keeps its name)</li>
+      <li><span class="b">new</span>: an empty profile for the selected device</li>
+      <li><span class="b">duplicate</span>: a copy, e.g. a second Bhoreal layout; switch between them in
+        the device's dropdown on the left (the device then uses that profile from now on)</li>
+      <li><span class="b">delete</span>: asks once more; <span class="b">built-in</span> (Bhoreal
+        only): back to the original, your changes are gone</li>
+    </ul>
+  </li>
 </ul>
 
 <p><b>What the addresses mean.</b> Each target is written as a short path. In the tab every address
