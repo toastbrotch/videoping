@@ -3213,7 +3213,11 @@ impl App {
             if secs > 2.0 && STEP.load(Ordering::Relaxed) == 0 {
                 STEP.store(1, Ordering::Relaxed);
                 self.ai_selftest_send("dim the output to half and look at it");
-            } else if secs > 5.5 && STEP.load(Ordering::Relaxed) == 1 {
+            } else if secs > 4.0 && STEP.load(Ordering::Relaxed) == 1 {
+                // the chat is done: no mock url in the screenshot (4.5 s)
+                self.cfg.ai_url_anthropic.clear();
+                STEP.store(3, Ordering::Relaxed);
+            } else if secs > 5.5 && STEP.load(Ordering::Relaxed) == 3 {
                 STEP.store(2, Ordering::Relaxed);
                 eprintln!("selftest ai: brightness = {:.2} (expected 0.50); chat: {}", self.s.master.brightness, self.ai_selftest_summary());
             }
