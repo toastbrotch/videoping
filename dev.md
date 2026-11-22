@@ -81,6 +81,8 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_CONFIG=1` | output options and general config folded open, column 2 scrolled to the bottom (screenshot of the settings) |
 | `VIDEOPING_SELFTEST_AI=<url>` | the ai tab talks to a mock Anthropic server at that url (key "selftest"); at 2 s it sends a message, at 5.5 s it prints the brightness and the chat. The mock must answer with `set /master/brightness 0.5` + `frame`, then a text (see features.md "ai tab") |
 | `VIDEOPING_SELFTEST_FINDER=<search>` | two favorites (gameboy-camera, chaos-feedback) and that search typed into the finder (screenshot of the accordion / search; empty = favorites only) |
+| `VIDEOPING_SELFTEST_LONGNAME=1` | the clip in slot 9 gets a very long name (screenshot: cut with "…" before the ×) |
+| `VIDEOPING_SELFTEST_VP=<query>` | needs the internet: the finder's videopong category searches the query; at 3.5 s results and thumbnails are printed and the first clip is downloaded into slot 3 (into the self-test folder); the mouse script is off. Use `VIDEOPING_SELFTEST_STAY=22` (videopong.net can be slow) |
 | `VIDEOPING_SELFTEST_MAP=1\|grid` | a mapping preset "selftest stage" (two slices, one corner-pinned, a soft mask) in the self-test folder, mapping on (grid: test grid); at 3 s pixels of the mapped output are checked (outside black, slices lit, mask black). With `VIDEOPING_SELFTEST_TAB=mapping`: the screenshot, and from 2 s a simulated press 12 px beside a corner of slice 2 in the output view, → → →, Shift+↓ (expected: grabbed, moved 3, 10 px) |
 | `VIDEOPING_SELFTEST_EDIT=<.fs>` | open it in the shader editor (with `VIDEOPING_SELFTEST_TAB=shader` for the screenshot); at 1.5 s an error is typed in, at 2.5 s the mapped error line is printed (and that the file on disk is unchanged), then fixed. With `VIDEOPING_SELFTEST_AI=<url>` the editor's ai runs against a mock instead (scratchpad mock_shader.py: get_shader, a broken set_shader, a fixed one + look) |
 | `VIDEOPING_SELFTEST_DOC=<effect .fs>` | that effect first on the clip (slot 9), its documentation window (.md) open (screenshot of the shader docs) |
@@ -160,6 +162,7 @@ src/
   ai.rs        ai tab client: Anthropic Messages API / OpenAI-compatible chat completions (ureq, blocking,
                worker thread); tool list from mcp.rs, request / answer formats
   ai_tab.rs    the chats (ai tab + shader editor ai): tool loop (calls run at a frame), undo, ask before changes
+  videopong.rs videopong.net in the finder: API (search / random), thumbnails, downloads into ~/Videos/videopong
   mapping.rs   projection mapping: slices, masks, presets (config folder), corner-pin homography
   mapping_tab.rs the tab "mapping": preset bar, slice / mask list, input + output views with handles
   shader_editor.rs the tab "shader editor": work copy + live preview, error line mapping, highlighting, the ai tools

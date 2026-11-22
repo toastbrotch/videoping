@@ -323,6 +323,7 @@ fn kind_name(k: &FileKind) -> &'static str {
         FileKind::Generator => "generator",
         FileKind::Effect => "effect",
         FileKind::Ndi => "ndi",
+        FileKind::Videopong => "videopong",
     }
 }
 

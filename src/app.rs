@@ -14,6 +14,8 @@ use std::time::Instant;
 #[derive(Clone, Debug)]
 enum Drag {
     File(PathBuf, FileKind),
+    /// a videopong.net clip (downloaded on drop)
+    Videopong(crate::videopong::Clip),
     Slot(usize),
     Effect(Owner, usize),
 }
@@ -33,7 +35,13 @@ struct FinderEntry {
 }
 
 /// The finder categories, top-down (accordion: one is open).
-const FINDER_CATS: [(&str, FileKind); 4] = [("clips", FileKind::Clip), ("generators", FileKind::Generator), ("effects", FileKind::Effect), ("NDI sources", FileKind::Ndi)];
+const FINDER_CATS: [(&str, FileKind); 5] = [
+    ("clips", FileKind::Clip),
+    ("generators", FileKind::Generator),
+    ("effects", FileKind::Effect),
+    ("NDI sources", FileKind::Ndi),
+    ("videopong", FileKind::Videopong),
+];
 
 /// Entries grouped by folder, in folder order (indices into the list).
 fn finder_groups(entries: &[&FinderEntry]) -> Vec<(String, Vec<usize>)> {
@@ -62,6 +70,9 @@ pub struct App {
     finder_new_root: String,
     /// the open finder category (accordion)
     finder_cat: Option<FileKind>,
+    /// videopong.net in the finder: search, thumbnails, downloads
+    vp: crate::videopong::Videopong,
+    vp_tex: HashMap<String, egui::TextureHandle>,
     /// folder groups opened / closed by hand ("kind|group" -> open)
     finder_open: HashMap<String, bool>,
     /// the search as last seen (a new search may switch the category)
@@ -335,6 +346,8 @@ impl App {
             finder_sel: None,
             finder_new_root: String::new(),
             finder_cat: Some(FileKind::Clip),
+            vp: Default::default(),
+            vp_tex: HashMap::new(),
             finder_open: HashMap::new(),
             finder_last_search: String::new(),
             preview: None,
@@ -442,10 +455,15 @@ impl App {
                 SourceKind::Generator { path: path.to_path_buf(), params: isf::default_params(&info) }
             }
             FileKind::Ndi => SourceKind::Ndi { source: path.to_string_lossy().to_string() },
-            FileKind::Effect => return None,
+            FileKind::Effect | FileKind::Videopong => return None,
         };
         let name = match kind {
             FileKind::Ndi => path.to_string_lossy().to_string(),
+            // videopong downloads: "<title> [<id>].mp4" -> the title
+            _ if path.parent() == Some(crate::videopong::clip_dir().as_path()) => {
+                let n = isf::display_name(path);
+                n.rsplit_once(" [").map(|(t, _)| t.to_string()).unwrap_or(n)
+            }
             _ => isf::display_name(path),
         };
         Some(Instance {
@@ -888,7 +906,6 @@ impl App {
             if widgets::choice(ui, self.tab == Tab::Ai, "ai").clicked() {
                 self.tab = Tab::Ai;
             }
-            ui.add_enabled(false, egui::Button::new(egui::RichText::new("sequencer").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::btn(ui, "load").clicked() {
                     let p = PathBuf::from(self.file_path.trim());
@@ -1102,6 +1119,16 @@ impl App {
             };
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(11.0), Color32::GRAY);
         }
+        // stop the preview: × top right like everywhere else (also: click the previewed file again)
+        if self.finder_sel.is_some() {
+            let br = Rect::from_min_size(rect.right_top() + vec2(-22.0, 4.0), vec2(18.0, 18.0));
+            let r = ui.interact(br, ui.scope_id().with("preview_stop"), Sense::click()).on_hover_text("stop the preview (or click the file again)");
+            ui.painter().rect_filled(br, 3.0, Color32::from_black_alpha(if r.hovered() { 220 } else { 150 }));
+            ui.painter().text(br.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(14.0), if r.hovered() { Color32::RED } else { Color32::GRAY });
+            if r.clicked() {
+                self.finder_sel = None;
+            }
+        }
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let r = ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search all").desired_width(field_width(ui, widgets::BTN.x)));
@@ -1144,6 +1171,11 @@ impl App {
         ui.separator();
         let action = self.finder_list(ui);
         if let Some((p, k, dbl)) = action {
+            // a click on the file that is previewed stops the preview
+            if !dbl && self.finder_sel.as_ref().is_some_and(|s| s.0 == p) {
+                self.finder_sel = None;
+                return;
+            }
             self.finder_sel = Some((p.clone(), k.clone()));
             if dbl {
                 self.add_file_to_slot(&p, &k, None);
@@ -1161,6 +1193,8 @@ impl App {
         let count = |k: &FileKind| -> usize {
             match k {
                 FileKind::Ndi => ndi.iter().filter(|n| hit(n)).count(),
+                // its own search (network): the results so far
+                FileKind::Videopong => self.vp.results.len(),
                 k => self.finder.iter().filter(|e| &e.kind == k && hit(&e.name)).count(),
             }
         };
@@ -1170,7 +1204,7 @@ impl App {
             self.finder_last_search = search.clone();
             let open = FINDER_CATS.iter().position(|(_, k)| Some(k) == self.finder_cat.as_ref());
             if !search.is_empty() && open.is_none_or(|o| counts[o] == 0) {
-                if let Some(c) = counts.iter().position(|n| *n > 0) {
+                if let Some(c) = counts.iter().enumerate().position(|(i, n)| *n > 0 && FINDER_CATS[i].1 != FileKind::Videopong) {
                     self.finder_cat = Some(FINDER_CATS[c].1.clone());
                 }
             }
@@ -1203,6 +1237,8 @@ impl App {
             egui::ScrollArea::vertical().id_salt(("finder", ci)).max_height(h).auto_shrink([false, false]).show(ui, |ui| {
                 if *kind == FileKind::Ndi {
                     self.finder_ndi(ui, &ndi, &search, &mut action);
+                } else if *kind == FileKind::Videopong {
+                    self.finder_videopong(ui, &mut action);
                 } else {
                     self.finder_files(ui, kind, &search, &mut action);
                 }
@@ -1317,6 +1353,132 @@ impl App {
                 });
             }
         });
+    }
+
+    /// Use a videopong clip: at once when downloaded, else after the download.
+    fn vp_use(&mut self, c: &crate::videopong::Clip, after: crate::videopong::After) {
+        match self.vp.fetch(c, after) {
+            Some(path) => self.vp_apply(path, after),
+            None => self.set_status(format!("videopong: downloading \"{}\" …", c.title)),
+        }
+    }
+
+    fn vp_apply(&mut self, path: PathBuf, after: crate::videopong::After) {
+        use crate::videopong::After;
+        match after {
+            After::Preview => self.finder_sel = Some((path, FileKind::Clip)),
+            After::FirstFree => self.add_file_to_slot(&path, &FileKind::Clip, None),
+            After::Slot(s) => {
+                let free = self.s.slots.get(s).is_some_and(|x| x.is_none());
+                self.add_file_to_slot(&path, &FileKind::Clip, if free { Some(s) } else { None });
+            }
+        }
+    }
+
+    /// Once per frame: finished videopong searches and downloads.
+    fn vp_poll(&mut self) {
+        for ev in self.vp.poll() {
+            let crate::videopong::Event::Downloaded(c, res, after) = ev;
+            match res {
+                Ok(path) => {
+                    self.set_status(format!("videopong: \"{}\" downloaded", c.title));
+                    self.vp_apply(path, after);
+                }
+                Err(e) => self.set_status(format!("videopong: \"{}\": {e}", c.title)),
+            }
+        }
+    }
+
+    /// The finder category "videopong": search / random, results with thumbnails.
+    fn finder_videopong(&mut self, ui: &mut Ui, action: &mut Option<(PathBuf, FileKind, bool)>) {
+        let _ = action;
+        ui.horizontal(|ui| {
+            let r = ui.add(egui::TextEdit::singleline(&mut self.vp.query).hint_text("search videopong.net").desired_width(field_width(ui, 2.0 * widgets::BTN.x + 40.0)));
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.vp.search(false);
+            }
+            if widgets::btn(ui, "search").clicked() {
+                self.vp.search(false);
+            }
+            if widgets::btn(ui, "random").on_hover_text("50 random clips").clicked() {
+                self.vp.query.clear();
+                self.vp.search(false);
+            }
+        });
+        if self.vp.busy() {
+            ui.label(egui::RichText::new("searching …").weak());
+        }
+        if let Some(e) = &self.vp.error {
+            ui.colored_label(Color32::from_rgb(220, 80, 80), e);
+        }
+        if self.vp.results.is_empty() && !self.vp.busy() {
+            ui.label(egui::RichText::new("search clips on videopong.net, or \"random\". Click = preview, double click = into the grid, drag = onto a slot. Downloads (480x360 previews) go to ~/Videos/videopong.").weak());
+            return;
+        }
+        // thumbnails that arrived: textures
+        let ready: Vec<(String, (u32, u32, Vec<u8>))> = self.vp.thumbs.lock().map(|mut t| {
+            let ids: Vec<String> = t.iter().filter(|(id, v)| v.is_some() && !self.vp_tex.contains_key(*id)).map(|(id, _)| id.clone()).collect();
+            ids.into_iter().filter_map(|id| t.get_mut(&id).and_then(|v| v.take()).map(|v| (id, v))).collect()
+        }).unwrap_or_default();
+        for (id, (w, h, px)) in ready {
+            let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &px);
+            self.vp_tex.insert(id.clone(), ui.ctx().load_texture(format!("vp{id}"), img, Default::default()));
+        }
+        let results = self.vp.results.clone();
+        let sel = self.finder_sel.as_ref().map(|s| s.0.clone());
+        let mut use_clip: Option<(crate::videopong::Clip, crate::videopong::After)> = None;
+        for c in &results {
+            let local = crate::videopong::clip_path(c);
+            let cached = crate::videopong::is_cached(c);
+            let progress = self.vp.downloads.get(&c.id).map(|d| {
+                let t = d.total.load(std::sync::atomic::Ordering::Relaxed);
+                let n = d.done.load(std::sync::atomic::Ordering::Relaxed);
+                if t > 0 { format!("{:.0} %", n as f64 / t as f64 * 100.0) } else { format!("{:.1} MB", n as f64 / 1e6) }
+            });
+            let selected = sel.as_ref() == Some(&local);
+            let row = ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(64.0, 48.0), Sense::hover());
+                match self.vp_tex.get(&c.id) {
+                    Some(t) => {
+                        ui.painter().image(t.id(), r, Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+                    }
+                    None => {
+                        ui.painter().rect_filled(r, 2.0, Color32::from_gray(30));
+                    }
+                }
+                ui.vertical(|ui| {
+                    let mark = if cached { "✓ " } else { "" };
+                    ui.label(egui::RichText::new(format!("{mark}{}", c.title)).color(if selected { Color32::WHITE } else { Color32::from_gray(210) }));
+                    let sub = match &progress {
+                        Some(p) => format!("downloading {p}"),
+                        None => format!("{} s · {} · {}", c.duration, c.author, c.license),
+                    };
+                    ui.label(egui::RichText::new(sub).weak().size(widgets::BTN_TEXT));
+                });
+            });
+            let r = ui.interact(row.response.rect, ui.scope_id().with(("vp", &c.id)), Sense::click_and_drag());
+            if selected || r.hovered() {
+                ui.painter().rect_stroke(row.response.rect, 2.0, egui::Stroke::new(1.0, if selected { ACCENT } else { Color32::from_gray(80) }), egui::StrokeKind::Outside);
+            }
+            let r = r.on_hover_text(format!("{}\nby {} · {} s · original {} · license {}\n{}\n\nclick = preview, double click = into the grid, drag = onto a slot{}", c.title, c.author, c.duration, c.resolution, c.license, c.page, if cached { "\ndownloaded: ".to_string() + &local.display().to_string() } else { String::new() }));
+            r.dnd_set_drag_payload(Drag::Videopong(c.clone()));
+            if r.double_clicked() {
+                use_clip = Some((c.clone(), crate::videopong::After::FirstFree));
+            } else if r.clicked() && selected {
+                // the previewed clip again: stop
+                self.finder_sel = None;
+            } else if r.clicked() {
+                use_clip = Some((c.clone(), crate::videopong::After::Preview));
+            }
+        }
+        if self.vp.results.len() < self.vp.total && !self.vp.busy() && !self.vp.query.trim().is_empty() {
+            if widgets::btn(ui, &format!("more ({} of {})", self.vp.results.len(), self.vp.total)).clicked() {
+                self.vp.search(true);
+            }
+        }
+        if let Some((c, after)) = use_clip {
+            self.vp_use(&c, after);
+        }
     }
 
     fn finder_ndi(&mut self, ui: &mut Ui, sources: &[String], search: &str, action: &mut Option<(PathBuf, FileKind, bool)>) {
@@ -1434,13 +1596,14 @@ impl App {
                         ui.painter().text(thumb_rect.center(), egui::Align2::CENTER_CENTER, "error", egui::FontId::proportional(11.0), Color32::RED);
                         resp.clone().on_hover_text(err.to_string());
                     }
-                    ui.painter().text(
-                        rect.left_bottom() + vec2(3.0, -2.0),
-                        egui::Align2::LEFT_BOTTOM,
-                        truncate(&name, (cell_w / 6.5) as usize),
-                        egui::FontId::proportional(11.0),
-                        ui.visuals().text_color(),
-                    );
+                    // the name: one line, cut with "…" so it never runs under the × (bottom right)
+                    {
+                        let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat { font_id: egui::FontId::proportional(11.0), color: ui.visuals().text_color(), ..Default::default() });
+                        job.wrap = egui::text::TextWrapping { max_width: (cell_w - 3.0 - 18.0).max(10.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+                        let galley = ui.painter().layout_job(job);
+                        let pos = rect.left_bottom() + vec2(3.0, -2.0 - galley.size().y);
+                        ui.painter().galley(pos, galley, ui.visuals().text_color());
+                    }
                     if let Some(l) = live {
                         widgets::outline(ui, rect, 3.0, layer_color(l));
                         ui.painter().text(rect.right_top() + vec2(-4.0, 2.0), egui::Align2::RIGHT_TOP, format!("L{}", l + 1), egui::FontId::monospace(11.0), layer_color(l));
@@ -1480,7 +1643,7 @@ impl App {
                 }
                 if let Some(p) = resp.dnd_hover_payload::<Drag>() {
                     // a new clip / generator / NDI source can't be dropped onto a live slot
-                    let blocked = matches!(&*p, Drag::File(_, k) if *k != FileKind::Effect) && self.s.slot_is_live(slot);
+                    let blocked = (matches!(&*p, Drag::File(_, k) if *k != FileKind::Effect) || matches!(&*p, Drag::Videopong(_))) && self.s.slot_is_live(slot);
                     if !blocked {
                         widgets::outline(ui, rect, 2.0, ACCENT);
                     }
@@ -1520,6 +1683,13 @@ impl App {
                     } else if slot < self.s.slots.len() {
                         self.s.delete_slot(slot);
                         self.add_file_to_slot(&path, &kind, Some(slot));
+                    }
+                }
+                Drag::Videopong(c) => {
+                    if self.s.slot_is_live(slot) {
+                        self.set_status("live in the mixer: can't replace it");
+                    } else {
+                        self.vp_use(&c, crate::videopong::After::Slot(slot));
                     }
                 }
                 Drag::Effect(..) => {}
@@ -2617,7 +2787,7 @@ mod shader_editor;
 #[path = "mapping_tab.rs"]
 mod mapping_tab;
 
-/// Top-level tabs (mapping, shader editor and sequencer later).
+/// Top-level tabs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Tab {
     Live,
@@ -2636,6 +2806,7 @@ impl eframe::App for App {
 
         self.ai_poll(&gl, &ctx);
         self.maps.poll();
+        self.vp_poll();
         if let Some(p) = self.edit_request.take() {
             self.shader_open(p);
         }
@@ -2677,7 +2848,7 @@ impl eframe::App for App {
             return;
         }
         // the MIDI self-test plays without the simulated mouse (its clicks select layers too)
-        if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() {
+        if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() || std::env::var_os("VIDEOPING_SELFTEST_VP").is_some() {
             return;
         }
         let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
@@ -2981,6 +3152,12 @@ fn selftest_session(t: &SelfTest) -> Session {
         _ => MixType::LumaKey,
     };
     s.layers[1].instance = Some(clip_id);
+    // VIDEOPING_SELFTEST_LONGNAME: a very long clip name (slot name must not run under the ×)
+    if std::env::var_os("VIDEOPING_SELFTEST_LONGNAME").is_some() {
+        if let Some(i) = s.slots[8].as_mut() {
+            i.name = "a very long clip name from videopong festival 2026 final cut".into();
+        }
+    }
     // VIDEOPING_SELFTEST_L1=clip: clip in layer 1 (over the generator), VIDEOPING_SELFTEST_L1AMOUNT:
     // its mix in % (luma fade check: the clip has several brightness levels)
     if std::env::var("VIDEOPING_SELFTEST_L1").as_deref() == Ok("clip") {
@@ -3294,6 +3471,41 @@ impl App {
         let secs = t.start.elapsed().as_secs_f32();
         // VIDEOPING_SELFTEST_EDIT=<.fs>: open in the shader editor; at 1.5 s an error is typed in,
         // at 2.5 s the mapped error line is printed and the error taken out again
+        // VIDEOPING_SELFTEST_VP=<query>: videopong in the finder: search at once, at 3.5 s the
+        // results + thumbnails, then the first clip downloaded into slot 3 (without the mouse script
+        // of the regular self-test, its "new" would clear it); as soon as it is there (max 20 s)
+        if let Ok(q) = std::env::var("VIDEOPING_SELFTEST_VP") {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            match STEP.load(Ordering::Relaxed) {
+                0 => {
+                    STEP.store(1, Ordering::Relaxed);
+                    self.finder_cat = Some(FileKind::Videopong);
+                    self.vp.query = q;
+                    self.vp.search(false);
+                }
+                1 if secs > 3.5 => {
+                    STEP.store(2, Ordering::Relaxed);
+                    eprintln!(
+                        "selftest videopong: {} results of {} (error {:?}), {} thumbnails shown; first: {:?}",
+                        self.vp.results.len(),
+                        self.vp.total,
+                        self.vp.error,
+                        self.vp_tex.len(),
+                        self.vp.results.first().map(|c| (&c.title, &c.author, &c.duration))
+                    );
+                    if let Some(c) = self.vp.results.first().cloned() {
+                        self.vp_use(&c, crate::videopong::After::Slot(2));
+                    }
+                }
+                2 if self.s.slots[2].is_some() || secs > 20.0 => {
+                    STEP.store(3, Ordering::Relaxed);
+                    let slot3 = self.s.slots[2].as_ref().map(|i| (i.name.clone(), match &i.source { SourceKind::Clip { path, .. } => path.exists(), _ => false }));
+                    eprintln!("selftest videopong: slot 3 = {slot3:?} (expected the first clip, file present); downloads running {}", self.vp.downloads.len());
+                }
+                _ => {}
+            }
+        }
         // VIDEOPING_SELFTEST_MAP=1|grid: a preset with two slices (one corner-pinned) and a soft
         // mask, mapping on (grid: the test grid); at 3 s pixels of the mapped output are checked
         if let Ok(mode) = std::env::var("VIDEOPING_SELFTEST_MAP") {

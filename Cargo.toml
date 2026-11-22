@@ -13,6 +13,7 @@ glow = "0.17"
 gstreamer = "0.25.4"
 gstreamer-app = "0.25.2"
 gstreamer-video = "0.25.4"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 libloading = "0.9.1"
 midir = "0.11.1"
 png = "0.18.1"

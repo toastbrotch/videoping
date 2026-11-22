@@ -208,13 +208,13 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <p>Four areas from left to right; all column borders can be dragged.</p>
 
 <h3 id="topbar">Top bar</h3>
-<figure><img src="docs/topbar.png" width="1010" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
+<figure><img src="docs/topbar.png" width="970" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
 <ul>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
     <span class="b">midi mapping</span> (<a href="#mapping">MIDI controllers</a>) and
     <span class="b">ai</span> (<a href="#aitab">the ai tab</a>), <span class="b">shader editor</span>
     (<a href="#editor">Shader editor</a>) and <span class="b">projection mapping</span> (<a href="#projmap">projection
-    mapping</a>). The output keeps playing in every tab. The sequencer comes later.</li>
+    mapping</a>). The output keeps playing in every tab.</li>
   <li>A status message appears for a few seconds (saved, loaded, recording to …).</li>
   <li><b>GPU · VRAM · CPU</b>: what videoping uses right now (see <a href="#performance">Performance</a>).</li>
   <li><b>fps counter</b> <code>measured / target fps</code>: grey = fine; white with ⚠ = the output does
@@ -226,13 +226,14 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <h3 id="finder">Column 1: finder</h3>
 <div class="side">
   <ul>
-    <li><b>finder preview</b> on top: click a file to see it there before using it.</li>
+    <li><b>finder preview</b> on top: click a file to see it there before using it. <span class="b">×</span> at its top
+      right stops it (or click the file again).</li>
     <li><b>search</b> filters the list; <span class="b">↻</span> rescans the folders (normally not
       needed: new files appear by themselves within 2 s).</li>
     <li><b>folders</b>: the folders the finder shows; add one with its path, remove one with
       <span class="b">×</span>.</li>
-    <li>Four categories: <b>clips</b>, <b>generators</b>, <b>effects</b> and <b>NDI sources</b>
-      (found automatically on the network). Their headers always stay visible, with the number of
+    <li>Five categories: <b>clips</b>, <b>generators</b>, <b>effects</b>, <b>NDI sources</b>
+      (found automatically on the network) and <b>videopong</b> (below). Their headers always stay visible, with the number of
       files; one is open at a time and scrolls on its own. Click another header to switch: each keeps
       its scroll position, so from deep in the clips the effects are one click away. Click the open
       header to close it. Whether a shader
@@ -241,6 +242,14 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       folder to open or close it.</li>
     <li><b>search all</b> searches every category at once: the headers show the hits, and a category
       with hits opens by itself. <b>Esc</b> clears the search.</li>
+    <li><b>videopong</b> (the fifth category): clips from <a href="https://www.videopong.net">videopong.net</a>,
+      the VJ footage platform. Type a search and press Enter (or <span class="b">search</span>), or
+      <span class="b">random</span> for 50 random clips; <span class="b">more</span> loads the next 50. Each
+      clip shows its thumbnail, title, length, author and license. <b>Click</b> = download and preview,
+      <b>double click</b> = download into the first free slot, <b>drag</b> onto a slot = download into that
+      slot (the row shows the progress). Downloaded clips get a <b>✓</b>, are stored in
+      <code>~/Videos/videopong/</code> and then work like any clip, also offline. Only the public preview
+      quality (480×360) is downloaded; please respect each clip's license.</li>
     <li><b>Favorites</b>: hover over a file and click the <b>☆</b> on its left: it is pinned under
       <b>★ favorites</b> on top of its category. Click ★ again to remove it. Favorites are saved with
       the session and stay with "new".</li>
@@ -833,6 +842,7 @@ read only).</p>
   <tr><td>window and column layout</td><td><code>~/.local/share/videoping/</code></td></tr>
   <tr><td>sessions (save / load)</td><td>the path in the top bar, default <code>~/videoping-session.json</code></td></tr>
   <tr><td>recordings</td><td>recording folder, default <code>~/Videos/videoping/</code></td></tr>
+  <tr><td>videopong downloads</td><td><code>~/Videos/videopong/</code> (thumbnails: <code>~/.cache/videoping/videopong-thumbs/</code>)</td></tr>
   <tr><td>mapping presets</td><td><code>~/.config/videoping/mapping/</code> (one file per preset, saved automatically)</td></tr>
   <tr><td>MIDI profiles</td><td><code>~/.config/videoping/midi/</code> (one file per profile, saved automatically)</td></tr>
 </table>
@@ -915,6 +925,10 @@ shader when its file changes, so you can edit a shader in a text editor while it
   <dt>The shader editor shows no preview for an effect.</dt>
   <dd>An effect needs a picture to work on: select an instance in the live tab (or have one playing in
     a layer).</dd>
+
+  <dt>videopong shows an error or nothing.</dt>
+  <dd>It needs the internet; videopong.net can be slow, thumbnails come in one after the other.
+    Downloaded clips (✓) keep working offline from <code>~/Videos/videopong/</code>.</dd>
 
   <dt>Paste (Ctrl+V) does nothing in a text field.</dt>
   <dd>Builds before 22 November 2026 had no clipboard support: update and restart videoping.</dd>

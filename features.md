@@ -41,9 +41,8 @@ the ui has top-level tabs:
 - planned, in this order (decided 2026-11-21): first the mcp server (no tab), then:
   - **ai**: built 2026-11-22 (see "ai tab")
   - **shader editor**: built 2026-11-22 (see "shader editor")
-- later (not planned yet):
-  - **mapping**: projection mapping, built 2026-11-22 (see "mapping")
-  - sequencer
+- **projection mapping**: built 2026-11-22 (see "mapping")
+- sequencer: no tab until there is a real sequencer (the greyed-out placeholder was removed 2026-11-22)
 
 everything below belongs to the tab "live".
 
@@ -85,6 +84,7 @@ everything below belongs to the tab "live".
 ## finder preview
 
 - shows preview if something is clicked in the finder
+- stoppable (2026-11-22): × at the top right of the preview (like every other ×) (while something is chosen), or a click on the previewed file again; then the preview instance is dropped (nothing renders)
 
 ## finder
 
@@ -105,7 +105,7 @@ finder finds these:
   - favorites: ☆ appears left of a file on hover, a click pins it (★, accent) under "★ favorites" on top of its category (it stays in its folder too); saved in the session, kept by "new" (like the finder folders)
   - later: "in use" marker (files in the grid / live), clip thumbnails, recently used
 - the finder folders are watched: every 2 s the known folders are checked (modification time only, cheap); a new, deleted or renamed file (e.g. a finished recording, copied clips) appears without a manual refresh
-- videopong clips (prio2)
+- videopong clips (decided 2026-11-22, see "videopong")
 - glslop.com shaders or https://editor.isf.video/shaders? (prio2)
 - set (each from above can be added to a set) (prio2)
 
@@ -132,6 +132,7 @@ the prepare area uses two columns (see "layout of the tab live"):
 
 - column 2: 4x8 slot grid (4 wide, 8 high) = mirrors bhoreal columns 2-5 1:1
   - each slot: thumbnail + name, empty slots are drop targets for the finder
+    - the name is one line cut with "…" to the slot width minus the room of the × (bottom right), so a long name never hides the × (2026-11-22)
   - type badge top left on the thumbnail (neutral grey on dark, colors belong to the layers):
     ▶ clip (mp4), ∿ generator (isf), NDI (NDI source); the live marker "L1".."L3" sits top right
   - live slot: border in the color of the mixer-layer it plays in (same as bhoreal LED)
@@ -507,6 +508,17 @@ earlier idea, decided 2026-11-21:
 - token count of the chat at the bottom right (input incl. cached)
 - self-test: VIDEOPING_SELFTEST_AI=<url of a mock server> (scratchpad mock: answers set + frame, then text) checks the whole loop without api cost
 - open: streaming, a cheaper model for quick questions, images from the prepare preview / slots in the chat
+
+## videopong (videopong.net clips in the finder) — decided + built 2026-11-22
+- like the Resolume plugin ../ffgl/source/plugins/VideoPong: the public JSON API https://www.videopong.net/api (no key): /clip/search/<query>/<offset>/<count> (count max 50), /clip/random/<n>; answer {status: {error, errorstring}, data: [[clip, user], ...], count}; clip: id, title, duration, framerate, resolution, license, url_thumb (jpg), url_preview_mp4, url_videopong; user: name
+- only the public preview mp4 (480x360 H.264): the full-quality download (url_download) needs a videopong login -> later, if wanted
+- finder: a 5th category "videopong" in the accordion: search field (Enter) + "random"; results 50 at a time, "more" loads the next 50; each row: thumbnail, title, duration, original resolution, author, license; ✓ = downloaded
+- click = download (if needed) + finder preview; double click = download + first free slot; drag onto a slot = download + into that slot (status line shows the download); a downloaded clip is a normal mp4 (same as a finder clip)
+- clips cached in ~/Videos/videopong/<title> [<id>].mp4 (visible, reusable, sessions find them offline); thumbnails cached in ~/.cache/videoping/videopong-thumbs/
+- network in background threads (search, 4 thumbnail workers, downloads with progress); the ui never waits
+- built: src/videopong.rs (ureq + image/jpeg for the thumbnails, 160x120 max), finder category FileKind::Videopong, Drag::Videopong (downloaded on drop), instance name = the title (without " [id]"); a global "search all" never switches to videopong (its count is the result list, not hits)
+- self-test: VIDEOPING_SELFTEST_VP=<query> (real network: search, thumbnails, first clip into slot 3)
+- later (open): login for the full-quality download; MCP / ai tools to search and load videopong clips
 
 ## mapping (projection mapping) — decided + built 2026-11-22
 - scope: 1 slices (an input rectangle of the composition placed on the output with a corner pin), 2 masks (polygons that black out parts of the output, soft edge, invertible), 3 test grid; not now: mesh warp, soft-edge blending, per-slice on/off / dimming, several mapped outputs

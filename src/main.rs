@@ -15,6 +15,7 @@ mod render;
 mod shader_doc;
 mod state;
 mod video;
+mod videopong;
 mod widgets;
 
 pub const NVIDIA_EGL_VENDOR: &str = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json";

@@ -48,6 +48,8 @@ pub enum FileKind {
     Effect,
     /// NDI source in the finder (the "path" carries the source name)
     Ndi,
+    /// videopong.net (finder category only; a downloaded clip is a Clip)
+    Videopong,
 }
 
 pub fn display_name(path: &Path) -> String {
