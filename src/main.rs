@@ -56,8 +56,36 @@ pub(crate) fn app_icon() -> std::sync::Arc<egui::IconData> {
     std::sync::Arc::new(eframe::icon_data::from_png_bytes(png).unwrap_or_default())
 }
 
+/// Only one videoping at a time: two would fight over the MIDI controllers (leds), the output
+/// window, NDI and the autosave. An exclusive lock on a file, released by the system when the
+/// process ends (also after a crash). The self-test is exempt (it can run beside a session).
+fn single_instance() -> Option<std::fs::File> {
+    if std::env::var_os("VIDEOPING_SELFTEST").is_some() {
+        return None;
+    }
+    let dir = dirs::runtime_dir().or_else(dirs::data_dir).unwrap_or_else(std::env::temp_dir);
+    let path = dir.join("videoping.lock");
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&path).ok()?;
+    match f.try_lock() {
+        Ok(()) => Some(f),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            let msg = "videoping is already running";
+            eprintln!("{msg} (lock {})", path.display());
+            // started from the launcher there is no terminal: a desktop notification, if available
+            let _ = std::process::Command::new("notify-send").args(["-a", "videoping", "-i", "videoping", msg]).status();
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("videoping: lock {}: {e} (starting anyway)", path.display());
+            None
+        }
+    }
+}
+
 fn main() -> eframe::Result {
     maybe_restart_on_nvidia();
+    // after the NVIDIA restart decision: the restarted process takes the lock
+    let _lock = single_instance();
     if let Err(e) = video::init() {
         eprintln!("gstreamer init failed: {e}");
     } else {

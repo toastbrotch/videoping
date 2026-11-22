@@ -78,6 +78,64 @@ pub struct Profile {
     /// of its 4 banks)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clear_ccs: Option<u8>,
+    /// a pad grid (the Bhoreal): bindings use the pads as you see them (note = row * size +
+    /// column from the top left), the grid translates to the device's own note numbers
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<Grid>,
+}
+
+/// A square pad grid and how it lies in front of you: one of the 8 ways to place a square
+/// (4 rotations, each also mirrored). Set by calibrating (press the top left, then the top right
+/// pad).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Grid {
+    pub size: u8,
+    /// 0 as is, 1 / 2 / 3 rotated by 90 / 180 / 270 degrees, 4..7 the same mirrored
+    pub orientation: u8,
+}
+
+impl Grid {
+    /// The device's (row, column) for the pad you see at (row, column).
+    fn place(&self, r: u8, c: u8) -> (u8, u8) {
+        let m = self.size - 1;
+        match self.orientation % 8 {
+            0 => (r, c),
+            1 => (c, m - r),
+            2 => (m - r, m - c),
+            3 => (m - c, r),
+            4 => (r, m - c),
+            5 => (m - r, c),
+            6 => (c, r),
+            _ => (m - c, m - r),
+        }
+    }
+
+    /// Note as you see it (row * size + column) -> the device's note.
+    pub fn to_device(&self, logical: u8) -> u8 {
+        let n = self.size as u16 * self.size as u16;
+        if logical as u16 >= n {
+            return logical;
+        }
+        let (r, c) = self.place(logical / self.size, logical % self.size);
+        r * self.size + c
+    }
+
+    /// The device's note -> note as you see it.
+    pub fn to_view(&self, device: u8) -> u8 {
+        let n = (self.size as u16 * self.size as u16) as u8;
+        (0..n).find(|&l| self.to_device(l) == device).unwrap_or(device)
+    }
+
+    /// The orientation in which the top right pad (the one next to the usb cable) sends
+    /// `top_right`. Only a corner works; of the two placements with that corner the turned one wins
+    /// over the mirrored one (a device turns, it does not mirror).
+    pub fn calibrate(size: u8, top_right: u8) -> Option<u8> {
+        (0..8).find(|&o| Grid { size, orientation: o }.to_device(size - 1) == top_right)
+    }
+
+    pub fn describe(&self) -> &'static str {
+        ["as is", "turned 90°", "turned 180°", "turned 270°", "mirrored", "mirrored, turned 180°", "mirrored, turned 90°", "mirrored, turned 270°"][(self.orientation % 8) as usize]
+    }
 }
 
 impl Profile {
@@ -121,13 +179,16 @@ pub fn bhoreal_hue(rgb: [u8; 3]) -> u8 {
 /// (cable top right, see bhoreal_note).
 /// Colors: layer colors for live / on / selected, plum (the accent) = "there, but not on",
 /// red = blackout / recording, yellow = output effect on, off = nothing.
-/// Note of a Bhoreal pad, column / row counted from the top left as you play it, with the usb
-/// cable at the top right (checked on the hardware 2026-11-21, pads and leds alike: top left =
-/// note 63, the pad right of it = 62, bottom right = note 0; the device counts row by row from
-/// the corner opposite the cable).
+/// Pad of the Bhoreal as you see it: column / row from the top left (bindings use this; the
+/// profile's grid translates it to the device's own note numbers).
 pub fn bhoreal_note(col: u8, row: u8) -> u8 {
-    63 - (row * 8 + col)
+    row * 8 + col
 }
+
+/// How the Bhoreal lay on 2026-11-21 (top left pad = note 63): its default orientation. It can
+/// present itself turned (seen on 2026-11-22 with the cable in the same place): calibrate in the
+/// midi mapping tab.
+pub const BHOREAL_GRID: Grid = Grid { size: 8, orientation: 2 };
 
 pub fn bhoreal_profile() -> Profile {
     let layer = [bhoreal_hue([0x1B, 0x68, 0x98]), bhoreal_hue([0x38, 0x8E, 0x3C]), bhoreal_hue([0xC8, 0x64, 0x0A])];
@@ -166,7 +227,7 @@ pub fn bhoreal_profile() -> Profile {
         v.push(b(pad(5, 4 + k), Mode::Toggle, format!("/out/fx/{}/active", k + 1), Feedback::OnOff { off: plum, on: yellow }));
     }
     // columns 7-8, bottom 4 rows: free
-    Profile { name: "Bhoreal".into(), ports: vec!["bhoreal".into(), "leonardo".into()], bindings: v, clear_notes: Some(64), clear_ccs: Some(0) }
+    Profile { name: "Bhoreal".into(), ports: vec!["bhoreal".into(), "leonardo".into()], bindings: v, clear_notes: Some(64), clear_ccs: Some(0), grid: Some(BHOREAL_GRID) }
 }
 
 /// Encoder number of the Midi Fighter Twister: row by row from the top left (checked on the
@@ -190,7 +251,7 @@ pub fn twister_profile() -> Profile {
     };
     let bindings = vec![enc(0, "/layer/1/mix"), enc(1, "/layer/2/mix"), enc(2, "/layer/3/mix"), enc(3, "/master/brightness")];
     // all 4 banks (16 encoders each, cc 0..63): also rings of encoders without a binding go to 0
-    Profile { name: "Midi Fighter Twister".into(), ports: vec!["twister".into()], bindings, clear_notes: Some(0), clear_ccs: Some(64) }
+    Profile { name: "Midi Fighter Twister".into(), ports: vec!["twister".into()], bindings, clear_notes: Some(0), clear_ccs: Some(64), grid: None }
 }
 
 pub fn builtin_profiles() -> Vec<Profile> {
@@ -241,6 +302,8 @@ pub struct Midi {
     pub learn: Option<Learn>,
     /// what the last learn did (shown in the tab)
     pub learned: Option<String>,
+    /// calibrating the grid of this port: waiting for the pad next to the usb cable (top right)
+    pub calibrate: Option<String>,
     pub last_hit: Option<Hit>,
     /// profiles changed and not written yet (by name); written ~0.5 s after the last change
     dirty: std::collections::HashSet<String>,
@@ -268,6 +331,7 @@ impl Midi {
             error: None,
             learn: None,
             learned: None,
+            calibrate: None,
             last_hit: None,
             dirty: Default::default(),
             dirty_since: None,
@@ -352,6 +416,23 @@ impl Midi {
         }
     }
 
+    /// Start calibrating this port's grid: all its leds off (they stay off until the press).
+    pub fn start_calibrate(&mut self, port: &str) {
+        self.learned = None;
+        self.calibrate = Some(port.to_string());
+        let profiles = &self.profiles;
+        if let Some(d) = self.devices.iter_mut().find(|d| d.port == port) {
+            clear_device(d, d.profile.map(|pi| &profiles[pi]));
+        }
+    }
+
+    /// Send this port's full led state again at the next feedback (e.g. after cancelling).
+    pub fn refresh(&mut self, port: &str) {
+        if let Some(d) = self.devices.iter_mut().find(|d| d.port == port) {
+            d.sent.clear();
+        }
+    }
+
     /// Quit: every device's leds off.
     pub fn shutdown(&mut self) {
         for d in &mut self.devices {
@@ -380,7 +461,7 @@ impl Midi {
     /// A new empty profile for this port (named after the device), used for it from now on.
     pub fn new_profile(&mut self, port: &str) -> usize {
         let name = self.unique_name(&port_base(port));
-        self.profiles.push(Profile { name, ports: vec![], bindings: vec![], clear_notes: None, clear_ccs: None });
+        self.profiles.push(Profile { name, ports: vec![], bindings: vec![], clear_notes: None, clear_ccs: None, grid: None });
         let pi = self.profiles.len() - 1;
         self.changed(pi);
         self.set_device_profile(port, Some(pi));
@@ -479,7 +560,23 @@ impl Midi {
             if low.starts_with("videoping") || low.starts_with("midi through") || self.devices.iter().any(|d| d.port == name) {
                 continue;
             }
-            let pi = self.profiles.iter().position(|p| p.matches(&name));
+            // the MIDI self-test plays only its own virtual device (real ones would share its profile);
+            // that one is named so that no profile picks it by itself (other running videopings
+            // would otherwise take it as a Bhoreal and send their leds to it)
+            let selftest = std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some();
+            if selftest && !low.contains("vp-selftest") {
+                continue;
+            }
+            // any other self-test leaves the real controllers alone (they belong to the session
+            // that may be running beside it)
+            if !selftest && std::env::var_os("VIDEOPING_SELFTEST").is_some() {
+                continue;
+            }
+            let pi = if selftest {
+                self.profiles.iter().position(|p| p.name == "Bhoreal")
+            } else {
+                self.profiles.iter().position(|p| p.matches(&name))
+            };
             if let Some(mut dev) = self.connect(&name, pi) {
                 match pi {
                     Some(pi) => eprintln!("midi: {name} -> profile {}", self.profiles[pi].name),
@@ -554,11 +651,41 @@ impl Midi {
     }
 
     fn handle(&mut self, id: u64, bytes: &[u8], t: &mut impl Target) {
-        let Some((ch, msg, val, release)) = parse(bytes) else { return };
+        let Some((ch, mut msg, val, release)) = parse(bytes) else { return };
         let Some(di) = self.devices.iter().position(|d| d.id == id) else { return };
         self.devices[di].last_msg = Some(Instant::now());
         let port = self.devices[di].port.clone();
-        self.monitor.push_front((port_base(&port), format!("ch {} {} {}", ch + 1, msg_text(msg), val)));
+        let grid = self.devices[di].profile.and_then(|pi| self.profiles[pi].grid);
+        // calibration: one press on the pad next to the usb cable (top right)
+        if let (Some(cport), Msg::Note(n), false) = (self.calibrate.clone(), msg, release) {
+            if cport == port {
+                self.calibrate = None;
+                if let (Some(pi), Some(g)) = (self.devices[di].profile, grid) {
+                    match Grid::calibrate(g.size, n) {
+                        Some(o) => {
+                            self.edit_profile(pi, |p| p.grid = Some(Grid { size: g.size, orientation: o }));
+                            // all off once more, the next feedback draws the state in the new orientation
+                            let profiles = &self.profiles;
+                            let d = &mut self.devices[di];
+                            clear_device(d, d.profile.map(|pi| &profiles[pi]));
+                            self.learned = Some(format!("orientation set: {}", Grid { size: g.size, orientation: o }.describe()));
+                        }
+                        None => self.learned = Some("that was not a corner pad: calibrate again and press the pad next to the usb cable".into()),
+                    }
+                }
+                return;
+            }
+        }
+        // a pad grid: from now on the note as you see the pad
+        let raw = msg;
+        if let (Some(g), Msg::Note(n)) = (grid, msg) {
+            msg = Msg::Note(g.to_view(n));
+        }
+        let shown = match (raw, msg) {
+            (Msg::Note(a), Msg::Note(b)) if a != b => format!("note {a} (pad {} {})", b / 8 + 1, b % 8 + 1),
+            _ => msg_text(msg),
+        };
+        self.monitor.push_front((port_base(&port), format!("ch {} {} {}", ch + 1, shown, val)));
         self.monitor.truncate(32);
         // learn: the first press / move on the learning device becomes a binding
         if let Some(l) = self.learn.clone() {
@@ -595,6 +722,10 @@ impl Midi {
 
     fn feedback(&mut self, t: &impl Target) {
         for dev in &mut self.devices {
+            // calibrating: dark until the pad is pressed
+            if self.calibrate.as_deref() == Some(dev.port.as_str()) {
+                continue;
+            }
             let (Some(out), Some(pi)) = (dev.output.as_mut(), dev.profile) else { continue };
             for (i, b) in self.profiles[pi].bindings.iter().enumerate() {
                 let fa = b.feedback_addr.as_deref().unwrap_or(&b.addr);
@@ -617,8 +748,9 @@ impl Midi {
                 if dev.sent.get(&i) == Some(&v) {
                     continue;
                 }
+                let grid = self.profiles[pi].grid;
                 let bytes = match b.msg {
-                    Msg::Note(n) => [0x90 | b.channel, n, v],
+                    Msg::Note(n) => [0x90 | b.channel, grid.map(|g| g.to_device(n)).unwrap_or(n), v],
                     Msg::Cc(c) => [0xB0 | b.channel, c, v],
                 };
                 if out.send(&bytes).is_ok() {
@@ -639,7 +771,7 @@ fn clear_device(d: &mut Device, p: Option<&Profile>) {
     msgs.extend((0..ccs).map(|c| [0xB0, c, 0]));
     for b in p.map(|p| p.bindings.as_slice()).unwrap_or_default() {
         let m = match b.msg {
-            Msg::Note(n) => [0x90 | b.channel, n, 0],
+            Msg::Note(n) => [0x90 | b.channel, p.and_then(|p| p.grid).map(|g| g.to_device(n)).unwrap_or(n), 0],
             Msg::Cc(c) => [0xB0 | b.channel, c, 0],
         };
         if !msgs.contains(&m) {
@@ -776,10 +908,11 @@ mod tests {
         assert_eq!(p.clear_notes, Some(64), "all pads off on connect / quit, not beyond 63");
         let find = |n: u8| p.bindings.iter().find(|b| b.msg == Msg::Note(n)).unwrap().addr.clone();
         let at = |col, row| find(bhoreal_note(col, row));
-        // as pressed on the hardware with the cable top right
-        assert_eq!(bhoreal_note(0, 0), 63, "top left");
-        assert_eq!(bhoreal_note(1, 0), 62, "right of it");
-        assert_eq!(bhoreal_note(7, 7), 0, "bottom right");
+        // as pressed on the hardware on 2026-11-21 (the default orientation)
+        let g = p.grid.unwrap();
+        assert_eq!(g.to_device(bhoreal_note(0, 0)), 63, "top left");
+        assert_eq!(g.to_device(bhoreal_note(1, 0)), 62, "right of it");
+        assert_eq!(g.to_device(bhoreal_note(7, 7)), 0, "bottom right");
         // column 1 top-down: select 1-3, on/off 1-3, blackout, record
         assert_eq!(at(0, 0), "/layer/1/select");
         assert_eq!(at(0, 5), "/layer/3/active");
@@ -806,6 +939,31 @@ mod tests {
                 assert!(!notes.contains(&bhoreal_note(col, row)), "free pad {col},{row}");
             }
         }
+    }
+
+    #[test]
+    fn grid_orientations() {
+        for o in 0..8 {
+            let g = Grid { size: 8, orientation: o };
+            // a real placement: every pad once, and back again
+            let mut seen: Vec<u8> = (0..64).map(|l| g.to_device(l)).collect();
+            seen.sort();
+            assert_eq!(seen, (0..64).collect::<Vec<_>>(), "orientation {o}");
+            for l in 0..64 {
+                assert_eq!(g.to_view(g.to_device(l)), l);
+            }
+            // one press on the top right corner finds every turned placement
+            if o < 4 {
+                assert_eq!(Grid::calibrate(8, g.to_device(7)), Some(o), "orientation {o}");
+            }
+        }
+        // 2026-11-21: top right pad = note 56 -> turned 180° (the default)
+        assert_eq!(Grid::calibrate(8, 56), Some(BHOREAL_GRID.orientation));
+        // 2026-11-22: the Bhoreal turned, top right pad = note 7 -> as is
+        assert_eq!(Grid::calibrate(8, 7), Some(0));
+        assert_eq!(Grid::calibrate(8, 9), None, "not a corner");
+        // notes outside the grid pass through
+        assert_eq!(BHOREAL_GRID.to_device(100), 100);
     }
 
     /// A fake target for the binding modes.

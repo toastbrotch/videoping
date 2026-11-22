@@ -456,6 +456,10 @@ is mapped in the tab <span class="b on">midi mapping</span>.</p>
 
 <h3 id="bhoreal">Bhoreal</h3>
 <p>Hold it with the <b>USB cable at the top right</b>. Column 1 is then on the left.</p>
+<p><b>If the pads are turned</b> (the Bhoreal sometimes presents itself turned around): in the tab
+<span class="b on">midi mapping</span>, choose the Bhoreal, press <span class="b">calibrate</span>
+next to "orientation" and then press the <b>pad next to the USB cable</b> (top right). Done; it is
+remembered.</p>
 <div class="devhead"><span>column 1</span><span>USB cable ▲</span></div>
 <div class="pads b8"><div class="pad" style="--c:var(--l1)">select<br>L1</div><div class="pad" style="--c:#777">slot<br>1</div><div class="pad" style="--c:#777">slot<br>9</div><div class="pad" style="--c:#777">slot<br>17</div><div class="pad" style="--c:#777">slot<br>25</div><div class="pad" style="--c:var(--l1)">L1<br>fx 1</div><div class="pad" style="--c:var(--l2)">L2<br>fx 1</div><div class="pad" style="--c:var(--l3)">L3<br>fx 1</div><div class="pad" style="--c:var(--l2)">select<br>L2</div><div class="pad" style="--c:#777">slot<br>2</div><div class="pad" style="--c:#777">slot<br>10</div><div class="pad" style="--c:#777">slot<br>18</div><div class="pad" style="--c:#777">slot<br>26</div><div class="pad" style="--c:var(--l1)">L1<br>fx 2</div><div class="pad" style="--c:var(--l2)">L2<br>fx 2</div><div class="pad" style="--c:var(--l3)">L3<br>fx 2</div><div class="pad" style="--c:var(--l3)">select<br>L3</div><div class="pad" style="--c:#777">slot<br>3</div><div class="pad" style="--c:#777">slot<br>11</div><div class="pad" style="--c:#777">slot<br>19</div><div class="pad" style="--c:#777">slot<br>27</div><div class="pad" style="--c:var(--l1)">L1<br>fx 3</div><div class="pad" style="--c:var(--l2)">L2<br>fx 3</div><div class="pad" style="--c:var(--l3)">L3<br>fx 3</div><div class="pad" style="--c:var(--l1)">L1<br>on</div><div class="pad" style="--c:#777">slot<br>4</div><div class="pad" style="--c:#777">slot<br>12</div><div class="pad" style="--c:#777">slot<br>20</div><div class="pad" style="--c:#777">slot<br>28</div><div class="pad" style="--c:var(--l1)">L1<br>fx 4</div><div class="pad" style="--c:var(--l2)">L2<br>fx 4</div><div class="pad" style="--c:var(--l3)">L3<br>fx 4</div><div class="pad" style="--c:var(--l2)">L2<br>on</div><div class="pad" style="--c:#777">slot<br>5</div><div class="pad" style="--c:#777">slot<br>13</div><div class="pad" style="--c:#777">slot<br>21</div><div class="pad" style="--c:#777">slot<br>29</div><div class="pad" style="--c:#e6c200">out<br>fx 1</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l3)">L3<br>on</div><div class="pad" style="--c:#777">slot<br>6</div><div class="pad" style="--c:#777">slot<br>14</div><div class="pad" style="--c:#777">slot<br>22</div><div class="pad" style="--c:#777">slot<br>30</div><div class="pad" style="--c:#e6c200">out<br>fx 2</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:#c62828">black-<br>out</div><div class="pad" style="--c:#777">slot<br>7</div><div class="pad" style="--c:#777">slot<br>15</div><div class="pad" style="--c:#777">slot<br>23</div><div class="pad" style="--c:#777">slot<br>31</div><div class="pad" style="--c:#e6c200">out<br>fx 3</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:#c62828">REC</div><div class="pad" style="--c:#777">slot<br>8</div><div class="pad" style="--c:#777">slot<br>16</div><div class="pad" style="--c:#777">slot<br>24</div><div class="pad" style="--c:#777">slot<br>32</div><div class="pad" style="--c:#e6c200">out<br>fx 4</div><div class="pad free">free</div><div class="pad free">free</div></div>
 <ul>
@@ -669,6 +673,10 @@ shader when its file changes, so you can edit a shader in a text editor while it
 <h2 id="trouble"><span class="n">11</span>Troubleshooting</h2>
 
 <dl class="qa">
+  <dt>Starting videoping does nothing.</dt>
+  <dd>It is already running (only one videoping at a time: two would fight over the controllers and
+    the output). A notification says so; switch to the window that is open.</dd>
+
   <dt>The fps counter shows ⚠ although nothing is heavy.</dt>
   <dd>On Wayland the desktop limits how often videoping may draw; on some laptops that is below 60 fps
     (e.g. ~53 fps on Intel, 30 fps with the NVIDIA card). Set the output frame rate to 50 or 30, or see
@@ -703,8 +711,9 @@ shader when its file changes, so you can edit a shader in a text editor while it
     MIDI (most are; no driver needed).</dd>
 
   <dt>The Bhoreal pads do the wrong things / the LEDs are mirrored.</dt>
-  <dd>Hold it with the USB cable at the top right. The monitor in the midi mapping tab shows which note
-    a pad sends: the top left pad must send note 63.</dd>
+  <dd>Hold it with the USB cable at the top right, then calibrate: midi mapping tab → Bhoreal →
+    <span class="b">calibrate</span> → press the pad next to the USB cable. The monitor shows each
+    press as the device's note and as the pad you see ("note 7 (pad 1 8)").</dd>
 
   <dt>Controller LEDs stay on after videoping is gone.</dt>
   <dd>They are switched off when videoping quits normally. After a crash they keep their last state

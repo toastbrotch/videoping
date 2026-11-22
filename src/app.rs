@@ -2697,10 +2697,10 @@ impl App {
             let leds: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>> = Default::default();
             let l2 = leds.clone();
             // both virtual ports under one name, like a real device (its leds are found by name)
-            let out = midir::MidiOutput::new("bhoreal-selftest").and_then(|o| o.create_virtual("Bhoreal selftest").map_err(|e| e.kind()).map_err(|_| midir::InitError));
-            let inp = midir::MidiInput::new("bhoreal-selftest").ok().and_then(|i| {
+            let out = midir::MidiOutput::new("vp-selftest").and_then(|o| o.create_virtual("vp-selftest pads").map_err(|e| e.kind()).map_err(|_| midir::InitError));
+            let inp = midir::MidiInput::new("vp-selftest").ok().and_then(|i| {
                 i.create_virtual(
-                    "Bhoreal selftest",
+                    "vp-selftest pads",
                     move |_, b, _| {
                         if b.len() == 3 && b[0] & 0xF0 == 0x90 {
                             l2.lock().unwrap().insert(b[1], b[2]);
@@ -2719,7 +2719,7 @@ impl App {
             }
             return;
         }
-        let connected = self.midi.as_ref().is_some_and(|m| m.devices().iter().any(|d| d.0.contains("selftest")));
+        let connected = self.midi.as_ref().is_some_and(|m| m.devices().iter().any(|d| d.0.contains("vp-selftest")));
         // the copy of the generator: the generator in a slot other than slot 1
         let dup = self.s.slots.iter().enumerate().skip(1).find(|(_, x)| x.as_ref().is_some_and(|i| matches!(i.source, SourceKind::Generator { .. }))).map(|(i, _)| i);
         let Some(t) = self.selftest.as_mut() else { return };
@@ -2728,7 +2728,8 @@ impl App {
             return; // wait for the port scan (every 2 s)
         }
         // pads by position (column, row), slot i of the page sits in column 1 + i / 8, row i % 8
-        use crate::midi::bhoreal_note as pad;
+        // the device's note of a pad as you see it (default orientation)
+        let pad = |c: u8, r: u8| crate::midi::BHOREAL_GRID.to_device(crate::midi::bhoreal_note(c, r));
         let slot_pad = |i: usize| pad(1 + (i / 8) as u8, (i % 8) as u8);
         let dup_note = slot_pad(dup.unwrap_or(0));
         let (sel_l3, blackout, rec, l2_fx1, l2_fx3, l1_fx1) = (pad(0, 2), pad(0, 6), pad(0, 7), pad(6, 0), pad(6, 2), pad(5, 0));
@@ -2757,7 +2758,7 @@ impl App {
             );
         }
         // learn: cc 20 of the virtual device -> /master/freeze, then use it
-        let port = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("selftest")).map(|d| d.0));
+        let port = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("vp-selftest")).map(|d| d.0));
         match sim.step {
             42 => {
                 if let (Some(m), Some(port)) = (self.midi.as_mut(), port.clone()) {
@@ -2774,6 +2775,43 @@ impl App {
             }
             55 => {
                 let _ = sim.out.send(&[0xB0, 20, 127]);
+            }
+            // calibrate: the device now sends note 7 for the pad next to the cable (as on 2026-11-22)
+            70 => {
+                if let (Some(m), Some(port)) = (self.midi.as_mut(), port.clone()) {
+                    m.start_calibrate(&port);
+                }
+            }
+            71 => {
+                // during calibration everything is dark
+                let lit = sim.leds.lock().unwrap().values().filter(|v| **v > 0).count();
+                eprintln!("selftest midi calibrate: leds lit while waiting for the press = {lit} (expected 0)");
+            }
+            72 => {
+                let _ = sim.out.send(&[0x90, 7, 64]);
+            }
+            73 => {
+                let _ = sim.out.send(&[0x90, 7, 0]);
+            }
+            90 => {
+                let m = self.midi.as_ref();
+                let g = m.and_then(|m| m.profiles().iter().find(|p| p.name == "Bhoreal").and_then(|p| p.grid));
+                let leds = sim.leds.lock().unwrap().clone();
+                let lit: Vec<(u8, u8)> = { let mut v: Vec<(u8, u8)> = leds.iter().filter(|x| *x.1 > 0).map(|(a, b)| (*a, *b)).collect(); v.sort(); v };
+                eprintln!(
+                    "selftest midi calibrate: lit after = {lit:?}; selected layer L{}, layers {:?}, slots {:?}, t = {:.1} s",
+                    self.s.selected_layer + 1,
+                    self.s.layers.iter().map(|l| (l.instance.and_then(|id| self.s.slot_of(id)).map(|x| x + 1), l.active)).collect::<Vec<_>>(),
+                    self.s.slots.iter().enumerate().filter(|x| x.1.is_some()).map(|x| x.0 + 1).collect::<Vec<_>>(),
+                    t.start.elapsed().as_secs_f32()
+                );
+                eprintln!(
+                    "selftest midi calibrate: {:?}; orientation {:?} (expected as is); select L3 led now on note {} = {:?} (orange 10)",
+                    m.and_then(|m| m.learned.clone()),
+                    g.map(|g| g.describe()),
+                    crate::midi::bhoreal_note(0, 2),
+                    leds.get(&crate::midi::bhoreal_note(0, 2)),
+                );
             }
             62 => {
                 let m = self.midi.as_ref();

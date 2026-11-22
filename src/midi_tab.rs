@@ -217,6 +217,29 @@ impl App {
                     self.midi_confirm_delete = Some(pi);
                 }
             });
+            // pad grid (the Bhoreal): how it lies; one press next to the usb cable sets it
+            if let Some(g) = m.profiles()[pi].grid {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("orientation").weak());
+                    if m.calibrate.as_deref() == Some(port.as_str()) {
+                        if widgets::choice(ui, true, "press the pad next to the USB cable (top right) …").on_hover_text("click to cancel").clicked() {
+                            m.calibrate = None;
+                            m.refresh(&port);
+                        }
+                    } else {
+                        ui.label(g.describe());
+                        if widgets::btn(ui, "calibrate")
+                            .on_hover_text("if the pads are turned: press this, then the pad next to the USB cable (top right)")
+                            .clicked()
+                        {
+                            m.start_calibrate(&port);
+                        }
+                        if let Some(t) = m.learned.as_ref().filter(|t| t.starts_with("orientation") || t.contains("corner")) {
+                            ui.label(egui::RichText::new(t).weak().size(11.0));
+                        }
+                    }
+                });
+            }
             if let Some(dir) = m.dir() {
                 ui.label(egui::RichText::new(format!("changes are saved automatically in {}", dir.display())).weak().size(11.0));
             }

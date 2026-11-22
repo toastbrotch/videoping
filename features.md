@@ -384,6 +384,11 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 
 - protocol (firmware bhoreal_slim_midi, docs table): pads send note on channel 1, note 0..63, press velocity 64, release velocity 0 (note on); leds: note on, velocity = hue on the firmware color wheel (velocity × 8 -> red -> green -> blue -> red), velocity 0 = off; the usb port name is "Arduino Leonardo" according to the docs
   - orientation: played with the usb cable at the top right
+  - the device can present itself turned by 180° with the cable in the same place (seen 2026-11-21 vs 2026-11-22; a hobby device): so the profile does not rely on a fixed numbering (decided 2026-11-22)
+    - bindings use the pads as you see them (row × 8 + column from the top left); the profile's grid (size 8, orientation: one of 8 placements, 4 rotations each also mirrored) translates to the device's notes, in and out
+    - calibrate in the midi mapping tab: press "calibrate", then the pad next to the usb cable (top right); one corner press is enough, the rotation wins over the mirrored placement; saved with the profile
+    - default orientation: turned 180° (as on 2026-11-21: top right = note 56)
+    - the monitor shows both: the device note and the pad as you see it
   - pad order (checked on the hardware 2026-11-21, leds and pads alike): with the cable top right the top left pad is note 63, the pad right of it 62, the bottom right pad note 0: note = 63 − (row × 8 + column), column / row from the top left; the usb port shows as "Arduino Leonardo MIDI 1"
     - (a first test gave the opposite corner: the device was held turned by 180° then)
 - the leds can only show full brightness, no dimming (changed 2026-11-21, was "bright / dim"): plum (the accent) = "there, but not on"
@@ -500,6 +505,11 @@ earlier idea, decided 2026-11-21:
 ## documentation
 - features.md = spec (decisions), manual.html = end-user manual as one HTML page (dark like videoping, table of contents; concept, tour with screenshots in docs/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
 - user-visible changes go into manual.html in the same step as features.md
+
+## single instance
+- only one videoping at a time (decided 2026-11-22): two would fight over the midi controllers (leds), the output window, NDI and the autosave
+- an exclusive lock on $XDG_RUNTIME_DIR/videoping.lock, released by the system when the process ends (also after a crash); a second start ends at once with "videoping is already running" (terminal + desktop notification via notify-send)
+- the self-test is exempt and leaves the real midi controllers alone (only the midi self-test uses its own virtual device), so it can run beside a session
 
 ## platform
 - Linux only for now (no Windows / macOS builds). The code still has Linux-specific bits (libndi.so names / paths, DejaVu font paths); a port would need those plus native CI builds.
