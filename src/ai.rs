@@ -70,9 +70,14 @@ pub struct ToolOut {
     pub png: Option<Vec<u8>>,
 }
 
-/// The tools in the provider's format (from the MCP tool list).
+/// The MCP tools in the provider's format.
+#[cfg(test)]
 pub fn tools(p: Provider) -> Value {
-    let list = crate::mcp::tools();
+    tools_for(&crate::mcp::tools(), p)
+}
+
+/// A tool list (MCP format: name, description, inputSchema) in the provider's format.
+pub fn tools_for(list: &Value, p: Provider) -> Value {
     let v: Vec<Value> = list
         .as_array()
         .map(|a| {
@@ -158,12 +163,12 @@ fn has_fallback(model: &str) -> bool {
     ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"].contains(&model)
 }
 
-pub fn anthropic_body(s: &Settings, system: &str, msgs: &[Value]) -> Value {
+pub fn anthropic_body(s: &Settings, system: &str, tools: &Value, msgs: &[Value]) -> Value {
     let mut body = json!({
         "model": s.model,
         "max_tokens": 16000,
         "system": system,
-        "tools": tools(Provider::Anthropic),
+        "tools": tools,
         "messages": msgs,
         // automatic prompt caching: tools + system + history are the same prefix every round
         "cache_control": { "type": "ephemeral" },
@@ -177,10 +182,10 @@ pub fn anthropic_body(s: &Settings, system: &str, msgs: &[Value]) -> Value {
     body
 }
 
-pub fn openai_body(s: &Settings, system: &str, msgs: &[Value]) -> Value {
+pub fn openai_body(s: &Settings, system: &str, tools: &Value, msgs: &[Value]) -> Value {
     let mut all = vec![json!({ "role": "system", "content": system })];
     all.extend(msgs.iter().cloned());
-    json!({ "model": s.model, "messages": all, "tools": tools(Provider::OpenAi) })
+    json!({ "model": s.model, "messages": all, "tools": tools })
 }
 
 fn http_error(status: u16, body: &str) -> String {
@@ -195,13 +200,14 @@ fn http_error(status: u16, body: &str) -> String {
     }
 }
 
-/// One request, blocking.
-pub fn request(s: &Settings, system: &str, msgs: &[Value]) -> Result<Reply, String> {
+/// One request, blocking. `tools`: MCP format (converted here).
+pub fn request(s: &Settings, system: &str, tools: &Value, msgs: &[Value]) -> Result<Reply, String> {
+    let tools = tools_for(tools, s.provider);
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(300))).http_status_as_error(false).build().into();
     let base = s.url.trim().trim_end_matches('/');
     let (url, body) = match s.provider {
-        Provider::Anthropic => (format!("{}/v1/messages", if base.is_empty() { ANTHROPIC_URL } else { base }), anthropic_body(s, system, msgs)),
-        Provider::OpenAi => (format!("{}/chat/completions", if base.is_empty() { OPENAI_URL } else { base }), openai_body(s, system, msgs)),
+        Provider::Anthropic => (format!("{}/v1/messages", if base.is_empty() { ANTHROPIC_URL } else { base }), anthropic_body(s, system, &tools, msgs)),
+        Provider::OpenAi => (format!("{}/chat/completions", if base.is_empty() { OPENAI_URL } else { base }), openai_body(s, system, &tools, msgs)),
     };
     let mut req = agent.post(&url).header("content-type", "application/json");
     match s.provider {
@@ -292,10 +298,10 @@ pub fn parse_openai(v: &Value) -> Reply {
 }
 
 /// The request in a worker thread; the answer arrives on the channel.
-pub fn spawn(s: Settings, system: String, msgs: Vec<Value>) -> Receiver<Result<Reply, String>> {
+pub fn spawn(s: Settings, system: String, tools: Value, msgs: Vec<Value>) -> Receiver<Result<Reply, String>> {
     let (tx, rx) = channel();
     let _ = std::thread::Builder::new().name("ai".into()).spawn(move || {
-        let _ = tx.send(request(&s, &system, &msgs));
+        let _ = tx.send(request(&s, &system, &tools, &msgs));
     });
     rx
 }
@@ -331,7 +337,7 @@ mod tests {
         assert_eq!(msgs.len(), 3);
         assert_eq!(msgs[2]["content"][1]["text"], "thanks");
         let s = Settings { provider: Provider::Anthropic, model: "claude-opus-5-5".into(), key: String::new(), url: String::new(), effort: "low".into() };
-        let b = anthropic_body(&s, "sys", &msgs);
+        let b = anthropic_body(&s, "sys", &tools(Provider::Anthropic), &msgs);
         assert_eq!(b["output_config"]["effort"], "low");
         assert_eq!(b["fallbacks"], "default");
         assert_eq!(b["tools"][0]["name"], "state");

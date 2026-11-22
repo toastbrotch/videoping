@@ -40,7 +40,7 @@ the ui has top-level tabs:
 - **midi mapping**: built (see "midi mapping")
 - planned, in this order (decided 2026-11-21): first the mcp server (no tab), then:
   - **ai**: built 2026-11-22 (see "ai tab")
-  - **shader editor** (later), with ai
+  - **shader editor**: built 2026-11-22 (see "shader editor")
 - later (not planned yet):
   - mapping
   - sequencer
@@ -99,7 +99,7 @@ finder finds these:
   - an NDI instance has no clip interface; the detail shows its status: resolution @ fps, or "no signal" (normal grey text, no color: colors are reserved for the layer color-code)
   - effects work on it like on any clip; it is received only while it is live / selected (stops 10 s later)
 - overview with many files (decided + built 2026-11-22):
-  - accordion: the category headers (clips · generators · effects · NDI sources) always stay visible, each with its number of files; one category is open and fills the rest of the column with its own scroll; a click on another header switches, every category keeps its scroll position
+  - accordion: the category headers (clips · generators · effects · NDI sources) always stay visible, each with its number of files; one category is open and fills the rest of the column with its own scroll; a click on another header switches, every category keeps its scroll position; a click on the open header closes it (all closed = only the headers; a search opens a category with hits again)
   - search ("search all") covers all categories: the headers show the hits (accent when > 0); when the open category has no hit, a category with hits opens; Esc in the field clears it
   - folders as groups: inside a category the files are grouped by the folder they are in (shown from the finder folder's name on, e.g. "clips/loops/abstract", with the number of files); groups are collapsible, open by default when a category has 3 or fewer, always open while searching; a folder with one file and a category with one folder show the files without a header
   - favorites: ☆ appears left of a file on hover, a click pins it (★, accent) under "★ favorites" on top of its category (it stays in its folder too); saved in the session, kept by "new" (like the finder folders)
@@ -341,7 +341,7 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
     - provider + model setting (anthropic, openai-compatible incl. local ollama / lm studio); settings and key in the ai tab itself (stored in config.json)
     - every tool call visible (what the ai changed), undo; "ask before applying" for shows; output / preview frames as images when the model supports them
     - caveats: local models are often weak at tool use; the key lives in a config file; every message costs api usage; for playing live the controller stays faster
-  - shader editor tab, with ai: write / change isf shaders inside videoping with a live preview (hot reload), the ai sees the output frame and the compile errors
+  - shader editor tab, with ai: write / change isf shaders inside videoping with a live preview (hot reload), the ai sees the output frame and the compile errors — built 2026-11-22, see "shader editor"
 - midi must feel instant: input on its own thread, applied at the start of the next video frame, not through the ui
 - mcp use cases (most useful first): writing shaders with claude live (hot reload + look at the output frame), preparing sets, asking / debugging (state, resource meters), playing via an agent (least)
 - open: osc on the same registry (touchosc etc.)?
@@ -506,7 +506,21 @@ earlier idea, decided 2026-11-21:
 - not saved: a new start or "new chat" = a new conversation; switching provider starts a new conversation (other message format)
 - token count of the chat at the bottom right (input incl. cached)
 - self-test: VIDEOPING_SELFTEST_AI=<url of a mock server> (scratchpad mock: answers set + frame, then text) checks the whole loop without api cost
-- open: streaming, a cheaper model for quick questions, images from the prepare preview / slots in the chat, the shader editor (next)
+- open: streaming, a cheaper model for quick questions, images from the prepare preview / slots in the chat
+
+## shader editor — built 2026-11-22
+- top-level tab "shader editor": code (left), preview + parameters or ai (right), compile result (bottom), file bar (top)
+- open: "open ▾" (finder generators + effects, with search), ✎ next to an effect in the effect stack and next to "generator" in the prepare detail, right click on a shader in the finder; "new generator" / "new effect" start from a small working template, the file field gets a free name next to the other shaders of that kind
+- save (Ctrl+S) writes the file in the "file" field: another name = a copy; an existing other file is never overwritten; revert = back to the saved text; "•" = unsaved; opening / new with unsaved changes asks (save / discard / cancel)
+- live preview without saving: the text goes to a work copy in $XDG_RUNTIME_DIR/videoping-edit/<name>.fs (a custom .vs next to the file is copied along), written 250 ms after the last key and compiled at once (Renderer::reload_shader); the real file and its live uses change only on save (then reloaded at once)
+- preview instance (id EDITOR_ID): a generator alone; an effect on a copy of the selected instance (else what plays in a layer), as its last effect; params follow input changes (reconcile_params); rendered only while the tab is open
+- parameters of the preview as sliders (with the .md descriptions of the saved file)
+- errors: GLSL log lines (NVIDIA "0(N)", Mesa "0:N(") and JSON header errors ("at line N") mapped to file lines (the body starts after "*/"; text before the header counts); red line numbers; click an error = cursor to that line
+- code view: monospace 13, line numbers, highlighting in greys + accent (comments, keywords, types, ISF builtins, numbers, JSON strings), no wrapping (scrolls sideways)
+- ai (panel "ai" under the preview): its own chat with the provider / model / key of the ai tab; tools get_shader, set_shader (whole file, compiled at once, answers "compiles ✓ — kind, parameters" or the errors by file line), look (the editor preview; waits 3 frames after set_shader so the new shader is rendered), list_shaders, read_shader (finder shaders only, with their .md); system prompt: ISF in videoping (header, builtins, passes), workflow get → set → fix → look, keep the user's inputs, LABEL/MIN/MAX/DEFAULT for new inputs, fast + no hard flashing, answer short
+  - it only changes the editor text, never the file; every set_shader has undo (also one that does not compile)
+- MCP frame source "editor" (Claude Code can look at the editor preview too)
+- self-test: VIDEOPING_SELFTEST_EDIT=<.fs> (error typed in → mapped line, fixed, file untouched); + VIDEOPING_SELFTEST_AI=<mock> = the editor's ai against a mock (get, broken set, fixed set, look)
 
 ## shader documentation (.md next to the .fs) — decided + built 2026-11-22
 - many isf shaders have a markdown file with the same name (`chaos-feedback.fs` + `chaos-feedback.md`) that explains the shader

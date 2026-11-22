@@ -225,7 +225,7 @@ pub fn tools() -> Value {
         },
         {
             "name": "frame",
-            "description": "The current picture as PNG: source \"output\" (default, after master), \"preview\" (the selected instance) or \"slot N\". Optional width in pixels (default 640, max 1920).",
+            "description": "The current picture as PNG: source \"output\" (default, after master), \"preview\" (the selected instance), \"editor\" (the shader editor's preview, while its tab is open) or \"slot N\". Optional width in pixels (default 640, max 1920).",
             "inputSchema": { "type": "object", "properties": { "source": { "type": "string" }, "width": { "type": "integer" } } }
         },
         {

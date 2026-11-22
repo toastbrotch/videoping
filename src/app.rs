@@ -61,7 +61,7 @@ pub struct App {
     finder_sel: Option<(PathBuf, FileKind)>,
     finder_new_root: String,
     /// the open finder category (accordion)
-    finder_cat: FileKind,
+    finder_cat: Option<FileKind>,
     /// folder groups opened / closed by hand ("kind|group" -> open)
     finder_open: HashMap<String, bool>,
     /// the search as last seen (a new search may switch the category)
@@ -101,6 +101,12 @@ pub struct App {
     md_cache: egui_commonmark::CommonMarkCache,
     /// the chat of the ai tab (runtime only)
     ai: ai_tab::AiChat,
+    /// the shader editor (runtime only)
+    shed: shader_editor::ShaderEd,
+    /// the chat of the shader editor's ai (runtime only)
+    ai_shed: ai_tab::AiChat,
+    /// "edit" clicked somewhere: open this shader in the editor at the next frame
+    edit_request: Option<PathBuf>,
     prepare_div_since: Instant,
     /// GPU ms of the main mix per frame (live instances, mixer, output effects, master, REC)
     main_ms: f32,
@@ -324,7 +330,7 @@ impl App {
             finder_search: std::env::var("VIDEOPING_SELFTEST_FINDER").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).unwrap_or_default(),
             finder_sel: None,
             finder_new_root: String::new(),
-            finder_cat: FileKind::Clip,
+            finder_cat: Some(FileKind::Clip),
             finder_open: HashMap::new(),
             finder_last_search: String::new(),
             preview: None,
@@ -376,6 +382,7 @@ impl App {
             tab: match std::env::var("VIDEOPING_SELFTEST_TAB").as_deref() {
                 Ok("midi") => Tab::Midi,
                 Ok("ai") => Tab::Ai,
+                Ok("shader") => Tab::Shader,
                 _ => Tab::Live,
             },
             midi_sel_port: None,
@@ -393,6 +400,9 @@ impl App {
             doc_windows: std::env::var("VIDEOPING_SELFTEST_DOC").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).map(PathBuf::from).into_iter().collect(),
             md_cache: Default::default(),
             ai: Default::default(),
+            shed: Default::default(),
+            ai_shed: Default::default(),
+            edit_request: std::env::var("VIDEOPING_SELFTEST_EDIT").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).map(PathBuf::from),
             prepare_div_since: Instant::now(),
             main_ms: 0.0,
             prepare_renders: 0,
@@ -701,6 +711,14 @@ impl App {
                 let mut fc = FrameCtx { dt: idt, bpm, beat_prev: ibeat, beat_now: now_beat, rng: &mut self.rng };
                 r.render_instance(gl, pv, &mut fc);
             }
+            // the shader editor's preview: only while its tab is open
+            if self.tab == Tab::Shader {
+                if let Some(pv) = self.shed.inst.as_mut() {
+                    let (idt, ibeat) = inst_clock(&mut self.inst_clock, pv.id, now, dt, beat_prev, now_beat);
+                    let mut fc = FrameCtx { dt: idt, bpm, beat_prev: ibeat, beat_now: now_beat, rng: &mut self.rng };
+                    r.render_instance(gl, pv, &mut fc);
+                }
+            }
             crate::gfx::reset_state(gl);
         }
 
@@ -841,7 +859,9 @@ impl App {
                 self.tab = Tab::Live;
             }
             ui.add_enabled(false, egui::Button::new(egui::RichText::new("mapping").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
-            ui.add_enabled(false, egui::Button::new(egui::RichText::new("shader editor").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
+            if widgets::choice(ui, self.tab == Tab::Shader, "shader editor").clicked() {
+                self.tab = Tab::Shader;
+            }
             if widgets::choice(ui, self.tab == Tab::Midi, "midi mapping").clicked() {
                 self.tab = Tab::Midi;
             }
@@ -1128,10 +1148,10 @@ impl App {
         // a new search: show a category that has hits
         if search != self.finder_last_search {
             self.finder_last_search = search.clone();
-            let open = FINDER_CATS.iter().position(|(_, k)| *k == self.finder_cat).unwrap_or(0);
-            if !search.is_empty() && counts[open] == 0 {
+            let open = FINDER_CATS.iter().position(|(_, k)| Some(k) == self.finder_cat.as_ref());
+            if !search.is_empty() && open.is_none_or(|o| counts[o] == 0) {
                 if let Some(c) = counts.iter().position(|n| *n > 0) {
-                    self.finder_cat = FINDER_CATS[c].1.clone();
+                    self.finder_cat = Some(FINDER_CATS[c].1.clone());
                 }
             }
         }
@@ -1139,7 +1159,7 @@ impl App {
         let header_h = 20.0;
         let gap = ui.spacing().item_spacing.y;
         for (ci, (title, kind)) in FINDER_CATS.iter().enumerate() {
-            let open = *kind == self.finder_cat;
+            let open = self.finder_cat.as_ref() == Some(kind);
             let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), header_h), Sense::click());
             let bg = if open { Color32::from_gray(48) } else if resp.hovered() { Color32::from_gray(40) } else { Color32::from_gray(32) };
             ui.painter().rect_filled(rect, 2.0, bg);
@@ -1151,7 +1171,8 @@ impl App {
             let nc = if !search.is_empty() && n > 0 { ACCENT } else { Color32::from_gray(120) };
             ui.painter().text(rect.right_center() - vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, n.to_string(), egui::FontId::monospace(11.0), nc);
             if resp.clicked() {
-                self.finder_cat = kind.clone();
+                // the open one closes again (all closed = only the headers)
+                self.finder_cat = if open { None } else { Some(kind.clone()) };
             }
             if !open {
                 continue;
@@ -1266,6 +1287,14 @@ impl App {
                 *action = Some((e.path.clone(), e.kind.clone(), true));
             } else if r.clicked() {
                 *action = Some((e.path.clone(), e.kind.clone(), false));
+            }
+            if e.kind != FileKind::Clip {
+                r.context_menu(|ui| {
+                    if ui.button("✎ edit in the shader editor").clicked() {
+                        self.edit_request = Some(e.path.clone());
+                        ui.close();
+                    }
+                });
             }
         });
     }
@@ -1577,14 +1606,17 @@ impl App {
                         ui.colored_label(Color32::RED, err);
                     }
                     let doc = self.docs.get(path);
-                    if let Some(d) = &doc {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("generator").weak());
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("generator").weak());
+                        if let Some(d) = &doc {
                             if doc_buttons(ui, d) {
                                 open_doc = Some(path.clone());
                             }
-                        });
-                    }
+                        }
+                        if widgets::btn(ui, "✎").on_hover_text("edit this shader in the shader editor").clicked() {
+                            self.edit_request = Some(path.clone());
+                        }
+                    });
                     if let Some(info) = infos.get(path) {
                         params_ui(ui, info, params, doc.as_deref(), ("gen", id));
                     }
@@ -1616,6 +1648,7 @@ impl App {
         let shader_errors: Vec<Option<String>> = fx_paths.iter().map(|p| self.r.as_ref().and_then(|r| r.shader_error(p)).map(|s| s.to_string())).collect();
         let fx_docs: Vec<Option<std::rc::Rc<crate::shader_doc::Doc>>> = fx_paths.iter().map(|p| self.docs.get(p)).collect();
         let mut open_doc: Option<PathBuf> = None;
+        let mut edit: Option<PathBuf> = None;
         // resource meter per effect: (level, tooltip), None when not rendered
         let fx_usage: Vec<Option<(u8, String)>> = {
             let budget = self.budget_ms();
@@ -1689,6 +1722,9 @@ impl App {
                         if doc_buttons(ui, d) {
                             open_doc = Some(fx.path.clone());
                         }
+                    }
+                    if widgets::btn(ui, "✎").on_hover_text("edit this shader in the shader editor").clicked() {
+                        edit = Some(fx.path.clone());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if widgets::btn(ui, "×").clicked() {
@@ -1764,6 +1800,9 @@ impl App {
         }
         if let Some(p) = open_doc {
             self.open_doc(p);
+        }
+        if edit.is_some() {
+            self.edit_request = edit;
         }
     }
 
@@ -2552,6 +2591,8 @@ mod midi_tab;
 mod mcp_tools;
 #[path = "ai_tab.rs"]
 mod ai_tab;
+#[path = "shader_editor.rs"]
+mod shader_editor;
 
 /// Top-level tabs (mapping, shader editor and sequencer later).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2559,6 +2600,7 @@ enum Tab {
     Live,
     Midi,
     Ai,
+    Shader,
 }
 
 impl eframe::App for App {
@@ -2569,12 +2611,19 @@ impl eframe::App for App {
         self.render(&gl);
 
         self.ai_poll(&gl, &ctx);
+        if let Some(p) = self.edit_request.take() {
+            self.shader_open(p);
+        }
+        if self.tab == Tab::Shader {
+            self.shader_poll(&gl);
+        }
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui, &gl));
         // the output keeps rendering in every tab (render() above)
         match self.tab {
             Tab::Live => self.live_tab(ui, frame, &ctx),
             Tab::Midi => self.midi_tab(ui),
             Tab::Ai => self.ai_tab(ui, frame),
+            Tab::Shader => self.shader_tab(ui, frame, &gl),
         }
 
         self.doc_windows(&ctx);
@@ -3206,20 +3255,59 @@ impl App {
         }
         let Some(t) = self.selftest.as_mut() else { return };
         let secs = t.start.elapsed().as_secs_f32();
-        // VIDEOPING_SELFTEST_AI=<mock url>: a chat message at 2 s, the result at 5.5 s
-        if std::env::var_os("VIDEOPING_SELFTEST_AI").is_some() {
+        // VIDEOPING_SELFTEST_EDIT=<.fs>: open in the shader editor; at 1.5 s an error is typed in,
+        // at 2.5 s the mapped error line is printed and the error taken out again
+        // VIDEOPING_SELFTEST_EDIT + VIDEOPING_SELFTEST_AI: the editor's ai against the mock (get,
+        // a broken set, a fixed set, look); the result at 4.2 s
+        if std::env::var_os("VIDEOPING_SELFTEST_EDIT").is_some() && std::env::var_os("VIDEOPING_SELFTEST_AI").is_some() {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            if secs > 1.5 && STEP.load(Ordering::Relaxed) == 0 {
+                STEP.store(1, Ordering::Relaxed);
+                self.shed.show_ai = true;
+                self.ai_selftest_send(ai_tab::Which::Shader, "invert the colours with a slider");
+            } else if secs > 4.2 && STEP.load(Ordering::Relaxed) == 1 {
+                STEP.store(2, Ordering::Relaxed);
+                self.cfg.ai_url_anthropic.clear();
+                eprintln!("selftest editor ai: dirty = {}, text has uInvert = {}, compiles = {}; chat: {}", self.shed.dirty(), self.shed.text.contains("uInvert"), self.r.as_ref().is_some_and(|r| r.shader_error(&self.shed.work).is_none()), self.ai_selftest_summary(ai_tab::Which::Shader));
+            }
+        } else if std::env::var_os("VIDEOPING_SELFTEST_EDIT").is_some() {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            if secs > 1.5 && STEP.load(Ordering::Relaxed) == 0 {
+                STEP.store(1, Ordering::Relaxed);
+                let line = self.shed.text.lines().position(|l| l.contains("gl_FragColor =")).map(|i| i + 1);
+                eprintln!("selftest editor: {} opened, {} lines, kind {:?}; typing an error into line {line:?}", self.shed.name(), self.shed.text.lines().count(), self.infos.get(&self.shed.work).map(|i| i.is_effect));
+                self.shed.text = self.shed.text.replacen("gl_FragColor =", "gl_FragColour =", 1);
+                self.shed_touch();
+            } else if secs > 2.5 && STEP.load(Ordering::Relaxed) == 1 {
+                STEP.store(2, Ordering::Relaxed);
+                let err = self.r.as_ref().and_then(|r| r.shader_error(&self.shed.work)).map(String::from).unwrap_or_default();
+                let mapped = shader_editor::map_errors(&self.shed.text, &err);
+                eprintln!("selftest editor: errors {:?}; file unchanged on disk = {}", mapped.iter().map(|(l, t)| (*l, t.chars().take(60).collect::<String>())).collect::<Vec<_>>(), self.shed.path.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).is_some_and(|t| !t.contains("gl_FragColour")));
+                self.shed.text = self.shed.text.replacen("gl_FragColour =", "gl_FragColor =", 1);
+                self.shed_touch();
+            } else if secs > 3.5 && STEP.load(Ordering::Relaxed) == 2 {
+                STEP.store(3, Ordering::Relaxed);
+                let err = self.r.as_ref().and_then(|r| r.shader_error(&self.shed.work)).map(String::from);
+                eprintln!("selftest editor: fixed -> error {err:?} (expected None), dirty = {} (expected false), preview = {}", self.shed.dirty(), self.r.as_ref().is_some_and(|r| r.output_of(crate::render::EDITOR_ID).is_some()));
+            }
+        }
+        // VIDEOPING_SELFTEST_AI=<mock url>: a chat message at 2 s, the result at 5.5 s (with
+        // VIDEOPING_SELFTEST_EDIT the editor's ai is tested instead, above)
+        if std::env::var_os("VIDEOPING_SELFTEST_AI").is_some() && std::env::var_os("VIDEOPING_SELFTEST_EDIT").is_none() {
             use std::sync::atomic::{AtomicU8, Ordering};
             static STEP: AtomicU8 = AtomicU8::new(0);
             if secs > 2.0 && STEP.load(Ordering::Relaxed) == 0 {
                 STEP.store(1, Ordering::Relaxed);
-                self.ai_selftest_send("dim the output to half and look at it");
+                self.ai_selftest_send(ai_tab::Which::Live, "dim the output to half and look at it");
             } else if secs > 4.0 && STEP.load(Ordering::Relaxed) == 1 {
                 // the chat is done: no mock url in the screenshot (4.5 s)
                 self.cfg.ai_url_anthropic.clear();
                 STEP.store(3, Ordering::Relaxed);
             } else if secs > 5.5 && STEP.load(Ordering::Relaxed) == 3 {
                 STEP.store(2, Ordering::Relaxed);
-                eprintln!("selftest ai: brightness = {:.2} (expected 0.50); chat: {}", self.s.master.brightness, self.ai_selftest_summary());
+                eprintln!("selftest ai: brightness = {:.2} (expected 0.50); chat: {}", self.s.master.brightness, self.ai_selftest_summary(ai_tab::Which::Live));
             }
         }
         // NDI input test: receive our own NDI output as soon as it is discovered

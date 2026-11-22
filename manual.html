@@ -144,9 +144,10 @@
       </ol>
     </li>
     <li><a href="#mcp">8 AI control: ai tab and MCP</a></li>
-    <li><a href="#performance">9 Performance</a></li>
-    <li><a href="#files">10 Files and settings</a></li>
-    <li><a href="#trouble">11 Troubleshooting</a></li>
+    <li><a href="#editor">9 Shader editor</a></li>
+    <li><a href="#performance">10 Performance</a></li>
+    <li><a href="#files">11 Files and settings</a></li>
+    <li><a href="#trouble">12 Troubleshooting</a></li>
   </ol>
 </nav>
 
@@ -210,8 +211,9 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <ul>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
     <span class="b">midi mapping</span> (<a href="#mapping">MIDI controllers</a>) and
-    <span class="b">ai</span> (<a href="#aitab">the ai tab</a>). The output keeps playing in every tab.
-    Mapping, shader editor and sequencer come later.</li>
+    <span class="b">ai</span> (<a href="#aitab">the ai tab</a>) and <span class="b">shader editor</span>
+    (<a href="#editor">Shader editor</a>). The output keeps playing in every tab. Mapping and sequencer
+    come later.</li>
   <li>A status message appears for a few seconds (saved, loaded, recording to …).</li>
   <li><b>GPU · VRAM · CPU</b>: what videoping uses right now (see <a href="#performance">Performance</a>).</li>
   <li><b>fps counter</b> <code>measured / target fps</code>: grey = fine; white with ⚠ = the output does
@@ -231,7 +233,8 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     <li>Four categories: <b>clips</b>, <b>generators</b>, <b>effects</b> and <b>NDI sources</b>
       (found automatically on the network). Their headers always stay visible, with the number of
       files; one is open at a time and scrolls on its own. Click another header to switch: each keeps
-      its scroll position, so from deep in the clips the effects are one click away. Whether a shader
+      its scroll position, so from deep in the clips the effects are one click away. Click the open
+      header to close it. Whether a shader
       is a generator or an effect is read from the shader itself, not from the folder it is in.</li>
     <li>Inside a category the files are grouped by <b>folder</b> (with the number of files): click a
       folder to open or close it.</li>
@@ -413,6 +416,8 @@ change the same settings.</p>
     other stack. It keeps all its settings.</li>
   <li>A shader that does not compile shows a red ⚠ next to its name; hover for the error.</li>
   <li><span class="b">?</span> next to the name: the shader has <a href="#shaderdocs">documentation</a>.</li>
+  <li><span class="b">✎</span> next to the name (and next to "generator" for a generator): open the shader in
+    the <a href="#editor">shader editor</a>. In the finder: right click on a shader → edit.</li>
 </ul>
 
 <h3 id="shaderdocs">Shader documentation</h3>
@@ -662,7 +667,7 @@ every tool call is listed in the chat with its result. The output preview is on 
   <tr><td><code>state</code></td><td>overview: what plays in which layer, master, bpm, recording, the slots and their effects, output effects, frame rate and GPU load</td></tr>
   <tr><td><code>list_addresses</code> · <code>get</code> · <code>set</code></td><td>everything a controller can do, with the same <a href="#midi">addresses</a> (<code>/layer/2/mix</code>, <code>/slot/9/fx/1/param/3</code> …)</td></tr>
   <tr><td><code>list_files</code> · <code>load_file</code> · <code>add_effect</code></td><td>the files of the finder; put a clip or generator into a slot; add an effect to a slot or the output (max 4)</td></tr>
-  <tr><td><code>frame</code></td><td>the output, the preview or a slot as an image</td></tr>
+  <tr><td><code>frame</code></td><td>the output, the preview, a slot or the shader editor's preview as an image</td></tr>
   <tr><td><code>shader_errors</code> · <code>shader_info</code></td><td>which shaders do not compile and why; the parameters of a shader in videoping's numbering, and its <a href="#shaderdocs">documentation</a></td></tr>
 </table>
 
@@ -676,7 +681,53 @@ every tool call is listed in the chat with its result. The output preview is on 
 </ul>
 
 <!-- ================================================================== -->
-<h2 id="performance"><span class="n">9</span>Performance</h2>
+<h2 id="editor"><span class="n">9</span>Shader editor</h2>
+
+<p>Write and change ISF shaders inside videoping, with a live preview — by hand, or by telling the
+AI what you want.</p>
+<figure><img src="docs/editor.png" width="1500" alt="the shader editor: code with line numbers, preview with parameters, the ai chat"></figure>
+
+<h3>Open, new, save</h3>
+<ul>
+  <li><span class="b">open ▾</span> lists the generators and effects of the finder (with search). Also
+    <span class="b">✎</span> next to an effect in the prepare detail, or a right click on a shader in the
+    finder.</li>
+  <li><span class="b">new generator</span> / <span class="b">new effect</span> start from a small working
+    example. The file name field is filled with a free name next to your other shaders of that kind.</li>
+  <li><b>Ctrl+S</b> or <span class="b">save</span> writes the file shown in the <b>file</b> field. Type
+    another name there to save a copy; an existing other file is never overwritten.
+    <span class="b">revert</span> goes back to the saved file. A <b>•</b> after the name = unsaved
+    changes; opening another shader then asks first (save / discard / cancel).</li>
+  <li>Until you save, nothing changes on disk: the clips that use the shader keep the saved version.
+    After saving they switch to the new one at once.</li>
+</ul>
+
+<h3>Editing and the preview</h3>
+<ul>
+  <li>The preview follows your typing (a quarter second after the last key). A <b>generator</b> is
+    shown alone, an <b>effect</b> on the selected instance of the live tab (or on what plays in a layer).</li>
+  <li>Under the preview: the shader's <b>parameters</b> as sliders, to try them out while you edit.</li>
+  <li>The line at the bottom says <b>compiles ✓</b> or lists the <b>errors</b> with the line in your
+    file (the line numbers on the left turn red). Click an error to jump to its line.</li>
+  <li>The preview renders only while this tab is open, so it costs nothing while you play.</li>
+</ul>
+
+<h3>With the AI</h3>
+<ul>
+  <li>Switch the panel under the preview from <span class="b">parameters</span> to
+    <span class="b">ai</span> and describe what you want: "a slow plasma in purple", "make it pulse
+    with the bpm", "add a hue shift slider", "why is it so slow?".</li>
+  <li>The AI reads the shader, writes the whole file into the editor, sees the compile errors and
+    fixes them, and looks at the preview. Every step is listed; <span class="b">undo</span> next to a
+    change puts the text back as it was.</li>
+  <li>It only changes the text in the editor, never the file: you decide with save. It can read the
+    other shaders of the finder (and their documentation) to learn from them.</li>
+  <li>It uses the provider, model and key of the <a href="#aitab">ai tab</a>; its conversation is
+    separate from the ai tab's.</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2 id="performance"><span class="n">10</span>Performance</h2>
 
 <p>videoping tells you when it gets too heavy, before the audience sees it.</p>
 
@@ -722,7 +773,7 @@ dropped frames.</p>
 </ul>
 
 <!-- ================================================================== -->
-<h2 id="files"><span class="n">10</span>Files and settings</h2>
+<h2 id="files"><span class="n">11</span>Files and settings</h2>
 
 <p><b>Session</b>: everything you set up — prepare grid (all pages, instances, effects, parameters),
 mixer layers, output effects, bpm, master, output options, finder folders and favorites.</p>
@@ -756,7 +807,7 @@ shader when its file changes, so you can edit a shader in a text editor while it
 <code>.md</code> file of the same name is its <a href="#shaderdocs">documentation</a>.</p>
 
 <!-- ================================================================== -->
-<h2 id="trouble"><span class="n">11</span>Troubleshooting</h2>
+<h2 id="trouble"><span class="n">12</span>Troubleshooting</h2>
 
 <dl class="qa">
   <dt>Starting videoping does nothing.</dt>
@@ -825,6 +876,10 @@ shader when its file changes, so you can edit a shader in a text editor while it
   <dt>The ai tab waits long ("thinking …").</dt>
   <dd>Set effort to <i>low</i>, or use a faster model (<code>claude-haiku-5-5</code>). Big jobs (many
     slots, looking at the output) take several rounds; <span class="b">stop</span> breaks off.</dd>
+
+  <dt>The shader editor shows no preview for an effect.</dt>
+  <dd>An effect needs a picture to work on: select an instance in the live tab (or have one playing in
+    a layer).</dd>
 
   <dt>Paste (Ctrl+V) does nothing in a text field.</dt>
   <dd>Builds before 22 November 2026 had no clipboard support: update and restart videoping.</dd>

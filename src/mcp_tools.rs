@@ -199,11 +199,13 @@ impl App {
                     Some((r.out.tex, w, h))
                 } else if src == "preview" {
                     self.s.selected_instance.and_then(|id| r.output_of(id)).map(|t| (t, w, h))
+                } else if src == "editor" {
+                    r.output_of(crate::render::EDITOR_ID).map(|t| (t, w, h))
                 } else if let Some(n) = src.strip_prefix("slot").and_then(|x| x.trim().parse::<usize>().ok()) {
                     let id = self.s.slots.get(n.wrapping_sub(1)).and_then(|x| x.as_ref()).map(|i| i.id);
                     id.and_then(|id| r.output_of(id).map(|t| (t, w, h)).or_else(|| r.thumb(id).map(|t| (t, crate::render::THUMB_W, crate::render::THUMB_H))))
                 } else {
-                    return ToolResult::error("source: output, preview or \"slot N\"");
+                    return ToolResult::error("source: output, preview, editor or \"slot N\"");
                 };
                 let Some((tex, tw, th)) = tex else { return ToolResult::error(format!("{src}: nothing rendered there (select it or load it into a layer)")) };
                 let (pw, ph, px) = r.snapshot(gl, tex, tw, th, width);

@@ -279,6 +279,15 @@ impl Renderer {
         self.ndi_status.clear();
     }
 
+    /// Compile again at the next use (the shader editor wrote the file).
+    pub fn reload_shader(&mut self, gl: &Gl, path: &Path) {
+        if let Some(old) = self.shaders.remove(path) {
+            if let Some(p) = old.prog {
+                p.delete(gl);
+            }
+        }
+    }
+
     pub fn shader_info(&mut self, gl: &Gl, path: &Path) -> Option<&IsfInfo> {
         self.shader(gl, path).info.as_ref()
     }
@@ -831,7 +840,7 @@ impl Renderer {
     /// Free GPU state of deleted instances; stop players of long inactive instances.
     pub fn gc(&mut self, gl: &Gl, s: &Session) {
         let alive: std::collections::HashSet<u64> = s.slots.iter().flatten().map(|i| i.id).collect();
-        let dead: Vec<u64> = self.insts.keys().filter(|k| !alive.contains(k) && **k != PREVIEW_ID).copied().collect();
+        let dead: Vec<u64> = self.insts.keys().filter(|k| !alive.contains(k) && **k != PREVIEW_ID && **k != EDITOR_ID).copied().collect();
         for id in dead {
             if let Some(mut g) = self.insts.remove(&id) {
                 g.delete(gl);
@@ -890,6 +899,8 @@ fn ph(t: &Target) -> Target {
 
 /// Id of the transient finder preview instance.
 pub const PREVIEW_ID: u64 = u64::MAX;
+/// Id of the shader editor's preview instance.
+pub const EDITOR_ID: u64 = u64::MAX - 1;
 
 #[derive(Clone, Copy)]
 enum StateKey {
