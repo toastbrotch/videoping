@@ -239,7 +239,8 @@ pub fn twister_cc(col: u8, row: u8) -> u8 {
 }
 
 /// The Midi Fighter Twister default layout (features.md): column 4 = the mix of layer 1 / 2 / 3
-/// and the master brightness (top-down); the led rings show the value. The other 12 are free.
+/// and the master brightness (top-down); columns 1-3 = parameters 1-12 of the selected
+/// instance's focus (the effect opened last), row by row, push = reset; the rings show the value.
 pub fn twister_profile() -> Profile {
     let enc = |row: u8, addr: &str| Binding {
         channel: 0,
@@ -249,7 +250,16 @@ pub fn twister_profile() -> Profile {
         feedback: Feedback::Range,
         feedback_addr: None,
     };
-    let bindings = vec![enc(0, "/layer/1/mix"), enc(1, "/layer/2/mix"), enc(2, "/layer/3/mix"), enc(3, "/master/brightness")];
+    let mut bindings = vec![enc(0, "/layer/1/mix"), enc(1, "/layer/2/mix"), enc(2, "/layer/3/mix"), enc(3, "/master/brightness")];
+    // columns 1-3: parameters 1-12 of the selected instance's focus, row by row; push = reset
+    for row in 0..4u8 {
+        for col in 0..3u8 {
+            let n = row * 3 + col + 1;
+            let cc = twister_cc(col, row);
+            bindings.push(Binding { channel: 0, msg: Msg::Cc(cc), mode: Mode::Absolute, addr: format!("/sel/param/{n}"), feedback: Feedback::Range, feedback_addr: None });
+            bindings.push(Binding { channel: 1, msg: Msg::Cc(cc), mode: Mode::Trigger, addr: format!("/sel/param/{n}/reset"), feedback: Feedback::None, feedback_addr: None });
+        }
+    }
     // all 4 banks (16 encoders each, cc 0..63): also rings of encoders without a binding go to 0
     Profile { name: "Midi Fighter Twister".into(), ports: vec!["twister".into()], bindings, clear_notes: Some(0), clear_ccs: Some(64), grid: None }
 }
@@ -573,7 +583,9 @@ impl Midi {
                 continue;
             }
             let pi = if selftest {
-                self.profiles.iter().position(|p| p.name == "Bhoreal")
+                // "vp-selftest twister" = the Twister, any other virtual one = the Bhoreal
+                let want = if low.contains("vp-selftest twister") { "Midi Fighter Twister" } else { "Bhoreal" };
+                self.profiles.iter().position(|p| p.name == want)
             } else {
                 self.profiles.iter().position(|p| p.matches(&name))
             };
@@ -1027,6 +1039,15 @@ mod tests {
         assert_eq!(find(7).unwrap().0, "/layer/2/mix");
         assert_eq!(find(11).unwrap().0, "/layer/3/mix");
         assert_eq!(find(15).unwrap().0, "/master/brightness");
+        // columns 1-3: parameters 1-12 row by row (top left = 1, row 2 starts with 4)
+        assert_eq!(find(0).unwrap().0, "/sel/param/1");
+        assert_eq!(find(2).unwrap().0, "/sel/param/3");
+        assert_eq!(find(4).unwrap().0, "/sel/param/4");
+        assert_eq!(find(14).unwrap().0, "/sel/param/12");
+        // the push (channel 2) resets it
+        let push = p.bindings.iter().find(|b| b.channel == 1 && b.msg == Msg::Cc(0)).unwrap();
+        assert_eq!((push.addr.as_str(), push.mode), ("/sel/param/1/reset", Mode::Trigger));
+        assert_eq!(p.bindings.len(), 4 + 12 * 2);
         assert_eq!(p.clear_ccs, Some(64), "all rings of all 4 banks off on connect / quit");
         assert!(p.matches("Midi Fighter Twister:Midi Fighter Twister MIDI 1 16:0"));
         assert!(!bhoreal_profile().matches("Midi Fighter Twister:Midi Fighter Twister MIDI 1 16:0"));

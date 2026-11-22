@@ -893,7 +893,7 @@ impl App {
 
     /// "/page/slot/9/..." -> the absolute "/slot/N/..." for the page shown (other addresses as they are)
     pub fn page_slot_resolve(&self, addr: &str) -> String {
-        crate::control::page_alias(&self.s, addr).unwrap_or_else(|| addr.to_string())
+        crate::control::resolve(&self.s, addr)
     }
 
     /// min / max of a range address
@@ -1435,6 +1435,18 @@ impl App {
             Owner::Instance(_) => format!("effects ({count}/{MAX_EFFECTS})"),
             Owner::Output => format!("output effects ({count}/{MAX_EFFECTS})"),
         };
+        // which effect the /sel controls point at (only shown on the selected instance)
+        let focus_uid = match owner {
+            Owner::Instance(id) if self.s.selected_instance == Some(id) => {
+                let inst = self.s.find(id);
+                let is_gen = inst.is_some_and(|i| matches!(i.source, SourceKind::Generator { .. }));
+                inst.and_then(|i| {
+                    i.effects.iter().find(|e| Some(e.uid) == self.s.focus_fx).map(|e| e.uid).or_else(|| if is_gen { None } else { i.effects.first().map(|e| e.uid) })
+                })
+            }
+            _ => None,
+        };
+        let mut new_focus: Option<u64> = None;
         let Some(effects) = self.effects_mut(owner) else { return };
         // the stack (= drop area) reaches down to the bottom of the visible column
         let frame = egui::Frame::group(ui.style());
@@ -1457,6 +1469,13 @@ impl App {
                     let name = isf::display_name(&fx.path);
                     if ui.add(egui::Button::new(format!("{arrow} {name}")).frame(false)).clicked() {
                         fx.open = !fx.open;
+                        // opening an effect points the "selected" controls (Twister) at it
+                        if fx.open {
+                            new_focus = Some(fx.uid);
+                        }
+                    }
+                    if focus_uid == Some(fx.uid) {
+                        ui.label(egui::RichText::new("◎").weak()).on_hover_text("the Twister encoders (columns 1-3) control this effect's parameters 1-12; open another effect to switch");
                     }
                     if let Some(Some((level, tip))) = fx_usage.get(i) {
                         widgets::meter(ui, *level, tip);
@@ -1532,6 +1551,9 @@ impl App {
         }
         if let Some(p) = ev_add {
             self.add_effect(owner, &p);
+        }
+        if new_focus.is_some() {
+            self.s.focus_fx = new_focus;
         }
     }
 
@@ -1624,11 +1646,11 @@ impl App {
             let clicked_inside = ui.input(|i| i.pointer.primary_clicked()) && r.contains_pointer();
             if r.clicked() || clicked_inside {
                 self.s.selected_layer = li;
-                if let Some(id) = self.s.layers[li].instance {
-                    self.s.selected_instance = Some(id);
-                    if let Some(slot) = self.s.slot_of(id) {
-                        self.s.page = slot / SLOTS_PER_PAGE;
-                    }
+                // its instance into the prepare detail; an empty layer empties it (like an empty
+                // slot), so the "selected" controls (Twister) have nothing to point at
+                self.s.selected_instance = self.s.layers[li].instance;
+                if let Some(slot) = self.s.layers[li].instance.and_then(|id| self.s.slot_of(id)) {
+                    self.s.page = slot / SLOTS_PER_PAGE;
                 }
             }
             // drop a slot onto a layer = load it there
@@ -2494,6 +2516,10 @@ struct MidiSim {
     _leds_in: midir::MidiInputConnection<()>,
     leds: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>>,
     step: u32,
+    /// a virtual Twister: encoders out, rings in (cc on channel 1)
+    tw_out: Option<midir::MidiOutputConnection>,
+    _tw_in: Option<midir::MidiInputConnection<()>>,
+    rings: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>>,
 }
 
 struct SelfTest {
@@ -2711,7 +2737,25 @@ impl App {
                 .ok()
             });
             match (out, inp) {
-                (Ok(out), Some(inp)) => t.midi_sim = Some(MidiSim { out, _leds_in: inp, leds, step: 0 }),
+                (Ok(out), Some(inp)) => {
+                    // the virtual Twister (ports named alike, like a real device)
+                    let rings: std::sync::Arc<std::sync::Mutex<HashMap<u8, u8>>> = Default::default();
+                    let r2 = rings.clone();
+                    let tw_out = midir::MidiOutput::new("vp-selftest twister").ok().and_then(|o| o.create_virtual("vp-selftest twister").ok());
+                    let tw_in = midir::MidiInput::new("vp-selftest twister").ok().and_then(|i| {
+                        i.create_virtual(
+                            "vp-selftest twister",
+                            move |_, b, _| {
+                                if b.len() == 3 && b[0] == 0xB0 {
+                                    r2.lock().unwrap().insert(b[1], b[2]);
+                                }
+                            },
+                            (),
+                        )
+                        .ok()
+                    });
+                    t.midi_sim = Some(MidiSim { out, _leds_in: inp, leds, step: 0, tw_out, _tw_in: tw_in, rings })
+                }
                 _ => {
                     eprintln!("selftest midi: could not create virtual ports (ALSA sequencer?)");
                     std::process::exit(1);
@@ -2719,9 +2763,10 @@ impl App {
             }
             return;
         }
-        let connected = self.midi.as_ref().is_some_and(|m| m.devices().iter().any(|d| d.0.contains("vp-selftest")));
+        let connected = self.midi.as_ref().is_some_and(|m| m.devices().iter().any(|d| d.0.contains("vp-selftest pads")));
         // the copy of the generator: the generator in a slot other than slot 1
         let dup = self.s.slots.iter().enumerate().skip(1).find(|(_, x)| x.as_ref().is_some_and(|i| matches!(i.source, SourceKind::Generator { .. }))).map(|(i, _)| i);
+        let sel1 = self.control_get("/sel/param/1");
         let Some(t) = self.selftest.as_mut() else { return };
         let Some(sim) = t.midi_sim.as_mut() else { return };
         if sim.step == 0 && !connected {
@@ -2758,7 +2803,7 @@ impl App {
             );
         }
         // learn: cc 20 of the virtual device -> /master/freeze, then use it
-        let port = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("vp-selftest")).map(|d| d.0));
+        let port = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("vp-selftest pads")).map(|d| d.0));
         match sim.step {
             42 => {
                 if let (Some(m), Some(port)) = (self.midi.as_mut(), port.clone()) {
@@ -2812,6 +2857,32 @@ impl App {
                     crate::midi::bhoreal_note(0, 2),
                     leds.get(&crate::midi::bhoreal_note(0, 2)),
                 );
+            }
+            // Twister: the clip (slot 9) selected, focus on its effect 1 (gameboy-camera:
+            // parameter 1 = uResolution 32..288, default 112); encoder 1 to full, then push
+            100 => {
+                self.s.selected_instance = self.s.slots[8].as_ref().map(|i| i.id);
+                self.s.focus_fx = self.s.slots[8].as_ref().and_then(|i| i.effects.first()).map(|e| e.uid);
+            }
+            102 => {
+                if let Some(o) = sim.tw_out.as_mut() {
+                    let _ = o.send(&[0xB0, 0, 127]);
+                }
+            }
+            108 => {
+                let v = sel1.clone();
+                let ring = sim.rings.lock().unwrap().get(&0).copied();
+                eprintln!("selftest twister: encoder 1 turned to 127 -> /sel/param/1 = {v:?} (expected 288), ring {ring:?} (127)");
+                if let Some(o) = sim.tw_out.as_mut() {
+                    let _ = o.send(&[0xB1, 0, 127]); // push (channel 2)
+                    let _ = o.send(&[0xB1, 0, 0]);
+                }
+            }
+            116 => {
+                let v = sel1.clone();
+                let ring = sim.rings.lock().unwrap().get(&0).copied();
+                let brightness_ring = sim.rings.lock().unwrap().get(&15).copied();
+                eprintln!("selftest twister: pushed -> /sel/param/1 = {v:?} (expected the default 112), ring {ring:?} (~42); brightness ring {brightness_ring:?} (127 = 100 %)");
             }
             62 => {
                 let m = self.midi.as_ref();

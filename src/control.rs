@@ -26,6 +26,11 @@
 //!                                            follow the page)
 //! /layer/N/fx/K/...  /layer/N/param/P        the same for whatever is loaded in layer N
 //! /out/fx/K/...                              output effect K
+//! /sel/param/P[/x|/y]   /sel/param/P/reset    parameter P of the focus in the selected instance:
+//!                                            the effect opened last (focus_fx), else the
+//!                                            generator, else effect 1; reset = isf default
+//! /sel/fx/K/...                              effect K of the selected instance
+//! .../param/P/reset                          any parameter back to its isf default (trigger)
 //!
 //! Slots count like the grid: top-down per column, 32 per page (page 2 starts at 33). A binding
 //! to a slot controls whatever is in that slot. Parameters are numbered in the order the ui
@@ -171,6 +176,22 @@ pub fn list(s: &Session, infos: &Infos) -> Vec<Desc> {
     for (k, fx) in s.output_effects.iter().enumerate() {
         list_fx(&mut v, &format!("/out/fx/{}", k + 1), "output", fx, infos);
     }
+    // the selected instance's focus: the same parameters once more under /sel/param, with reset
+    if let Some(prefix) = sel_param_prefix(s) {
+        let pre = format!("{prefix}/");
+        let sel: Vec<Desc> = v
+            .iter()
+            .filter(|d| d.addr.starts_with(&pre))
+            .map(|d| Desc { addr: format!("/sel/param/{}", &d.addr[pre.len()..]), label: format!("selected · {}", d.label), kind: d.kind.clone(), writable: d.writable })
+            .collect();
+        for d in sel {
+            let is_xy = d.addr.ends_with("/x") || d.addr.ends_with("/y");
+            if !is_xy {
+                v.push(Desc { addr: format!("{}/reset", d.addr), label: format!("{} reset", d.label), kind: Kind::Trigger, writable: true });
+            }
+            v.push(d);
+        }
+    }
     v
 }
 
@@ -183,6 +204,37 @@ pub fn page_alias(s: &Session, addr: &str) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Where /sel/param points to right now: "/slot/N/fx/K/param" or "/slot/N/param".
+pub fn sel_param_prefix(s: &Session) -> Option<String> {
+    let id = s.selected_instance?;
+    let slot = s.slot_of(id)? + 1;
+    let inst = s.find(id)?;
+    if let Some(k) = s.focus_fx.and_then(|uid| inst.effects.iter().position(|e| e.uid == uid)) {
+        return Some(format!("/slot/{slot}/fx/{}/param", k + 1));
+    }
+    if matches!(inst.source, SourceKind::Generator { .. }) {
+        return Some(format!("/slot/{slot}/param"));
+    }
+    (!inst.effects.is_empty()).then(|| format!("/slot/{slot}/fx/1/param"))
+}
+
+/// "/sel/param/..." and "/sel/fx/..." -> the absolute slot address of the selected instance
+fn sel_alias(s: &Session, addr: &str) -> Option<String> {
+    match parts(addr).as_slice() {
+        ["sel", "param", rest @ ..] if !rest.is_empty() => Some(format!("{}/{}", sel_param_prefix(s)?, rest.join("/"))),
+        ["sel", "fx", rest @ ..] if !rest.is_empty() => {
+            let slot = s.slot_of(s.selected_instance?)? + 1;
+            Some(format!("/slot/{slot}/fx/{}", rest.join("/")))
+        }
+        _ => None,
+    }
+}
+
+/// The page and selection aliases resolved (other addresses as they are).
+pub fn resolve(s: &Session, addr: &str) -> String {
+    sel_alias(s, addr).or_else(|| page_alias(s, addr)).unwrap_or_else(|| addr.to_string())
 }
 
 fn list_instance(v: &mut Vec<Desc>, prefix: &str, owner: &str, inst: &crate::state::Instance, infos: &Infos) {
@@ -281,7 +333,7 @@ fn effects_of_mut<'a>(s: &'a mut Session, o: &Owner) -> Option<&'a mut Vec<Effec
 // ---------------------------------------------------------------------------------- get
 
 pub fn get(s: &Session, infos: &Infos, ext: Ext, addr: &str) -> Option<Value> {
-    if let Some(a) = page_alias(s, addr) {
+    if let Some(a) = sel_alias(s, addr).or_else(|| page_alias(s, addr)) {
         return get(s, infos, ext, &a);
     }
     let p = parts(addr);
@@ -369,7 +421,7 @@ fn get_param(params: &[Param], name: &str, sub: Option<&str>) -> Option<Value> {
 
 /// Set an address. Triggers ignore the value. Ranges are clamped to their limits.
 pub fn set(s: &mut Session, infos: &Infos, addr: &str, value: &Value) -> Result<Effect, String> {
-    if let Some(a) = page_alias(s, addr) {
+    if let Some(a) = sel_alias(s, addr).or_else(|| page_alias(s, addr)) {
         return set(s, infos, &a, value);
     }
     let p = parts(addr);
@@ -397,13 +449,12 @@ pub fn set(s: &mut Session, infos: &Infos, addr: &str, value: &Value) -> Result<
             let li = n.parse::<usize>().ok().and_then(|n| n.checked_sub(1)).filter(|i| *i < NUM_LAYERS).ok_or_else(bad)?;
             match *field {
                 "select" => {
-                    // like a click on the layer: select it and focus its instance
+                    // like a click on the layer: select it and show its instance in the prepare
+                    // detail; an empty layer empties the detail
                     s.selected_layer = li;
-                    if let Some(id) = s.layers[li].instance {
-                        s.selected_instance = Some(id);
-                        if let Some(slot) = s.slot_of(id) {
-                            s.page = slot / SLOTS_PER_PAGE;
-                        }
+                    s.selected_instance = s.layers[li].instance;
+                    if let Some(slot) = s.layers[li].instance.and_then(|id| s.slot_of(id)) {
+                        s.page = slot / SLOTS_PER_PAGE;
                     }
                 }
                 "active" => s.layers[li].active = want_bool()?,
@@ -476,6 +527,11 @@ fn mixtype_value(v: &Value) -> Option<MixType> {
 fn set_param(params: &mut [Param], info: &IsfInfo, name: &str, sub: Option<&str>, value: &Value) -> Option<()> {
     let inp = info.inputs.iter().find(|i| i.name == name)?;
     let p = params.iter_mut().find(|p| p.name == name)?;
+    // back to the isf default, as freshly loaded (value, range, animation off): like a right click
+    if sub == Some("reset") {
+        p.value = crate::isf::default_params(info).into_iter().find(|d| d.name == name)?.value;
+        return Some(());
+    }
     match (&inp.kind, &mut p.value, sub) {
         (InputKind::Float { min, max, .. }, ParamValue::Anim(a), None) => a.first_mut()?.value = value.as_num()?.clamp(*min, *max),
         (InputKind::Long { min, max, .. }, ParamValue::Anim(a), None) => a.first_mut()?.value = value.as_num()?.round().clamp(*min, *max),
@@ -491,7 +547,7 @@ fn set_param(params: &mut [Param], info: &IsfInfo, name: &str, sub: Option<&str>
 
 /// min / max of a range address (None: not a range or does not exist)
 pub fn range(s: &Session, infos: &Infos, addr: &str) -> Option<(f32, f32)> {
-    let addr = page_alias(s, addr).unwrap_or_else(|| addr.to_string());
+    let addr = resolve(s, addr);
     list(s, infos).into_iter().find(|d| d.addr == addr).and_then(|d| match d.kind {
         Kind::Range { min, max, .. } => Some((min, max)),
         _ => None,
@@ -597,9 +653,40 @@ mod tests {
         set(&mut s, &infos, "/page", &Value::Num(2.0)).unwrap();
         assert_eq!(get(&s, &infos, Ext::default(), "/page/slot/1/state"), Some(Value::Text("empty".into())));
         set(&mut s, &infos, "/page", &Value::Num(1.0)).unwrap();
+        // selecting an empty layer empties the prepare detail (and /sel)
+        s.selected_instance = Some(clip);
+        set(&mut s, &infos, "/layer/3/select", &Value::Bool(true)).unwrap();
+        assert_eq!((s.selected_layer, s.selected_instance), (2, None));
+        assert_eq!(get(&s, &infos, Ext::default(), "/sel/param/1"), None);
+        set(&mut s, &infos, "/layer/2/select", &Value::Bool(true)).unwrap();
+        assert_eq!(s.selected_instance, Some(clip));
         set(&mut s, &infos, "/layer/2/unload", &Value::Bool(true)).unwrap();
         assert!(s.layers[1].instance.is_none());
         assert!(set(&mut s, &infos, "/layer/2/fx/1/active", &Value::Bool(true)).is_err(), "nothing loaded");
+    }
+
+    #[test]
+    fn selected_focus() {
+        let (mut s, infos, clip) = setup();
+        // nothing selected: no /sel
+        assert_eq!(get(&s, &infos, Ext::default(), "/sel/param/1"), None);
+        // the clip (slot 1) selected, no focus: its first effect
+        s.selected_instance = Some(clip);
+        assert_eq!(sel_param_prefix(&s).as_deref(), Some("/slot/1/fx/1/param"));
+        set(&mut s, &infos, "/sel/param/1", &Value::Num(200.0)).unwrap();
+        assert_eq!(get(&s, &infos, Ext::default(), "/slot/1/fx/1/param/1"), Some(Value::Num(200.0)));
+        assert_eq!(range(&s, &infos, "/sel/param/1"), Some((32.0, 288.0)));
+        // reset: back to the isf default (112)
+        set(&mut s, &infos, "/sel/param/1/reset", &Value::Bool(true)).unwrap();
+        assert_eq!(get(&s, &infos, Ext::default(), "/sel/param/1"), Some(Value::Num(112.0)));
+        // the generator (slot 2) selected: its own parameters
+        let gen_id = s.slots[1].as_ref().unwrap().id;
+        s.selected_instance = Some(gen_id);
+        assert_eq!(sel_param_prefix(&s).as_deref(), Some("/slot/2/param"));
+        assert!(list(&s, &infos).iter().any(|d| d.addr == "/sel/param/1/reset"));
+        // focus on an effect that is not in the selected instance: ignored
+        s.focus_fx = Some(9999);
+        assert_eq!(sel_param_prefix(&s).as_deref(), Some("/slot/2/param"));
     }
 
     #[test]

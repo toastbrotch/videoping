@@ -232,6 +232,7 @@ the prepare area uses two columns (see "layout of the tab live"):
     - same instance as in the prepare lane, so changes here and there are the same
     - effects are not shown here (only in the prepare detail)
   - click on a layer = select it + focus its instance in the prepare lane (shows its detail, switches the prepare page if needed)
+    - an empty layer: the prepare detail becomes empty (like a click on an empty slot), so the twister parameter encoders control nothing (fixed 2026-11-22); the same for the bhoreal select pads
     - also when clicking one of the layer's controls (the controls still do their own action)
 - mark the selected layer
 
@@ -408,8 +409,11 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 - protocol (checked on the hardware 2026-11-21): encoders numbered row by row from the top left (top left = cc 0, top right = cc 3, bottom right = cc 15); turning: cc on channel 1, absolute 0..127; pushing: the same cc on channel 2, 127 = pressed, 0 = released; a cc sent to it on channel 1 sets the led ring
 - built-in profile "Midi Fighter Twister" (default layout, decided 2026-11-21):
   - column 4, top-down: mix of layer 1, layer 2, layer 3, master brightness (absolute; the led ring shows the value, also after mouse changes, so turning never jumps)
-  - the other 12 encoders and the pushes: not decided yet (free for midi learn)
-- the earlier idea below (bank 1 = parameters of the selected effect) is not built yet:
+  - columns 1-3 (decided + built 2026-11-22): parameters 1-12 of the focus of the selected instance, row by row (top left = 1, row 2 starts with 4), absolute with ring feedback; push (channel 2) = reset that parameter to its isf default
+    - focus = the effect opened last (▸ -> ▾) in the selected instance, marked ◎ next to its name; no focus: the generator's own parameters, else effect 1 (runtime only, not saved)
+    - registry: /sel/param/N (and /sel/param/N/reset, /sel/fx/K/...) resolve to the selected instance's slot; any .../param/N/reset = back to default
+    - switching the focus moves the rings to the new values (feedback), so turning never jumps
+- the earlier idea below is what was built (bank 2 not yet):
 
 earlier idea, decided 2026-11-21:
 - bank 1: the 16 encoders = the first 16 parameters of the selected effect (or of the selected generator), relative mode

@@ -73,7 +73,7 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_L1MIX=a\|lk\|ilk\|ad` | mix-type of layer 1 (the generator over the clip; default lk), check the result in `out_*.rgba` |
 | `VIDEOPING_SELFTEST_L1=clip` | clip in layer 1 over the generator (several brightness levels, for key checks) |
 | `VIDEOPING_SELFTEST_L1AMOUNT=<0..100>` | mix of layer 1 in % (luma fade check with `_L1MIX=lk\|ilk`) |
-| `VIDEOPING_SELFTEST_MIDI=1` | a virtual MIDI device "vp-selftest pads" (ALSA, Bhoreal profile; named so that no other running videoping picks it up) presses pads (select L3, load the copy of the generator, blackout, effect off), the LED feedback is checked, then cc 20 is learned onto /master/freeze and used; the mouse script is off |
+| `VIDEOPING_SELFTEST_MIDI=1` | a virtual MIDI device "vp-selftest pads" (ALSA, Bhoreal profile; named so that no other running videoping picks it up) presses pads (select L3, load the copy of the generator, blackout, effect off), the LED feedback is checked, then cc 20 is learned onto /master/freeze and used, the orientation is calibrated, and a virtual "vp-selftest twister" turns and pushes encoder 1 (/sel/param/1 of the focused effect); the mouse script is off |
 | `VIDEOPING_SELFTEST_TAB=midi` | start in the midi mapping tab (screenshot of the tab; with `_MIDI` the virtual device is selected) |
 | `VIDEOPING_SELFTEST_MCP=<port>` | MCP server on that port (otherwise off in the self-test); `_MCP_RO=1`: read only |
 | `VIDEOPING_SELFTEST_STAY=<seconds>` | keep the self-test open that long (for calls from outside, e.g. `scripts/mcp-test.sh <port> <outdir>`) |

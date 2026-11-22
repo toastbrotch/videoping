@@ -302,7 +302,7 @@ effects — all before anything is live. The preview shows the result.</p>
   <li>Select a mixer layer (click it), then <b>double-click</b> a slot: it plays in that layer.</li>
   <li>Or drag a slot onto a layer.</li>
   <li>Click a live layer: its instance is selected in the grid (the page switches if needed), so you
-    can tweak it right away.</li>
+    can tweak it right away. Clicking an empty layer selects it and empties the prepare detail.</li>
 </ul>
 
 <p><b>Mix.</b> Per layer (and per effect, it works the same):</p>
@@ -482,12 +482,19 @@ remembered.</p>
 </table>
 
 <h3 id="twister">Midi Fighter Twister</h3>
-<div class="pads t4"><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l1)">L1<br>mix</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l2)">L2<br>mix</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:var(--l3)">L3<br>mix</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad free">free</div><div class="pad" style="--c:#bbb">bright-<br>ness</div></div>
+<div class="pads t4"><div class="pad" style="--c:var(--accent)">param<br>1</div><div class="pad" style="--c:var(--accent)">param<br>2</div><div class="pad" style="--c:var(--accent)">param<br>3</div><div class="pad" style="--c:var(--l1)">L1<br>mix</div><div class="pad" style="--c:var(--accent)">param<br>4</div><div class="pad" style="--c:var(--accent)">param<br>5</div><div class="pad" style="--c:var(--accent)">param<br>6</div><div class="pad" style="--c:var(--l2)">L2<br>mix</div><div class="pad" style="--c:var(--accent)">param<br>7</div><div class="pad" style="--c:var(--accent)">param<br>8</div><div class="pad" style="--c:var(--accent)">param<br>9</div><div class="pad" style="--c:var(--l3)">L3<br>mix</div><div class="pad" style="--c:var(--accent)">param<br>10</div><div class="pad" style="--c:var(--accent)">param<br>11</div><div class="pad" style="--c:var(--accent)">param<br>12</div><div class="pad" style="--c:#bbb">bright-<br>ness</div></div>
 <ul>
   <li><b>Column 4</b>, top-down: mix of layer 1, layer 2, layer 3, and the master brightness.</li>
   <li>The LED ring shows the value, also after changes with the mouse: turning never jumps.</li>
   <li>Brightness during a blackout: the ring shows 0; turning it up ends the blackout and fades in.</li>
-  <li>The other 12 encoders and the pushes are free for now: map them with learn in the tab.</li>
+  <li><b>Columns 1–3</b>: parameters 1–12 of the <b>focused effect</b> of the selected instance,
+    row by row (top left = parameter 1, the next row starts with 4). The focus is the effect you
+    opened last (▸ → ▾); a ◎ next to its name shows it. Nothing opened: a generator's own
+    parameters, else effect 1. Open another effect and the encoders control it at once; the rings
+    jump to its values.</li>
+  <li><b>Push</b> an encoder of columns 1–3: that parameter back to its default (like a right click).</li>
+  <li>Parameters are counted like the parameter list (top-down); an encoder without a parameter
+    shows an empty ring.</li>
   <li>On start and on quit all rings are set to 0 (all 4 banks), also those of encoders without a
     binding.</li>
 </ul>
@@ -532,6 +539,7 @@ also shows its meaning in words (e.g. "slot 9 (testclip) · gameboy-camera · Ko
   <tr><td><code>/page/slot/9/…</code></td><td>slot 9 of the page shown: a controller follows the page</td></tr>
   <tr><td><code>…/param/4</code></td><td>the 4th parameter, counted top-down like the parameter list (not by name: names change while shaders are made)</td></tr>
   <tr><td><code>/out/fx/1/…</code></td><td>output effect 1</td></tr>
+  <tr><td><code>/sel/param/3</code></td><td>parameter 3 of the focused effect of the selected instance (the effect opened last; the Twister uses this); <code>/sel/param/3/reset</code> = back to its default</td></tr>
   <tr><td><code>/master/blackout</code> <code>/bpm</code> <code>/record</code> <code>/page</code></td><td>master, tempo, recording, the prepare page</td></tr>
 </table>
 <p>A binding to a slot controls whatever is in that slot; a binding to a layer whatever plays in that

@@ -416,6 +416,10 @@ pub struct Session {
     pub slots: Vec<Option<Instance>>,
     pub page: usize,
     pub selected_instance: Option<u64>,
+    /// the effect (uid) the "selected instance" controls point at (/sel/param/N: the Twister
+    /// encoders); set by opening an effect; not saved
+    #[serde(skip)]
+    pub focus_fx: Option<u64>,
     pub layers: [Layer; NUM_LAYERS],
     pub selected_layer: usize,
     pub bpm: f32,
@@ -439,6 +443,7 @@ impl Default for Session {
             slots: vec![None; SLOTS_PER_PAGE],
             page: 0,
             selected_instance: None,
+            focus_fx: None,
             layers: Default::default(),
             selected_layer: 0,
             bpm: 120.0,
