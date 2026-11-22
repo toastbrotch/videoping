@@ -80,6 +80,7 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
 | `VIDEOPING_SELFTEST_CONFIG=1` | output options and general config folded open, column 2 scrolled to the bottom (screenshot of the settings) |
 | `VIDEOPING_SELFTEST_AI=<url>` | the ai tab talks to a mock Anthropic server at that url (key "selftest"); at 2 s it sends a message, at 5.5 s it prints the brightness and the chat. The mock must answer with `set /master/brightness 0.5` + `frame`, then a text (see features.md "ai tab") |
+| `VIDEOPING_SELFTEST_FINDER=<search>` | two favorites (gameboy-camera, chaos-feedback) and that search typed into the finder (screenshot of the accordion / search; empty = favorites only) |
 | `VIDEOPING_SELFTEST_DOC=<effect .fs>` | that effect first on the clip (slot 9), its documentation window (.md) open (screenshot of the shader docs) |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |

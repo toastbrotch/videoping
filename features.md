@@ -98,6 +98,12 @@ finder finds these:
   - click = preview, double-click / drag = new instance in the prepare grid (like a clip)
   - an NDI instance has no clip interface; the detail shows its status: resolution @ fps, or "no signal" (normal grey text, no color: colors are reserved for the layer color-code)
   - effects work on it like on any clip; it is received only while it is live / selected (stops 10 s later)
+- overview with many files (decided + built 2026-11-22):
+  - accordion: the category headers (clips · generators · effects · NDI sources) always stay visible, each with its number of files; one category is open and fills the rest of the column with its own scroll; a click on another header switches, every category keeps its scroll position
+  - search ("search all") covers all categories: the headers show the hits (accent when > 0); when the open category has no hit, a category with hits opens; Esc in the field clears it
+  - folders as groups: inside a category the files are grouped by the folder they are in (shown from the finder folder's name on, e.g. "clips/loops/abstract", with the number of files); groups are collapsible, open by default when a category has 3 or fewer, always open while searching; a folder with one file and a category with one folder show the files without a header
+  - favorites: ☆ appears left of a file on hover, a click pins it (★, accent) under "★ favorites" on top of its category (it stays in its folder too); saved in the session, kept by "new" (like the finder folders)
+  - later: "in use" marker (files in the grid / live), clip thumbnails, recently used
 - the finder folders are watched: every 2 s the known folders are checked (modification time only, cheap); a new, deleted or renamed file (e.g. a finished recording, copied clips) appears without a manual refresh
 - videopong clips (prio2)
 - glslop.com shaders or https://editor.isf.video/shaders? (prio2)

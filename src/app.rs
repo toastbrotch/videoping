@@ -28,6 +28,20 @@ struct FinderEntry {
     path: PathBuf,
     name: String,
     kind: FileKind,
+    /// the folder it is in, from the finder folder's name on ("clips/loops/abstract")
+    group: String,
+}
+
+/// The finder categories, top-down (accordion: one is open).
+const FINDER_CATS: [(&str, FileKind); 4] = [("clips", FileKind::Clip), ("generators", FileKind::Generator), ("effects", FileKind::Effect), ("NDI sources", FileKind::Ndi)];
+
+/// Entries grouped by folder, in folder order (indices into the list).
+fn finder_groups(entries: &[&FinderEntry]) -> Vec<(String, Vec<usize>)> {
+    let mut m: std::collections::BTreeMap<&str, Vec<usize>> = Default::default();
+    for (i, e) in entries.iter().enumerate() {
+        m.entry(e.group.as_str()).or_default().push(i);
+    }
+    m.into_iter().map(|(g, v)| (g.to_string(), v)).collect()
 }
 
 pub struct App {
@@ -46,6 +60,12 @@ pub struct App {
     finder_search: String,
     finder_sel: Option<(PathBuf, FileKind)>,
     finder_new_root: String,
+    /// the open finder category (accordion)
+    finder_cat: FileKind,
+    /// folder groups opened / closed by hand ("kind|group" -> open)
+    finder_open: HashMap<String, bool>,
+    /// the search as last seen (a new search may switch the category)
+    finder_last_search: String,
     preview: Option<Instance>,
     preview_key: Option<(PathBuf, Option<u64>)>,
     tex_ids: HashMap<glow::Texture, egui::TextureId>,
@@ -218,7 +238,7 @@ fn mtime(p: &Path) -> Option<std::time::SystemTime> {
 
 /// Files of the finder folders, plus every scanned directory with its modification time.
 fn scan_with_dirs(roots: &[PathBuf]) -> (Vec<FinderEntry>, Vec<(PathBuf, Option<std::time::SystemTime>)>) {
-    fn walk(dir: &Path, depth: usize, out: &mut Vec<FinderEntry>, dirs: &mut Vec<(PathBuf, Option<std::time::SystemTime>)>) {
+    fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<FinderEntry>, dirs: &mut Vec<(PathBuf, Option<std::time::SystemTime>)>) {
         if depth > 5 {
             return;
         }
@@ -233,16 +253,19 @@ fn scan_with_dirs(roots: &[PathBuf]) -> (Vec<FinderEntry>, Vec<(PathBuf, Option<
                 continue;
             }
             if p.is_dir() {
-                walk(&p, depth + 1, out, dirs);
+                walk(root, &p, depth + 1, out, dirs);
             } else if let Some(kind) = isf::classify(&p) {
-                out.push(FinderEntry { name: isf::display_name(&p), path: p, kind });
+                // the group: the folder relative to the parent of the finder folder
+                let base = root.parent().unwrap_or(root);
+                let group = dir.strip_prefix(base).unwrap_or(dir).display().to_string();
+                out.push(FinderEntry { name: isf::display_name(&p), path: p, kind, group });
             }
         }
     }
     let mut out = vec![];
     let mut dirs = vec![];
     for r in roots {
-        walk(r, 0, &mut out, &mut dirs);
+        walk(r, r, 0, &mut out, &mut dirs);
     }
     (out, dirs)
 }
@@ -298,9 +321,12 @@ impl App {
             finder_watch: (finder_roots, finder_dirs),
             finder_checked: Instant::now(),
             finder,
-            finder_search: String::new(),
+            finder_search: std::env::var("VIDEOPING_SELFTEST_FINDER").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).unwrap_or_default(),
             finder_sel: None,
             finder_new_root: String::new(),
+            finder_cat: FileKind::Clip,
+            finder_open: HashMap::new(),
+            finder_last_search: String::new(),
             preview: None,
             preview_key: None,
             tex_ids: HashMap::new(),
@@ -762,10 +788,11 @@ impl App {
         self.preview_key = None;
     }
 
-    /// "new": clear all content, keep the setup (finder folders, output options).
+    /// "new": clear all content, keep the setup (finder folders and favorites, output options).
     fn new_session(&mut self, gl: &glow::Context) {
         let mut s = Session::default();
         s.finder_roots = self.s.finder_roots.clone();
+        s.finder_favs = self.s.finder_favs.clone();
         s.output = self.s.output.clone();
         self.replace_session(s, gl);
         self.set_status("new session");
@@ -1037,7 +1064,11 @@ impl App {
         }
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search").desired_width(field_width(ui, widgets::BTN.x)));
+            let r = ui.add(egui::TextEdit::singleline(&mut self.finder_search).hint_text("search all").desired_width(field_width(ui, widgets::BTN.x)));
+            // Esc clears the search (the field gives up the focus on Esc)
+            if (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.finder_search.clear();
+            }
             if widgets::btn(ui, "↻").on_hover_text("rescan folders").clicked() {
                 self.rescan_finder();
             }
@@ -1071,74 +1102,191 @@ impl App {
             });
         });
         ui.separator();
-        let search = self.finder_search.to_lowercase();
-        let mut action: Option<(PathBuf, FileKind, bool)> = None; // (path, kind, double-click)
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            for (title, kind) in [("clips", FileKind::Clip), ("generators", FileKind::Generator), ("effects", FileKind::Effect)] {
-                egui::CollapsingHeader::new(title).default_open(true).show(ui, |ui| {
-                    for e in self.finder.iter().filter(|e| e.kind == kind) {
-                        if !search.is_empty() && !e.name.to_lowercase().contains(&search) {
-                            continue;
-                        }
-                        let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == e.path);
-                        // shaders: the first paragraph of their .md on hover, ⚠ for a warning
-                        let doc = if kind == FileKind::Clip { None } else { self.docs.get(&e.path) };
-                        let warn = doc.as_ref().and_then(|d| d.warning());
-                        let text = if warn.is_some() { format!("{}  ⚠", e.name) } else { e.name.clone() };
-                        let tip = match &doc {
-                            Some(d) if !d.summary.is_empty() => format!("{}\n\n{}", d.summary, e.path.display()),
-                            _ => e.path.display().to_string(),
-                        };
-                        let tip = match &warn {
-                            Some(w) => format!("⚠ {w}\n\n{tip}"),
-                            None => tip,
-                        };
-                        let r = ui
-                            .add(egui::Button::selectable(selected, text))
-                            .interact(Sense::click_and_drag())
-                            .on_hover_ui(|ui| {
-                                ui.set_max_width(360.0);
-                                ui.label(tip);
-                            });
-                        r.dnd_set_drag_payload(Drag::File(e.path.clone(), e.kind.clone()));
-                        if r.double_clicked() {
-                            action = Some((e.path.clone(), e.kind.clone(), true));
-                        } else if r.clicked() {
-                            action = Some((e.path.clone(), e.kind.clone(), false));
-                        }
-                    }
-                });
-            }
-            egui::CollapsingHeader::new("NDI sources").default_open(true).show(ui, |ui| match &self.ndi_finder {
-                None => {
-                    ui.label(egui::RichText::new("libndi not loaded: set \"NDI library folder\" in the output options").weak());
-                }
-                Some(f) => {
-                    let sources = f.sources();
-                    if sources.is_empty() {
-                        ui.label(egui::RichText::new("searching…").weak());
-                    }
-                    for name in sources {
-                        if !search.is_empty() && !name.to_lowercase().contains(&search) {
-                            continue;
-                        }
-                        let path = PathBuf::from(&name);
-                        let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == path);
-                        let r = ui.add(egui::Button::selectable(selected, &name)).interact(Sense::click_and_drag());
-                        r.dnd_set_drag_payload(Drag::File(path.clone(), FileKind::Ndi));
-                        if r.double_clicked() {
-                            action = Some((path, FileKind::Ndi, true));
-                        } else if r.clicked() {
-                            action = Some((path, FileKind::Ndi, false));
-                        }
-                    }
-                }
-            });
-        });
+        let action = self.finder_list(ui);
         if let Some((p, k, dbl)) = action {
             self.finder_sel = Some((p.clone(), k.clone()));
             if dbl {
                 self.add_file_to_slot(&p, &k, None);
+            }
+        }
+    }
+
+    /// The finder list as an accordion: the four category headers stay visible, the open one
+    /// fills the rest with its own scroll (each keeps its scroll position). Returns a click:
+    /// (path, kind, double-click).
+    fn finder_list(&mut self, ui: &mut Ui) -> Option<(PathBuf, FileKind, bool)> {
+        let search = self.finder_search.trim().to_lowercase();
+        let hit = |name: &str| search.is_empty() || name.to_lowercase().contains(&search);
+        let ndi: Vec<String> = self.ndi_finder.as_ref().map(|f| f.sources()).unwrap_or_default();
+        let count = |k: &FileKind| -> usize {
+            match k {
+                FileKind::Ndi => ndi.iter().filter(|n| hit(n)).count(),
+                k => self.finder.iter().filter(|e| &e.kind == k && hit(&e.name)).count(),
+            }
+        };
+        let counts: Vec<usize> = FINDER_CATS.iter().map(|(_, k)| count(k)).collect();
+        // a new search: show a category that has hits
+        if search != self.finder_last_search {
+            self.finder_last_search = search.clone();
+            let open = FINDER_CATS.iter().position(|(_, k)| *k == self.finder_cat).unwrap_or(0);
+            if !search.is_empty() && counts[open] == 0 {
+                if let Some(c) = counts.iter().position(|n| *n > 0) {
+                    self.finder_cat = FINDER_CATS[c].1.clone();
+                }
+            }
+        }
+        let mut action = None;
+        let header_h = 20.0;
+        let gap = ui.spacing().item_spacing.y;
+        for (ci, (title, kind)) in FINDER_CATS.iter().enumerate() {
+            let open = *kind == self.finder_cat;
+            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), header_h), Sense::click());
+            let bg = if open { Color32::from_gray(48) } else if resp.hovered() { Color32::from_gray(40) } else { Color32::from_gray(32) };
+            ui.painter().rect_filled(rect, 2.0, bg);
+            let txt = format!("{} {title}", if open { "▾" } else { "▸" });
+            let fg = if open { Color32::from_gray(230) } else { Color32::from_gray(180) };
+            ui.painter().text(rect.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, txt, egui::FontId::proportional(13.0), fg);
+            // the number of files, or of hits while searching (accent = hits there)
+            let n = counts[ci];
+            let nc = if !search.is_empty() && n > 0 { ACCENT } else { Color32::from_gray(120) };
+            ui.painter().text(rect.right_center() - vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, n.to_string(), egui::FontId::monospace(11.0), nc);
+            if resp.clicked() {
+                self.finder_cat = kind.clone();
+            }
+            if !open {
+                continue;
+            }
+            // the open category: all the height the headers below leave
+            let below = (FINDER_CATS.len() - ci - 1) as f32 * (header_h + gap);
+            let h = (ui.available_height() - below - gap).max(40.0);
+            egui::ScrollArea::vertical().id_salt(("finder", ci)).max_height(h).auto_shrink([false, false]).show(ui, |ui| {
+                if *kind == FileKind::Ndi {
+                    self.finder_ndi(ui, &ndi, &search, &mut action);
+                } else {
+                    self.finder_files(ui, kind, &search, &mut action);
+                }
+            });
+        }
+        action
+    }
+
+    /// One category of files: favorites on top, then the folders (collapsible when there are
+    /// several; a folder with one file shows it without a header).
+    fn finder_files(&mut self, ui: &mut Ui, kind: &FileKind, search: &str, action: &mut Option<(PathBuf, FileKind, bool)>) {
+        let all = std::mem::take(&mut self.finder);
+        let items: Vec<&FinderEntry> = all.iter().filter(|e| &e.kind == kind && (search.is_empty() || e.name.to_lowercase().contains(search))).collect();
+        let mut fav_toggle: Option<PathBuf> = None;
+        if items.is_empty() {
+            ui.label(egui::RichText::new(if search.is_empty() { "nothing in the finder folders" } else { "no hits" }).weak());
+        }
+        let favs: Vec<&FinderEntry> = items.iter().copied().filter(|e| self.s.finder_favs.contains(&e.path)).collect();
+        if !favs.is_empty() {
+            ui.label(egui::RichText::new("★ favorites").weak().size(widgets::BTN_TEXT));
+            for e in &favs {
+                self.finder_row(ui, e, action, &mut fav_toggle);
+            }
+            ui.add_space(4.0);
+        }
+        let groups = finder_groups(&items);
+        let many = groups.len() > 1;
+        for (g, idx) in &groups {
+            if !many || idx.len() == 1 {
+                for i in idx {
+                    self.finder_row(ui, items[*i], action, &mut fav_toggle);
+                }
+                continue;
+            }
+            // folder header: open by default when there are few folders; always open while searching
+            let key = format!("{kind:?}|{g}");
+            let open = !search.is_empty() || *self.finder_open.get(&key).unwrap_or(&(groups.len() <= 3));
+            let label = format!("{} {g}  ", if open { "▾" } else { "▸" });
+            let mut job = egui::text::LayoutJob::default();
+            job.append(&label, 0.0, egui::TextFormat { font_id: egui::FontId::proportional(widgets::BTN_TEXT), color: Color32::from_gray(170), ..Default::default() });
+            job.append(&idx.len().to_string(), 0.0, egui::TextFormat { font_id: egui::FontId::monospace(10.0), color: Color32::from_gray(110), ..Default::default() });
+            let r = ui.add(egui::Button::new(job).frame(false)).on_hover_text(format!("{} files in {g}", idx.len()));
+            if r.clicked() && search.is_empty() {
+                self.finder_open.insert(key, !open);
+            }
+            if open {
+                ui.indent(("fg", g), |ui| {
+                    for i in idx {
+                        self.finder_row(ui, items[*i], action, &mut fav_toggle);
+                    }
+                });
+            }
+        }
+        drop(items);
+        self.finder = all;
+        if let Some(p) = fav_toggle {
+            if let Some(i) = self.s.finder_favs.iter().position(|f| *f == p) {
+                self.s.finder_favs.remove(i);
+            } else {
+                self.s.finder_favs.push(p);
+            }
+        }
+    }
+
+    /// A file: ★ (favorite; shown on hover), the name (click = preview, double-click = add,
+    /// drag = onto a slot / effect stack).
+    fn finder_row(&mut self, ui: &mut Ui, e: &FinderEntry, action: &mut Option<(PathBuf, FileKind, bool)>, fav_toggle: &mut Option<PathBuf>) {
+        let fav = self.s.finder_favs.contains(&e.path);
+        let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == e.path);
+        // shaders: the first paragraph of their .md on hover, ⚠ for a warning
+        let doc = if e.kind == FileKind::Clip { None } else { self.docs.get(&e.path) };
+        let warn = doc.as_ref().and_then(|d| d.warning());
+        let text = if warn.is_some() { format!("{}  ⚠", e.name) } else { e.name.clone() };
+        let tip = match &doc {
+            Some(d) if !d.summary.is_empty() => format!("{}\n\n{}", d.summary, e.path.display()),
+            _ => e.path.display().to_string(),
+        };
+        let tip = match &warn {
+            Some(w) => format!("⚠ {w}\n\n{tip}"),
+            None => tip,
+        };
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            let (star, star_r) = ui.allocate_exact_size(vec2(14.0, ui.spacing().interact_size.y), Sense::click());
+            let r = ui
+                .add(egui::Button::selectable(selected, text))
+                .interact(Sense::click_and_drag())
+                .on_hover_ui(|ui| {
+                    ui.set_max_width(360.0);
+                    ui.label(tip);
+                });
+            let row_hover = star_r.hovered() || r.hovered();
+            if fav || row_hover {
+                let c = if fav { ACCENT } else if star_r.hovered() { Color32::from_gray(200) } else { Color32::from_gray(90) };
+                ui.painter().text(star.center(), egui::Align2::CENTER_CENTER, if fav { "★" } else { "☆" }, egui::FontId::proportional(12.0), c);
+            }
+            if star_r.on_hover_text(if fav { "remove from favorites" } else { "favorite: pinned on top" }).clicked() {
+                *fav_toggle = Some(e.path.clone());
+            }
+            r.dnd_set_drag_payload(Drag::File(e.path.clone(), e.kind.clone()));
+            if r.double_clicked() {
+                *action = Some((e.path.clone(), e.kind.clone(), true));
+            } else if r.clicked() {
+                *action = Some((e.path.clone(), e.kind.clone(), false));
+            }
+        });
+    }
+
+    fn finder_ndi(&mut self, ui: &mut Ui, sources: &[String], search: &str, action: &mut Option<(PathBuf, FileKind, bool)>) {
+        if self.ndi_finder.is_none() {
+            ui.label(egui::RichText::new("libndi not loaded: set \"NDI library folder\" in the output options").weak());
+            return;
+        }
+        if sources.is_empty() {
+            ui.label(egui::RichText::new("searching…").weak());
+        }
+        for name in sources.iter().filter(|n| search.is_empty() || n.to_lowercase().contains(search)) {
+            let path = PathBuf::from(name);
+            let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == path);
+            let r = ui.add(egui::Button::selectable(selected, name)).interact(Sense::click_and_drag());
+            r.dnd_set_drag_payload(Drag::File(path.clone(), FileKind::Ndi));
+            if r.double_clicked() {
+                *action = Some((path, FileKind::Ndi, true));
+            } else if r.clicked() {
+                *action = Some((path, FileKind::Ndi, false));
             }
         }
     }
@@ -2759,6 +2907,10 @@ fn selftest_session(t: &SelfTest) -> Session {
     s.selected_instance = Some(clip_id);
     // finder: only the repo shaders and the self-test folder (no private files in screenshots)
     s.finder_roots = vec![root.join("isf-generator"), root.join("isf-effect"), t.dir.clone()];
+    // VIDEOPING_SELFTEST_FINDER=<search>: two favorites, that search typed (screenshot of the finder)
+    if std::env::var_os("VIDEOPING_SELFTEST_FINDER").is_some() {
+        s.finder_favs = vec![root.join("isf-effect/gameboy-camera.fs"), root.join("isf-effect/chaos-feedback.fs")];
+    }
     // VIDEOPING_SELFTEST_PREPARE=<generator .fs>: a (heavy) generator in slot 3, selected but not
     // live -> prepare priority test
     if let Ok(p) = std::env::var("VIDEOPING_SELFTEST_PREPARE") {
@@ -3204,5 +3356,20 @@ impl App {
             eprintln!("selftest prepare: selected non-live instance rendered {:.1} times per second", (self.prepare_renders - t.prep0) as f32 / span);
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finder_folder_groups() {
+        let e = |name: &str, group: &str| FinderEntry { path: PathBuf::from(format!("/x/{group}/{name}")), name: name.into(), kind: FileKind::Clip, group: group.into() };
+        // the walk can split a folder (files before and after a subfolder): one group each
+        let list = [e("a", "clips"), e("b", "clips/loops"), e("c", "clips"), e("d", "clips/loops")];
+        let refs: Vec<&FinderEntry> = list.iter().collect();
+        let g = finder_groups(&refs);
+        assert_eq!(g, vec![("clips".to_string(), vec![0, 2]), ("clips/loops".to_string(), vec![1, 3])]);
     }
 }

@@ -480,6 +480,9 @@ pub struct Session {
     pub master: Master,
     pub output: OutputOptions,
     pub finder_roots: Vec<PathBuf>,
+    /// finder favorites (★): pinned on top of their category
+    #[serde(default)]
+    pub finder_favs: Vec<PathBuf>,
     pub next_id: u64,
 }
 
@@ -504,6 +507,7 @@ impl Default for Session {
             master: Master::default(),
             output: OutputOptions::default(),
             finder_roots: roots,
+            finder_favs: vec![],
             next_id: 1,
         }
     }

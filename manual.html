@@ -228,16 +228,25 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       needed: new files appear by themselves within 2 s).</li>
     <li><b>folders</b>: the folders the finder shows; add one with its path, remove one with
       <span class="b">×</span>.</li>
-    <li>The list is grouped into <b>clips</b>, <b>generators</b>, <b>effects</b> and <b>NDI sources</b>
-      (found automatically on the network). Whether a shader is a generator or an effect is read from
-      the shader itself, not from the folder it is in.</li>
+    <li>Four categories: <b>clips</b>, <b>generators</b>, <b>effects</b> and <b>NDI sources</b>
+      (found automatically on the network). Their headers always stay visible, with the number of
+      files; one is open at a time and scrolls on its own. Click another header to switch: each keeps
+      its scroll position, so from deep in the clips the effects are one click away. Whether a shader
+      is a generator or an effect is read from the shader itself, not from the folder it is in.</li>
+    <li>Inside a category the files are grouped by <b>folder</b> (with the number of files): click a
+      folder to open or close it.</li>
+    <li><b>search all</b> searches every category at once: the headers show the hits, and a category
+      with hits opens by itself. <b>Esc</b> clears the search.</li>
+    <li><b>Favorites</b>: hover over a file and click the <b>☆</b> on its left: it is pinned under
+      <b>★ favorites</b> on top of its category. Click ★ again to remove it. Favorites are saved with
+      the session and stay with "new".</li>
     <li><b>Click</b> = preview, <b>double-click</b> = add to the first free prepare slot (an effect:
       add it to the selected instance), <b>drag</b> = drop onto a slot (a new instance, or replaces one
       that is not live) or, for effects, onto a slot or an effect stack.</li>
     <li>A shader with <a href="#shaderdocs">documentation</a> shows its description when you hover
       over it; a grey <b>⚠</b> after the name means the documentation has a warning (e.g. flashing).</li>
   </ul>
-  <figure><img src="docs/finder.png" width="195" alt="finder"></figure>
+  <figure><img src="docs/finder.png" width="195" alt="finder: the open category clips with its folders, the other category headers at the bottom"></figure>
 </div>
 
 <h3 id="prepare">Column 2: prepare grid, master, bpm, record, settings</h3>
@@ -715,7 +724,7 @@ dropped frames.</p>
 <h2 id="files"><span class="n">10</span>Files and settings</h2>
 
 <p><b>Session</b>: everything you set up — prepare grid (all pages, instances, effects, parameters),
-mixer layers, output effects, bpm, master, output options, finder folders.</p>
+mixer layers, output effects, bpm, master, output options, finder folders and favorites.</p>
 <ul>
   <li><b>Autosave</b>: the session is saved every 2 s when something changed, and on quit. After a
     restart or a crash everything is back.</li>
@@ -723,7 +732,7 @@ mixer layers, output effects, bpm, master, output options, finder folders.</p>
     the text field (default <code>~/videoping-session.json</code>). Media are referenced by path, never
     copied: keep your files where they are, or the instances show an error.</li>
   <li><span class="b">new</span> clears everything after asking: grid, mixer, effects, bpm, master.
-    Finder folders and output options stay (that is your setup, not your set).</li>
+    Finder folders, favorites and output options stay (that is your setup, not your set).</li>
 </ul>
 
 <p><b>General config</b> (column 2): settings of the program itself, not part of a session — save,
