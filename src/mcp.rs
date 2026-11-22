@@ -235,7 +235,7 @@ pub fn tools() -> Value {
         },
         {
             "name": "shader_info",
-            "description": "The parameters of an ISF shader file in the order videoping numbers them (param/1, param/2 ...): name, label, type, range, default; and whether it is an effect or a generator.",
+            "description": "The parameters of an ISF shader file in the order videoping numbers them (param/1, param/2 ...): name, label, type, range, default; whether it is an effect or a generator; and its documentation (the .md file next to it) when there is one.",
             "inputSchema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] }
         }
     ])

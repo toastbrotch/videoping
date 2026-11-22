@@ -232,6 +232,8 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     <li><b>Click</b> = preview, <b>double-click</b> = add to the first free prepare slot (an effect:
       add it to the selected instance), <b>drag</b> = drop onto a slot (a new instance, or replaces one
       that is not live) or, for effects, onto a slot or an effect stack.</li>
+    <li>A shader with <a href="#shaderdocs">documentation</a> shows its description when you hover
+      over it; a grey <b>⚠</b> after the name means the documentation has a warning (e.g. flashing).</li>
   </ul>
   <figure><img src="docs/finder.png" width="195" alt="finder"></figure>
 </div>
@@ -382,7 +384,8 @@ change the same settings.</p>
   <li>On / off parameters are checkboxes, colors a color button, lists a dropdown.</li>
   <li><b>Right click</b> on a parameter (its name or its control) resets it to the shader's default:
     value, full range, animation off.</li>
-  <li>Long names wrap; hover over a name to see it in full.</li>
+  <li>Long names wrap; hover over a name to see it in full, and, when the shader has
+    <a href="#shaderdocs">documentation</a>, what the parameter does (range, default).</li>
 </ul>
 
 <!-- ================================================================== -->
@@ -398,7 +401,35 @@ change the same settings.</p>
   <li><b>Move</b> an effect between an instance and the output effects: drag its ≡ handle onto the
     other stack. It keeps all its settings.</li>
   <li>A shader that does not compile shows a red ⚠ next to its name; hover for the error.</li>
+  <li><span class="b">?</span> next to the name: the shader has <a href="#shaderdocs">documentation</a>.</li>
 </ul>
+
+<h3 id="shaderdocs">Shader documentation</h3>
+<p>A shader can come with a Markdown file of the same name next to it:
+<code>chaos-feedback.fs</code> + <code>chaos-feedback.md</code>. videoping reads it (it never changes it)
+and shows it in four places:</p>
+<ul>
+  <li><b>Finder</b>: hover over the shader for its first paragraph.</li>
+  <li><b>Parameters</b>: hover over a parameter name for its line of the slider table.</li>
+  <li><span class="b">?</span> on the effect (or next to "generator" in the prepare detail): the whole
+    document in its own window. It stays open while you play; move and resize it, close with ×
+    or by clicking ? again. Long tables are shown as lists so the text wraps.</li>
+  <li>A grey <b>⚠</b> in the finder and next to <span class="b">?</span> when the document has a
+    warning line; hover to read it.</li>
+</ul>
+<p>Write the file like this, so videoping finds the parts (the rest is free):</p>
+<pre><code># Title
+
+First paragraph: what the shader does (shown in the finder).
+
+&gt; ⚠️ **Flashing:** a warning line starts with &gt; and contains ⚠.
+
+| Slider | Range | Default | What it does |
+|---|---|---|---|
+| **Feedback-Mix** | 0 – 1 | 0.85 | How much of the previous frame is added back. |</code></pre>
+<p>The bold name in the first column must be the parameter's <code>LABEL</code> from the shader
+header (or its <code>NAME</code>). The last column is the description. Edits to the .md show up
+within a second.</p>
 
 <!-- ================================================================== -->
 <h2 id="output"><span class="n">6</span>Output: screen, NDI, recording</h2>
@@ -587,7 +618,7 @@ slow?").</p>
   <tr><td><code>list_addresses</code> · <code>get</code> · <code>set</code></td><td>everything a controller can do, with the same <a href="#midi">addresses</a> (<code>/layer/2/mix</code>, <code>/slot/9/fx/1/param/3</code> …)</td></tr>
   <tr><td><code>list_files</code> · <code>load_file</code> · <code>add_effect</code></td><td>the files of the finder; put a clip or generator into a slot; add an effect to a slot or the output (max 4)</td></tr>
   <tr><td><code>frame</code></td><td>the output, the preview or a slot as an image</td></tr>
-  <tr><td><code>shader_errors</code> · <code>shader_info</code></td><td>which shaders do not compile and why; the parameters of a shader in videoping's numbering</td></tr>
+  <tr><td><code>shader_errors</code> · <code>shader_info</code></td><td>which shaders do not compile and why; the parameters of a shader in videoping's numbering, and its <a href="#shaderdocs">documentation</a></td></tr>
 </table>
 
 <h3>Safety</h3>
@@ -675,7 +706,8 @@ read only).</p>
 </table>
 
 <p><b>Shaders</b> are ISF files (<code>.fs</code>). videoping uses them as they are and reloads a
-shader when its file changes, so you can edit a shader in a text editor while it plays.</p>
+shader when its file changes, so you can edit a shader in a text editor while it plays. A
+<code>.md</code> file of the same name is its <a href="#shaderdocs">documentation</a>.</p>
 
 <!-- ================================================================== -->
 <h2 id="trouble"><span class="n">11</span>Troubleshooting</h2>

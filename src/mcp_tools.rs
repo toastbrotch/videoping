@@ -227,6 +227,10 @@ impl App {
                         if !images.is_empty() {
                             lines.push(format!("image inputs: {}", images.join(", ")));
                         }
+                        // the documentation next to the shader (.md), when there is one
+                        if let Ok(md) = std::fs::read_to_string(crate::shader_doc::md_path(Path::new(&p))) {
+                            lines.push(format!("\ndocumentation ({}):\n{md}", crate::shader_doc::md_path(Path::new(&p)).display()));
+                        }
                         ToolResult::text(lines.join("\n"))
                     }
                     Err(e) => ToolResult::error(e),

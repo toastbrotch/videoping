@@ -485,16 +485,18 @@ earlier idea, decided 2026-11-21:
 - crash-safe: index space for 1 hour reserved at the start of the file, updated every 2 s; after a crash the file plays up to the last update (tested: killed after 7 s, plays 6 s); longer recordings are finished normally on stop
 - measured (1080p, Intel Iris Xe + NVENC): about 8 % of one CPU core (~1.6 ms per frame)
 
-## shader documentation (.md next to the .fs) — proposal, to be decided later
+## shader documentation (.md next to the .fs) — decided + built 2026-11-22
 - many isf shaders have a markdown file with the same name (`chaos-feedback.fs` + `chaos-feedback.md`) that explains the shader
-- common structure of these files: `# title`, a short description paragraph, a slider table `| **Label** | range | default | description |`, then sections like tips / starting points; some have a ⚠ warning (e.g. flashing)
-- the bold label in the table is the LABEL of the isf header, so a table row can be matched to its parameter
-- ideas (none decided yet):
-  1. parameter tooltip: hover over a parameter name shows its description from the slider table
-  2. "?" button on the effect / generator header (only when an .md exists): opens the whole document rendered (e.g. crate egui_commonmark, tables included) in its own window that can stay open
-  3. finder: hover over a shader file shows the first description paragraph
-  4. ⚠ marker: if the .md contains a ⚠ warning, a small grey ⚠ next to the shader name in the finder and the detail, the warning text on hover
-- read-only: the .md and .fs files are never changed; reloaded when the file changes (like the shaders)
+- structure used: `# title`, the first paragraph = short description, a slider table `| **Label** | range | default | description |` (bold first cell = the isf LABEL, else NAME; last cell = description, the cells between with their column names), `> ⚠ ...` lines = warnings; everything else is free
+- all four ideas built:
+  1. parameter tooltip: hover over a parameter name = its label + description (range, default) from the slider table
+  2. "?" button on the effect header and on a "generator" line above the generator parameters (only when an .md exists): the whole document rendered (egui_commonmark 0.26) in its own window; several can be open, they stay open while playing (also in the midi tab), ? again or × closes
+     - tables with a cell longer than 50 characters are shown as lists (`- **Label** · range · default x — text`): egui_commonmark table cells do not wrap; short tables stay tables
+  3. finder: hover over a shader file = the first paragraph (+ the path); clips: path only
+  4. ⚠ marker: a grey ⚠ after the name in the finder and next to the "?" when the .md has a warning line, the warning on hover
+- read-only: the .md and .fs files are never changed; re-read when the .md changes (stat at most once a second per shader)
+- MCP `shader_info` returns the .md text too (context for the ai tab later)
+- self-test: VIDEOPING_SELFTEST_DOC=<effect .fs> puts that effect first on the clip and opens its doc window (screenshot)
 
 ## audio
 - no audio: mp4 clips play without sound, no audio input / audio-reactive effects

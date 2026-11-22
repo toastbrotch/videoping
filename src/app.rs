@@ -74,6 +74,11 @@ pub struct App {
     inst_clock: HashMap<u64, (Instant, f64)>,
     /// prepare work runs every n-th video frame (2 = half rate, 4, 8; 0 = paused)
     prepare_div: u32,
+    /// the .md docs next to the shaders (features.md "shader documentation")
+    docs: crate::shader_doc::Docs,
+    /// shaders whose doc window is open
+    doc_windows: Vec<PathBuf>,
+    md_cache: egui_commonmark::CommonMarkCache,
     prepare_div_since: Instant,
     /// GPU ms of the main mix per frame (live instances, mixer, output effects, master, REC)
     main_ms: f32,
@@ -344,6 +349,9 @@ impl App {
             control_snap: Default::default(),
             inst_clock: HashMap::new(),
             prepare_div: 2,
+            docs: Default::default(),
+            doc_windows: std::env::var("VIDEOPING_SELFTEST_DOC").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).map(PathBuf::from).into_iter().collect(),
+            md_cache: Default::default(),
             prepare_div_since: Instant::now(),
             main_ms: 0.0,
             prepare_renders: 0,
@@ -1055,10 +1063,25 @@ impl App {
                             continue;
                         }
                         let selected = self.finder_sel.as_ref().is_some_and(|s| s.0 == e.path);
+                        // shaders: the first paragraph of their .md on hover, ⚠ for a warning
+                        let doc = if kind == FileKind::Clip { None } else { self.docs.get(&e.path) };
+                        let warn = doc.as_ref().and_then(|d| d.warning());
+                        let text = if warn.is_some() { format!("{}  ⚠", e.name) } else { e.name.clone() };
+                        let tip = match &doc {
+                            Some(d) if !d.summary.is_empty() => format!("{}\n\n{}", d.summary, e.path.display()),
+                            _ => e.path.display().to_string(),
+                        };
+                        let tip = match &warn {
+                            Some(w) => format!("⚠ {w}\n\n{tip}"),
+                            None => tip,
+                        };
                         let r = ui
-                            .add(egui::Button::selectable(selected, &e.name))
+                            .add(egui::Button::selectable(selected, text))
                             .interact(Sense::click_and_drag())
-                            .on_hover_text(e.path.display().to_string());
+                            .on_hover_ui(|ui| {
+                                ui.set_max_width(360.0);
+                                ui.label(tip);
+                            });
                         r.dnd_set_drag_payload(Drag::File(e.path.clone(), e.kind.clone()));
                         if r.double_clicked() {
                             action = Some((e.path.clone(), e.kind.clone(), true));
@@ -1356,6 +1379,7 @@ impl App {
         let status = self.r.as_ref().and_then(|r| r.clip_status.get(&id).copied()).unwrap_or_default();
         let ndi_status = self.r.as_ref().and_then(|r| r.ndi_status.get(&id).copied());
         let mut scrub = None;
+        let mut open_doc: Option<PathBuf> = None;
         let infos = &self.infos;
         let r_ref = self.r.as_ref();
         if let Some(inst) = self.s.find_mut(id) {
@@ -1386,8 +1410,17 @@ impl App {
                     if let Some(err) = r_ref.and_then(|r| r.shader_error(path)) {
                         ui.colored_label(Color32::RED, err);
                     }
+                    let doc = self.docs.get(path);
+                    if let Some(d) = &doc {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("generator").weak());
+                            if doc_buttons(ui, d) {
+                                open_doc = Some(path.clone());
+                            }
+                        });
+                    }
                     if let Some(info) = infos.get(path) {
-                        params_ui(ui, info, params, ("gen", id));
+                        params_ui(ui, info, params, doc.as_deref(), ("gen", id));
                     }
                 }
             }
@@ -1396,6 +1429,9 @@ impl App {
             if let Some(r) = self.r.as_mut() {
                 r.pending_scrub.push((id, n));
             }
+        }
+        if let Some(p) = open_doc {
+            self.open_doc(p);
         }
         ui.add_space(4.0);
         self.effect_stack(ui, Owner::Instance(id));
@@ -1410,10 +1446,10 @@ impl App {
         let mut ev_transfer: Option<(Owner, usize, Option<usize>)> = None;
         let mut first_handle: Option<egui::Pos2> = None;
         let infos = self.infos.clone();
-        let shader_errors: Vec<Option<String>> = {
-            let paths: Vec<PathBuf> = self.effects_mut(owner).map(|v| v.iter().map(|e| e.path.clone()).collect()).unwrap_or_default();
-            paths.iter().map(|p| self.r.as_ref().and_then(|r| r.shader_error(p)).map(|s| s.to_string())).collect()
-        };
+        let fx_paths: Vec<PathBuf> = self.effects_mut(owner).map(|v| v.iter().map(|e| e.path.clone()).collect()).unwrap_or_default();
+        let shader_errors: Vec<Option<String>> = fx_paths.iter().map(|p| self.r.as_ref().and_then(|r| r.shader_error(p)).map(|s| s.to_string())).collect();
+        let fx_docs: Vec<Option<std::rc::Rc<crate::shader_doc::Doc>>> = fx_paths.iter().map(|p| self.docs.get(p)).collect();
+        let mut open_doc: Option<PathBuf> = None;
         // resource meter per effect: (level, tooltip), None when not rendered
         let fx_usage: Vec<Option<(u8, String)>> = {
             let budget = self.budget_ms();
@@ -1483,6 +1519,11 @@ impl App {
                     if let Some(Some(e)) = shader_errors.get(i) {
                         ui.colored_label(Color32::RED, "⚠").on_hover_text(e);
                     }
+                    if let Some(Some(d)) = fx_docs.get(i) {
+                        if doc_buttons(ui, d) {
+                            open_doc = Some(fx.path.clone());
+                        }
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if widgets::btn(ui, "×").clicked() {
                             ev_remove = Some(i);
@@ -1505,7 +1546,7 @@ impl App {
                     widgets::mix_controls(ui, &mut fx.mix, ("fxmix", fx.uid));
                     if fx.open {
                         if let Some(info) = infos.get(&fx.path) {
-                            params_ui(ui, info, &mut fx.params, ("fxp", fx.uid));
+                            params_ui(ui, info, &mut fx.params, fx_docs.get(i).and_then(|d| d.as_deref()), ("fxp", fx.uid));
                         }
                     }
                 });
@@ -1554,6 +1595,48 @@ impl App {
         }
         if new_focus.is_some() {
             self.s.focus_fx = new_focus;
+        }
+        if let Some(p) = open_doc {
+            self.open_doc(p);
+        }
+    }
+
+    /// Open the documentation window of a shader (closes it when it is open already).
+    fn open_doc(&mut self, shader: PathBuf) {
+        if let Some(i) = self.doc_windows.iter().position(|p| *p == shader) {
+            self.doc_windows.remove(i);
+        } else {
+            self.doc_windows.push(shader);
+        }
+    }
+
+    /// The open documentation windows (own windows, they stay open while playing).
+    fn doc_windows(&mut self, ctx: &egui::Context) {
+        let mut close = vec![];
+        for (i, shader) in self.doc_windows.clone().iter().enumerate() {
+            let Some(doc) = self.docs.get(shader) else {
+                close.push(i);
+                continue;
+            };
+            let mut open = true;
+            let title = if doc.title.is_empty() { isf::display_name(shader) } else { doc.title.clone() };
+            egui::Window::new(title)
+                .id(egui::Id::unique(("doc", shader)))
+                .open(&mut open)
+                .default_size(vec2(720.0, 640.0))
+                .resizable(true)
+                .collapsible(true)
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                        egui_commonmark::CommonMarkViewer::new().show(ui, &mut self.md_cache, &doc.view);
+                    });
+                });
+            if !open {
+                close.push(i);
+            }
+        }
+        for i in close.into_iter().rev() {
+            self.doc_windows.remove(i);
         }
     }
 
@@ -2052,18 +2135,21 @@ impl App {
 }
 
 /// Parameter ui: range slider + animation row per parameter.
-fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::hash::Hash + Copy + std::fmt::Debug) {
+fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], doc: Option<&crate::shader_doc::Doc>, salt: impl std::hash::Hash + Copy + std::fmt::Debug) {
     for inp in &info.inputs {
         let Some(p) = params.iter_mut().find(|p| p.name == inp.name) else { continue };
+        // hover text of the name: its line from the .md slider table
+        let tip = doc.and_then(|d| d.param(&inp.label, &inp.name));
+        let tip = tip.map(|t| format!("{}\n\n{t}", inp.label)).unwrap_or_else(|| inp.label.clone());
         let row = ui.push_id((salt, &inp.name), |ui| match (&inp.kind, &mut p.value) {
-            (InputKind::Float { min, max, .. }, ParamValue::Anim(a)) => anim_ui(ui, &inp.label, &mut a[0], *min, *max, false),
+            (InputKind::Float { min, max, .. }, ParamValue::Anim(a)) => anim_ui(ui, &inp.label, &tip, &mut a[0], *min, *max, false),
             (InputKind::Long { min, max, labels, .. }, ParamValue::Anim(a)) => {
                 if labels.is_empty() {
-                    anim_ui(ui, &inp.label, &mut a[0], *min, *max, true)
+                    anim_ui(ui, &inp.label, &tip, &mut a[0], *min, *max, true)
                 } else {
                     // same layout as the sliders: name column, then the control
                     ui.horizontal_top(|ui| {
-                        param_label(ui, &inp.label);
+                        param_label(ui, &inp.label, &tip);
                         let cur = a[0].value.round() as i32;
                         let txt = labels.iter().find(|l| l.0 == cur).map(|l| l.1.clone()).unwrap_or(cur.to_string());
                         egui::ComboBox::from_id_salt("long").selected_text(txt).show_ui(ui, |ui| {
@@ -2077,25 +2163,25 @@ fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::
                 }
             }
             (InputKind::Point2D { min, max, .. }, ParamValue::Anim(a)) if a.len() == 2 => {
-                anim_ui(ui, &format!("{} x", inp.label), &mut a[0], min[0], max[0], false);
-                anim_ui(ui, &format!("{} y", inp.label), &mut a[1], min[1], max[1], false);
+                anim_ui(ui, &format!("{} x", inp.label), &tip, &mut a[0], min[0], max[0], false);
+                anim_ui(ui, &format!("{} y", inp.label), &tip, &mut a[1], min[1], max[1], false);
             }
             (InputKind::Bool { .. }, ParamValue::Bool(b)) => {
                 // same layout as the sliders: name column, then the control
                 ui.horizontal_top(|ui| {
-                    param_label(ui, &inp.label);
+                    param_label(ui, &inp.label, &tip);
                     widgets::check(ui, b, ACCENT);
                 });
             }
             (InputKind::Event, ParamValue::Bool(b)) => {
-                if ui.button(&inp.label).clicked() {
+                if ui.button(&inp.label).on_hover_text(&tip).clicked() {
                     *b = true;
                 }
             }
             (InputKind::Color { .. }, ParamValue::Color(c)) => {
                 // same layout as the sliders: name column, then the control
                 ui.horizontal_top(|ui| {
-                    param_label(ui, &inp.label);
+                    param_label(ui, &inp.label, &tip);
                     ui.color_edit_button_rgba_unmultiplied(c);
                 });
             }
@@ -2120,11 +2206,11 @@ fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], salt: impl std::
 /// Width of the parameter label column.
 const PARAM_LABEL_W: f32 = 120.0;
 
-fn anim_ui(ui: &mut Ui, label: &str, a: &mut AnimParam, min: f32, max: f32, integer: bool) {
+fn anim_ui(ui: &mut Ui, label: &str, tip: &str, a: &mut AnimParam, min: f32, max: f32, integer: bool) {
     // the label column spans both rows (slider + play buttons): a name that wraps onto a second
     // line sits next to the play buttons instead of pushing them down
     ui.horizontal_top(|ui| {
-        param_label(ui, label);
+        param_label(ui, label, tip);
         ui.vertical(|ui| {
             widgets::range_slider(ui, a, min, max, integer);
             widgets::transport_row(ui, &mut a.mode, &mut a.loop_mode, &mut a.speed, "/s");
@@ -2133,11 +2219,30 @@ fn anim_ui(ui: &mut Ui, label: &str, a: &mut AnimParam, min: f32, max: f32, inte
 }
 
 /// Parameter label: left aligned, normal text size, wraps onto a second line if too long.
-fn param_label(ui: &mut Ui, label: &str) {
+fn param_label(ui: &mut Ui, label: &str, tip: &str) {
     ui.allocate_ui_with_layout(vec2(PARAM_LABEL_W, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
         ui.set_width(PARAM_LABEL_W);
-        ui.add(egui::Label::new(egui::RichText::new(label).size(widgets::BTN_TEXT)).wrap()).on_hover_text(label);
+        ui.add(egui::Label::new(egui::RichText::new(label).size(widgets::BTN_TEXT)).wrap()).on_hover_ui(|ui| {
+            ui.set_max_width(360.0);
+            ui.label(tip);
+        });
     });
+}
+
+/// "?" (opens the shader's .md) and a grey ⚠ when it has a warning; true = "?" clicked.
+fn doc_buttons(ui: &mut Ui, d: &crate::shader_doc::Doc) -> bool {
+    let tip = if d.summary.is_empty() { "documentation".to_string() } else { format!("{}\n\n(click: the whole documentation)", d.summary) };
+    let clicked = widgets::btn(ui, "?").on_hover_ui(|ui| {
+        ui.set_max_width(360.0);
+        ui.label(tip);
+    }).clicked();
+    if let Some(w) = d.warning() {
+        ui.label(egui::RichText::new("⚠").weak()).on_hover_ui(|ui| {
+            ui.set_max_width(360.0);
+            ui.label(w);
+        });
+    }
+    clicked
 }
 
 /// Type badge of a prepare slot.
@@ -2301,6 +2406,7 @@ impl eframe::App for App {
             Tab::Midi => self.midi_tab(ui),
         }
 
+        self.doc_windows(&ctx);
         self.confirm_new_dialog(&ctx, &gl);
         self.output_window(&ctx, frame);
         if self.selftest.is_some() {
@@ -2601,6 +2707,15 @@ fn selftest_session(t: &SelfTest) -> Session {
         }],
         seed: rng.next_f32(),
     });
+    // VIDEOPING_SELFTEST_DOC=<effect .fs with an .md>: that effect first on the clip, its
+    // documentation window open (screenshot of the shader docs)
+    if let Ok(p) = std::env::var("VIDEOPING_SELFTEST_DOC") {
+        let path = PathBuf::from(p);
+        if let (Ok((info, _)), Some(fx)) = (isf::parse_info(&path), s.slots[8].as_mut().and_then(|i| i.effects.first_mut())) {
+            fx.params = isf::default_params(&info);
+            fx.path = path;
+        }
+    }
     s.layers[0].instance = Some(gen_id);
     s.layers[0].mix.mix_type = match std::env::var("VIDEOPING_SELFTEST_L1MIX").as_deref() {
         Ok("ilk") => MixType::InvLumaKey,

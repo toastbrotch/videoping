@@ -10,6 +10,7 @@ mod midi;
 mod ndi;
 mod record;
 mod render;
+mod shader_doc;
 mod state;
 mod video;
 mod widgets;
