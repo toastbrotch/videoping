@@ -10,7 +10,8 @@
     { "NAME": "uVertical",   "LABEL": "Vertikal-Bewegung", "TYPE": "float", "DEFAULT": 0.0,  "MIN": 0.0, "MAX": 1.0 },
     { "NAME": "uDissolve",   "LABEL": "Dissolve/Aufloesen","TYPE": "float", "DEFAULT": 0.0,  "MIN": 0.0, "MAX": 1.0 },
     { "NAME": "uGlitch",     "LABEL": "Zeilen-Glitch",     "TYPE": "float", "DEFAULT": 0.0,  "MIN": 0.0, "MAX": 1.0 },
-    { "NAME": "uSeed",       "LABEL": "Seed",              "TYPE": "float", "DEFAULT": 42.0, "MIN": 0.0, "MAX": 1000.0 }
+    { "NAME": "uSeed",       "LABEL": "Seed",              "TYPE": "float", "DEFAULT": 42.0, "MIN": 0.0, "MAX": 1000.0 },
+    { "NAME": "uShape",      "LABEL": "Punkt-Form",        "TYPE": "float", "DEFAULT": 0.0,  "MIN": 0.0, "MAX": 1.0 }
   ]
 }*/
 
@@ -142,16 +143,12 @@ void main(){
     float gapMaskX = 1.0 - step(cellsWide, colCont);
     float inBoundsX = step(0.0, charIndexF)*step(charIndexF, len - 1.0)*gapMaskX;
 
-    // uInstanceSeed is supplied by the ISFBrowser host itself (one fixed
-    // random value per loaded plugin instance, like TIME/RENDERSIZE) so two
-    // copies of this shader show different strings even at identical uSeed.
     float chSeed = charIndexF + uSeed*7.0 + uInstanceSeed*11.3;
 
     // vertical bounce per character (no-op at uVertical=0)
     float yOff = sin(gT*1.3 + chSeed*3.7)*unit*1.8*uVertical;
 
-    // split-flap flip: squashes the glyph vertically to ~0 height and swaps
-    // its identity at the flat point, then unsquashes (no-op at uFlip=0)
+    // split-flap flip (no-op at uFlip=0)
     float flipRate = 0.6*uFlip;
     float flipCyclePos = fract(gT*flipRate + chSeed*0.13);
     float squash = cos(flipCyclePos*6.2831853);
@@ -165,8 +162,6 @@ void main(){
 
     float inBoundsY = step(0.0, rowF)*step(rowF, cellsTall - 1.0);
 
-    // periodic full re-roll of a character's identity (no-op at uCharChange=0);
-    // max rate is a rapid scramble/flicker, not a gentle cycle.
     float swap = floor(gT*(60.0*uCharChange) + chSeed*3.0);
     float combinedGen = gen*97.0 + swap*31.0;
     float charSel = clamp(floor(hash21(vec2(charIndexF*1.7 + uSeed*7.0 + uInstanceSeed*11.3, combinedGen))*36.0), 0.0, 35.0);
@@ -175,12 +170,14 @@ void main(){
     if (inBoundsX > 0.5 && inBoundsY > 0.5){
         ink = fontInk(charSel, colF, rowF);
 
-        float margin = 0.14; // small gap between dots for a dot-matrix look
-        float dotFill = step(margin, colFrac)*step(colFrac, 1.0 - margin)*
-                         step(margin, rowFrac)*step(rowFrac, 1.0 - margin);
-        ink *= dotFill;
+        // dot shape via superellipse: 0 square -> rounded -> 0.6 circle -> 0.8 diamond -> 1 star
+        float margin = 0.14;
+        vec2 q = abs(vec2(colFrac, rowFrac) - 0.5)/(0.5 - margin);
+        float n = exp2(mix(4.0, -1.0, clamp(uShape, 0.0, 1.0)));
+        float d = pow(pow(q.x, n) + pow(q.y, n), 1.0/n);
+        float aa = fwidth(d);
+        ink *= 1.0 - smoothstep(1.0 - aa, 1.0 + aa, d);
 
-        // dissolve: at uDissolve=0, dPhase is pinned to 1.0 -> fully solid
         float dPhase = mix(1.0, 0.5 + 0.5*sin(gT*0.7 + chSeed*5.0), uDissolve);
         float noiseV = hash21(vec2(colF + charIndexF*13.0, rowF + 7.0) + chSeed*11.0);
         ink *= step(1.0 - dPhase, noiseV);
