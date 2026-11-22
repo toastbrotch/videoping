@@ -344,6 +344,17 @@ pub struct OutputOptions {
     /// start on the discrete NVIDIA GPU (PRIME render offload, applied at program start)
     #[serde(default)]
     pub prefer_nvidia: bool,
+    /// projection mapping: the active preset (by name; the presets live in the config folder)
+    #[serde(default)]
+    pub mapping: String,
+    /// the mapping is applied to the screen output
+    #[serde(default)]
+    pub mapping_on: bool,
+    /// the mapping also on NDI / on the recording (default: they stay the clean composition)
+    #[serde(default)]
+    pub map_ndi: bool,
+    #[serde(default)]
+    pub map_rec: bool,
 }
 
 fn default_fps() -> u32 {
@@ -367,6 +378,10 @@ impl Default for OutputOptions {
             fps: 60,
             screen: 0,
             prefer_nvidia: false,
+            mapping: String::new(),
+            mapping_on: false,
+            map_ndi: false,
+            map_rec: false,
         }
     }
 }

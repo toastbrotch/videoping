@@ -42,7 +42,7 @@ the ui has top-level tabs:
   - **ai**: built 2026-11-22 (see "ai tab")
   - **shader editor**: built 2026-11-22 (see "shader editor")
 - later (not planned yet):
-  - mapping
+  - **mapping**: projection mapping, built 2026-11-22 (see "mapping")
   - sequencer
 
 everything below belongs to the tab "live".
@@ -344,7 +344,7 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
   - shader editor tab, with ai: write / change isf shaders inside videoping with a live preview (hot reload), the ai sees the output frame and the compile errors — built 2026-11-22, see "shader editor"
 - midi must feel instant: input on its own thread, applied at the start of the next video frame, not through the ui
 - mcp use cases (most useful first): writing shaders with claude live (hot reload + look at the output frame), preparing sets, asking / debugging (state, resource meters), playing via an agent (least)
-- open: osc on the same registry (touchosc etc.)?
+- osc: not for now (decided 2026-11-22); the registry would carry it if it comes back
 
 # midi mapping
 
@@ -507,6 +507,19 @@ earlier idea, decided 2026-11-21:
 - token count of the chat at the bottom right (input incl. cached)
 - self-test: VIDEOPING_SELFTEST_AI=<url of a mock server> (scratchpad mock: answers set + frame, then text) checks the whole loop without api cost
 - open: streaming, a cheaper model for quick questions, images from the prepare preview / slots in the chat
+
+## mapping (projection mapping) — decided + built 2026-11-22
+- scope: 1 slices (an input rectangle of the composition placed on the output with a corner pin), 2 masks (polygons that black out parts of the output, soft edge, invertible), 3 test grid; not now: mesh warp, soft-edge blending, per-slice on/off / dimming, several mapped outputs
+- applied at the very end, after master, to the screen output (fullscreen window); output options "mapping also on NDI" and "mapping also on the recording" (default off: NDI and the recording stay the clean composition)
+- presets: a mapping belongs to a venue, not to a set: named presets in ~/.config/videoping/mapping/<name>.json (like the midi profiles), saved by themselves; the session only stores which preset is active and whether the mapping is on
+- tab "projection mapping" (renamed from "mapping" 2026-11-22): preset bar (choose / new / duplicate / rename / delete, mapping on, test grid, also NDI, also recording); list of slices and masks (add, select, rename, delete) with the numbers of the selected one; input view (the composition with the slice rectangles) and output view (the projector image with the slice corners and mask points), handles dragged with the mouse, arrow keys nudge the selected handle (1 px, Shift 10 px); masks: double click on an edge adds a point, right click on a point removes it
+- handles (fixed 2026-11-22 after the first test: corners were hard to catch): catch radius 16 px, also outside the view (corners on its border), nearest handle wins (the selected item slightly preferred); cursor: crosshair over a handle, move over an inside, grabbing while dragging; dragging is relative (a handle grabbed beside its point does not jump to the mouse); the last grabbed handle has a white ring + its position in px; arrow keys (read from the raw key events, so nothing else takes them) move it 1 px, Shift 10 px
+- the output window shows the mapping live while editing (with the test grid when on); the operator previews (live tab) stay unmapped
+- gpu: per slice one pass with a perspective-correct corner pin (homography), per mask one pass that darkens (blending); cheap for a few slices
+- coordinates normalized 0..1, origin top left, independent of the output resolution
+- built: src/mapping.rs (types, homography, presets: saved 0.5 s after a change and on quit; the self-test uses its own folder), gfx SLICE_FS / MASK_FS (polygon up to 64 points, crossing test + edge distance for the soft edge) / GRID_FS, Renderer::render_output(.., MapFrame) after master into `mapped`; the screen window shows Renderer::screen_tex(); the mapping is also computed while the tab is open and the mapping is off (for its output view), but only shown on the screen when on
+- the session stores output.mapping (preset name), mapping_on, map_ndi, map_rec; "new" keeps them (output options)
+- self-test: VIDEOPING_SELFTEST_MAP=1|grid (two slices, one corner-pinned, a soft mask; pixel checks outside / inside / in the mask)
 
 ## shader editor — built 2026-11-22
 - top-level tab "shader editor": code (left), preview + parameters or ai (right), compile result (bottom), file bar (top)

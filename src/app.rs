@@ -103,6 +103,10 @@ pub struct App {
     ai: ai_tab::AiChat,
     /// the shader editor (runtime only)
     shed: shader_editor::ShaderEd,
+    /// projection mapping presets (config folder) and the tab's state
+    maps: crate::mapping::Presets,
+    map_test: bool,
+    map_ui: mapping_tab::MapUi,
     /// the chat of the shader editor's ai (runtime only)
     ai_shed: ai_tab::AiChat,
     /// "edit" clicked somewhere: open this shader in the editor at the next frame
@@ -383,6 +387,7 @@ impl App {
                 Ok("midi") => Tab::Midi,
                 Ok("ai") => Tab::Ai,
                 Ok("shader") => Tab::Shader,
+                Ok("mapping") => Tab::Mapping,
                 _ => Tab::Live,
             },
             midi_sel_port: None,
@@ -401,6 +406,9 @@ impl App {
             md_cache: Default::default(),
             ai: Default::default(),
             shed: Default::default(),
+            maps: crate::mapping::Presets::load(),
+            map_test: false,
+            map_ui: Default::default(),
             ai_shed: Default::default(),
             edit_request: std::env::var("VIDEOPING_SELFTEST_EDIT").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).map(PathBuf::from),
             prepare_div_since: Instant::now(),
@@ -642,7 +650,17 @@ impl App {
         r.meter.enabled = true;
         // ---- 2. main mix: mixer, output effects, master, NDI, REC
         let mut fc = FrameCtx { dt, bpm, beat_prev, beat_now: now_beat, rng: &mut self.rng };
-        r.render_output(gl, &mut self.s, layer_tex, &mut fc);
+        // projection mapping: when on and its preset exists (the test grid also while the tab shows it)
+        let o = &self.s.output;
+        // (computed for the mapping tab's view also while it is off)
+        let map = self.maps.get(&o.mapping).filter(|_| o.mapping_on || self.tab == Tab::Mapping).map(|m| crate::render::MapFrame {
+            mapping: m,
+            test_grid: self.map_test,
+            screen: o.mapping_on,
+            ndi: o.map_ndi,
+            rec: o.map_rec,
+        });
+        r.render_output(gl, &mut self.s, layer_tex, &mut fc, map.as_ref());
         if self.cfg.meters {
             self.proc_stats.sample(gl);
         }
@@ -858,7 +876,9 @@ impl App {
             if widgets::choice(ui, self.tab == Tab::Live, "live").clicked() {
                 self.tab = Tab::Live;
             }
-            ui.add_enabled(false, egui::Button::new(egui::RichText::new("mapping").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
+            if widgets::choice(ui, self.tab == Tab::Mapping, "projection mapping").clicked() {
+                self.tab = Tab::Mapping;
+            }
             if widgets::choice(ui, self.tab == Tab::Shader, "shader editor").clicked() {
                 self.tab = Tab::Shader;
             }
@@ -2265,7 +2285,8 @@ impl App {
     fn output_preview(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let w = self.preview_width(ui, 1);
         let (rect, _) = ui.allocate_exact_size(vec2(w, w / self.output_aspect), Sense::hover());
-        let tex = self.r.as_ref().map(|r| r.out.tex);
+        // the screen: the projection-mapped output when the mapping is on
+        let tex = self.r.as_ref().map(|r| r.screen_tex());
         let tid = self.tex_id(frame, tex);
         paint_tex(ui, rect, tid, self.output_aspect);
         if self.s.master.blackout || self.s.master.freeze {
@@ -2593,6 +2614,8 @@ mod mcp_tools;
 mod ai_tab;
 #[path = "shader_editor.rs"]
 mod shader_editor;
+#[path = "mapping_tab.rs"]
+mod mapping_tab;
 
 /// Top-level tabs (mapping, shader editor and sequencer later).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2601,6 +2624,7 @@ enum Tab {
     Midi,
     Ai,
     Shader,
+    Mapping,
 }
 
 impl eframe::App for App {
@@ -2611,6 +2635,7 @@ impl eframe::App for App {
         self.render(&gl);
 
         self.ai_poll(&gl, &ctx);
+        self.maps.poll();
         if let Some(p) = self.edit_request.take() {
             self.shader_open(p);
         }
@@ -2624,6 +2649,7 @@ impl eframe::App for App {
             Tab::Midi => self.midi_tab(ui),
             Tab::Ai => self.ai_tab(ui, frame),
             Tab::Shader => self.shader_tab(ui, frame, &gl),
+            Tab::Mapping => self.mapping_tab(ui, frame),
         }
 
         self.doc_windows(&ctx);
@@ -2640,6 +2666,16 @@ impl eframe::App for App {
     /// the self-test must not touch the stored ui layout
     /// self-test: simulated mouse drag of the in-limiter "[" of the prepare-detail timeline
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // mapping self-test: mouse + arrow keys on the output view (from 2 s on, one step a frame)
+        if std::env::var_os("VIDEOPING_SELFTEST_MAP").is_some() && self.tab == Tab::Mapping {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static STEP: AtomicU32 = AtomicU32::new(0);
+            if self.selftest.as_ref().is_some_and(|t| t.start.elapsed().as_secs_f32() > 2.0) {
+                let step = STEP.fetch_add(1, Ordering::Relaxed);
+                self.selftest_map_input(raw, step);
+            }
+            return;
+        }
         // the MIDI self-test plays without the simulated mouse (its clicks select layers too)
         if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() {
             return;
@@ -2818,6 +2854,7 @@ impl eframe::App for App {
         if self.selftest.is_none() {
             let _ = save_session(&self.s, &self.autosave_path);
         }
+        self.maps.flush();
         // midi profile changes of the last half second; the controller leds off
         if let Some(m) = self.midi.as_mut() {
             m.flush();
@@ -3257,6 +3294,39 @@ impl App {
         let secs = t.start.elapsed().as_secs_f32();
         // VIDEOPING_SELFTEST_EDIT=<.fs>: open in the shader editor; at 1.5 s an error is typed in,
         // at 2.5 s the mapped error line is printed and the error taken out again
+        // VIDEOPING_SELFTEST_MAP=1|grid: a preset with two slices (one corner-pinned) and a soft
+        // mask, mapping on (grid: the test grid); at 3 s pixels of the mapped output are checked
+        if let Ok(mode) = std::env::var("VIDEOPING_SELFTEST_MAP") {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            if STEP.load(Ordering::Relaxed) == 0 {
+                STEP.store(1, Ordering::Relaxed);
+                let mut m = crate::mapping::Mapping::new("selftest stage");
+                m.slices[0] = crate::mapping::Slice { name: "left box".into(), input: [0.0, 0.0, 0.5, 1.0], output: [[0.05, 0.1], [0.42, 0.18], [0.40, 0.85], [0.08, 0.92]] };
+                m.slices.push(crate::mapping::Slice { name: "right box".into(), input: [0.5, 0.0, 0.5, 1.0], output: [[0.55, 0.2], [0.95, 0.2], [0.95, 0.8], [0.55, 0.8]] });
+                m.masks.push(crate::mapping::Mask { name: "booth".into(), points: vec![[0.62, 0.55], [0.88, 0.55], [0.88, 0.8], [0.62, 0.8]], feather: 30.0, invert: false });
+                self.maps.list.retain(|x| x.name != m.name);
+                self.s.output.mapping = self.maps.add(m);
+                self.s.output.mapping_on = true;
+                self.map_test = mode == "grid";
+                self.map_ui = Default::default();
+            } else if secs > 3.0 && STEP.load(Ordering::Relaxed) == 1 {
+                STEP.store(2, Ordering::Relaxed);
+                if let Some(r) = self.r.as_ref() {
+                    let (w, h) = r.size();
+                    let at = |x: f32, y: f32| r.mapped_pixel(gl, (x * w as f32) as i32, (y * h as f32) as i32);
+                    let lum = |p: [u8; 4]| p[0] as u32 + p[1] as u32 + p[2] as u32;
+                    eprintln!(
+                        "selftest mapping: outside (0.5,0.05) = {} (expected 0), left box centre = {} (>0), right box above mask (0.75,0.3) = {} (>0), mask centre (0.75,0.7) = {} (expected 0), screen shows mapped = {}",
+                        lum(at(0.5, 0.05)),
+                        lum(at(0.24, 0.5)),
+                        lum(at(0.75, 0.3)),
+                        lum(at(0.75, 0.7)),
+                        r.mapping_on
+                    );
+                }
+            }
+        }
         // VIDEOPING_SELFTEST_EDIT + VIDEOPING_SELFTEST_AI: the editor's ai against the mock (get,
         // a broken set, a fixed set, look); the result at 4.2 s
         if std::env::var_os("VIDEOPING_SELFTEST_EDIT").is_some() && std::env::var_os("VIDEOPING_SELFTEST_AI").is_some() {

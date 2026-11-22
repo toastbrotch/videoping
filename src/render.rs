@@ -174,6 +174,12 @@ pub struct Renderer {
     fx_raw: Target,
     frozen: Target,
     pub out: Target,
+    /// the projection-mapped output (screen; NDI / recording when chosen)
+    pub mapped: Target,
+    /// test grid (mapping), drawn when used
+    grid: Target,
+    /// the mapping was applied this frame: the screen shows `mapped`
+    pub mapping_on: bool,
     ndi_flip: Target,
     pbos: [glow::Buffer; 2],
     pbo_pending: [bool; 2],
@@ -214,6 +220,9 @@ impl Renderer {
             fx_raw: Target::new(gl, w, h),
             frozen: Target::new(gl, w, h),
             out: Target::new(gl, w, h),
+            mapped: Target::new(gl, w, h),
+            grid: Target::new(gl, w, h),
+            mapping_on: false,
             ndi_flip: Target::new(gl, w, h),
             pbos,
             pbo_pending: [false; 2],
@@ -249,9 +258,11 @@ impl Renderer {
         self.h = h;
         // a recording has one fixed size: it ends when the output resolution changes
         self.stop_recording(gl);
-        for t in self.comp.iter().chain([&self.fx_raw, &self.frozen, &self.out, &self.ndi_flip]) {
+        for t in self.comp.iter().chain([&self.fx_raw, &self.frozen, &self.out, &self.ndi_flip, &self.mapped, &self.grid]) {
             t.delete(gl);
         }
+        self.mapped = Target::new(gl, w, h);
+        self.grid = Target::new(gl, w, h);
         self.comp = [Target::new(gl, w, h), Target::new(gl, w, h)];
         self.fx_raw = Target::new(gl, w, h);
         self.frozen = Target::new(gl, w, h);
@@ -661,13 +672,15 @@ impl Renderer {
         Some(out)
     }
 
-    /// Mixer + output effects + master. Returns the output texture.
+    /// Mixer + output effects + master, then the projection mapping (when on). Returns the
+    /// output texture (unmapped).
     pub fn render_output(
         &mut self,
         gl: &Gl,
         s: &mut Session,
         layer_tex: [Option<glow::Texture>; NUM_LAYERS],
         fc: &mut FrameCtx,
+        map: Option<&MapFrame>,
     ) -> glow::Texture {
         // mixer: bottom layer (3) first, top layer (1) last
         self.meter.begin(gl, Key::Mixer);
@@ -706,14 +719,29 @@ impl Renderer {
         let out = std::mem::replace(&mut self.out, ph(&self.black));
         self.b.master(gl, frozen, brightness, &out);
         self.out = out;
+        // projection mapping: after master; the test grid replaces the composition
+        self.mapping_on = map.is_some_and(|m| m.screen);
+        if let Some(m) = map {
+            let src = if m.test_grid {
+                self.b.grid(gl, w, h, &self.grid);
+                self.grid.tex
+            } else {
+                self.out.tex
+            };
+            let dst = std::mem::replace(&mut self.mapped, ph(&self.black));
+            self.b.mapping(gl, src, m.mapping, w, h, &dst);
+            self.mapped = dst;
+        }
+        let ndi_src = if map.is_some_and(|m| m.screen && m.ndi) { self.mapped.tex } else { self.out.tex };
+        let rec_src = if map.is_some_and(|m| m.screen && m.rec) { self.mapped.tex } else { self.out.tex };
 
         if self.ndi.is_some() {
-            self.ndi_readback(gl);
+            self.ndi_readback(gl, ndi_src);
         }
         self.meter.end(gl);
         if self.rec.is_some() {
             self.meter.begin(gl, Key::Record);
-            self.rec_readback(gl);
+            self.rec_readback(gl, rec_src);
             self.meter.end(gl);
         }
         self.meter.end_frame(gl);
@@ -722,10 +750,9 @@ impl Renderer {
     }
 
     /// Async readback through two PBOs: read this frame, send the previous one.
-    fn ndi_readback(&mut self, gl: &Gl) {
+    fn ndi_readback(&mut self, gl: &Gl, out_tex: glow::Texture) {
         let (w, h) = (self.w, self.h);
         let size = (w * h * 4) as usize;
-        let out_tex = self.out.tex;
         let flip = std::mem::replace(&mut self.ndi_flip, ph(&self.black));
         self.b.blit(gl, out_tex, w, h, &flip, true); // NDI wants top-down rows
         unsafe {
@@ -779,12 +806,12 @@ impl Renderer {
 
     /// NV12 conversion on the GPU, async readback through two PBOs: read this frame, push the
     /// previous one to the encoder (the CPU never waits for the GPU).
-    fn rec_readback(&mut self, gl: &Gl) {
+    fn rec_readback(&mut self, gl: &Gl, src: glow::Texture) {
         let (Some(rec), Some(nv)) = (self.rec.as_mut(), self.rec_nv12.as_ref()) else { return };
         rec.poll();
         let (w, h) = (rec.w, rec.h);
         let size = (w * h * 3 / 2) as usize;
-        self.b.nv12(gl, self.out.tex, w, h, nv);
+        self.b.nv12(gl, src, w, h, nv);
         unsafe {
             let i = self.rec_idx;
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(nv.fbo));
@@ -880,6 +907,17 @@ impl Renderer {
         buf
     }
 
+    /// One pixel of the mapped output (x, y from the top left; self-test).
+    pub fn mapped_pixel(&self, gl: &Gl, x: i32, y: i32) -> [u8; 4] {
+        let mut px = [0u8; 4];
+        unsafe {
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(self.mapped.fbo));
+            gl.read_pixels(x, self.h - 1 - y, 1, 1, glow::RGBA, glow::UNSIGNED_BYTE, glow::PixelPackData::Slice(Some(&mut px)));
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+        }
+        px
+    }
+
     /// Drop the finder preview's GPU state.
     pub fn drop_instance(&mut self, gl: &Gl, id: u64) {
         if let Some(mut g) = self.insts.remove(&id) {
@@ -899,6 +937,28 @@ fn ph(t: &Target) -> Target {
 
 /// Id of the transient finder preview instance.
 pub const PREVIEW_ID: u64 = u64::MAX;
+/// The projection mapping for one frame.
+pub struct MapFrame<'a> {
+    pub mapping: &'a crate::mapping::Mapping,
+    pub test_grid: bool,
+    /// on the screen output (false: only computed for the mapping tab's view)
+    pub screen: bool,
+    /// also on NDI / on the recording
+    pub ndi: bool,
+    pub rec: bool,
+}
+
+/// What the screen shows: the mapped output when the mapping is on.
+impl Renderer {
+    pub fn grid_tex(&self) -> glow::Texture {
+        self.grid.tex
+    }
+
+    pub fn screen_tex(&self) -> glow::Texture {
+        if self.mapping_on { self.mapped.tex } else { self.out.tex }
+    }
+}
+
 /// Id of the shader editor's preview instance.
 pub const EDITOR_ID: u64 = u64::MAX - 1;
 

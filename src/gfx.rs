@@ -213,6 +213,16 @@ impl Program {
         let l = self.loc(gl, name);
         unsafe { gl.uniform_4_f32(l.as_ref(), v[0], v[1], v[2], v[3]) }
     }
+    /// 3x3 matrix, row-major
+    pub fn m3(&mut self, gl: &Gl, name: &str, m: &[f32; 9]) {
+        let l = self.loc(gl, name);
+        unsafe { gl.uniform_matrix_3_f32_slice(l.as_ref(), true, m) }
+    }
+    /// vec2 array
+    pub fn f2v(&mut self, gl: &Gl, name: &str, v: &[f32]) {
+        let l = self.loc(gl, name);
+        unsafe { gl.uniform_2_f32_slice(l.as_ref(), v) }
+    }
     /// bind texture to unit and set sampler uniform
     pub fn tex(&mut self, gl: &Gl, name: &str, unit: u32, tex: Option<glow::Texture>) {
         let l = self.loc(gl, name);
@@ -346,12 +356,85 @@ void main() {
 }
 ";
 
+/// Mapping: one slice. Output pixels (origin top left) -> slice-local (u, v) through the inverse
+/// corner pin, then the input rectangle of the composition; outside the quad nothing is drawn.
+const SLICE_FS: &str = "#version 330
+in vec2 uv;
+out vec4 o;
+uniform sampler2D src;
+uniform mat3 hinv;
+uniform vec4 rect; // input x, y, w, h (origin top left)
+void main() {
+    vec3 q = hinv * vec3(uv.x, 1.0 - uv.y, 1.0);
+    if (q.z <= 0.0) discard;
+    vec2 st = q.xy / q.z;
+    if (st.x < 0.0 || st.x > 1.0 || st.y < 0.0 || st.y > 1.0) discard;
+    vec2 p = rect.xy + st * rect.zw;
+    o = vec4(texture(src, vec2(p.x, 1.0 - p.y)).rgb, 1.0);
+}
+";
+
+/// Mapping: one mask. Coverage of the polygon (soft edge `feather` pixels) as alpha; blended
+/// with (ZERO, ONE_MINUS_SRC_ALPHA) it darkens the output there.
+const MASK_FS: &str = "#version 330
+in vec2 uv;
+out vec4 o;
+uniform vec2 pts[64];
+uniform int n;
+uniform float feather;
+uniform int invert;
+uniform vec2 size;
+void main() {
+    vec2 p = vec2(uv.x, 1.0 - uv.y) * size;
+    bool inside = false;
+    float d = 1e9;
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        vec2 a = pts[i] * size;
+        vec2 b = pts[j] * size;
+        if (((a.y > p.y) != (b.y > p.y)) && (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) inside = !inside;
+        vec2 e = b - a;
+        float t = clamp(dot(p - a, e) / max(dot(e, e), 1e-6), 0.0, 1.0);
+        d = min(d, length(p - a - e * t));
+    }
+    float sd = inside ? -d : d;
+    float cov = feather > 0.0 ? 1.0 - smoothstep(-feather * 0.5, feather * 0.5, sd) : (inside ? 1.0 : 0.0);
+    if (invert == 1) cov = 1.0 - cov;
+    o = vec4(0.0, 0.0, 0.0, cov);
+}
+";
+
+/// Mapping: test grid in composition space (square cells, centre cross, circle, border).
+const GRID_FS: &str = "#version 330
+in vec2 uv;
+out vec4 o;
+uniform vec2 size;
+void main() {
+    vec2 px = vec2(uv.x, 1.0 - uv.y) * size;
+    float cell = size.y / 9.0;
+    vec2 c = size * 0.5;
+    vec2 g = abs(mod(px - c + cell * 0.5, cell) - cell * 0.5);
+    float line = 1.0 - smoothstep(0.5, 1.5, min(g.x, g.y));
+    vec2 dc = abs(px - c);
+    float cross = 1.0 - smoothstep(1.0, 2.5, min(dc.x, dc.y));
+    float circle = 1.0 - smoothstep(1.0, 2.5, abs(length(px - c) - size.y * 0.45));
+    float border = 1.0 - smoothstep(2.0, 4.0, min(min(px.x, px.y), min(size.x - px.x, size.y - px.y)));
+    vec3 bg = mix(vec3(0.10), vec3(0.16), step(0.5, mod(floor((px.x - c.x) / cell) + floor((px.y - c.y) / cell), 2.0)));
+    vec3 col = bg + vec3(0.55) * line;
+    col = mix(col, vec3(0.545, 0.29, 0.53), max(cross, circle));
+    col = mix(col, vec3(1.0), border);
+    o = vec4(col, 1.0);
+}
+";
+
 pub struct Builtins {
     pub quad: Quad,
     pub blit: Program,
     pub mix: Program,
     pub master: Program,
     pub nv12: Program,
+    pub slice: Program,
+    pub mask: Program,
+    pub grid: Program,
 }
 
 impl Builtins {
@@ -362,7 +445,49 @@ impl Builtins {
             mix: Program::new(gl, VS, MIX_FS).expect("mix shader"),
             master: Program::new(gl, VS, MASTER_FS).expect("master shader"),
             nv12: Program::new(gl, VS, NV12_FS).expect("nv12 shader"),
+            slice: Program::new(gl, VS, SLICE_FS).expect("slice shader"),
+            mask: Program::new(gl, VS, MASK_FS).expect("mask shader"),
+            grid: Program::new(gl, VS, GRID_FS).expect("grid shader"),
         }
+    }
+
+    /// Projection mapping of `src` into `dst` (w x h): slices, then masks.
+    pub fn mapping(&mut self, gl: &Gl, src: glow::Texture, m: &crate::mapping::Mapping, w: i32, h: i32, dst: &Target) {
+        dst.bind(gl);
+        unsafe {
+            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear(glow::COLOR_BUFFER_BIT);
+        }
+        self.slice.use_prog(gl);
+        self.slice.tex(gl, "src", 0, Some(src));
+        for sl in &m.slices {
+            let Some(inv) = crate::mapping::invert3(&crate::mapping::square_to_quad(&sl.output)) else { continue };
+            self.slice.m3(gl, "hinv", &inv);
+            self.slice.f4(gl, "rect", sl.input);
+            self.quad.draw(gl);
+        }
+        unsafe {
+            gl.enable(glow::BLEND);
+            gl.blend_func(glow::ZERO, glow::ONE_MINUS_SRC_ALPHA);
+        }
+        self.mask.use_prog(gl);
+        for mk in m.masks.iter().filter(|k| k.points.len() >= 3) {
+            let pts: Vec<f32> = mk.points.iter().take(crate::mapping::MAX_MASK_POINTS).flat_map(|p| [p[0], p[1]]).collect();
+            self.mask.f2v(gl, "pts", &pts);
+            self.mask.i1(gl, "n", (pts.len() / 2) as i32);
+            self.mask.f1(gl, "feather", mk.feather.max(0.0));
+            self.mask.i1(gl, "invert", mk.invert as i32);
+            self.mask.f2(gl, "size", w as f32, h as f32);
+            self.quad.draw(gl);
+        }
+        unsafe { gl.disable(glow::BLEND) }
+    }
+
+    pub fn grid(&mut self, gl: &Gl, w: i32, h: i32, dst: &Target) {
+        dst.bind(gl);
+        self.grid.use_prog(gl);
+        self.grid.f2(gl, "size", w as f32, h as f32);
+        self.quad.draw(gl);
     }
 
     /// src -> dst, optional vertical flip, keeps aspect (letterbox) of src_w/src_h in dst.

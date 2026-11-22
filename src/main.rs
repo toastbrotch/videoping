@@ -6,6 +6,7 @@ mod control;
 mod gfx;
 mod isf;
 mod mcp;
+mod mapping;
 mod meter;
 mod midi;
 mod ndi;

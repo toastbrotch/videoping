@@ -135,7 +135,8 @@
     <li><a href="#playing">3 Playing a set</a></li>
     <li><a href="#clips">4 Clips and parameters</a></li>
     <li><a href="#effects">5 Effects</a></li>
-    <li><a href="#output">6 Output, NDI, recording</a></li>
+    <li><a href="#output">6 Output, NDI, recording, mapping</a>
+      <ul><li><a href="#projmap">projection mapping</a></li></ul></li>
     <li><a href="#midi">7 MIDI controllers</a>
       <ol>
         <li><a href="#bhoreal">Bhoreal</a></li>
@@ -207,13 +208,13 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <p>Four areas from left to right; all column borders can be dragged.</p>
 
 <h3 id="topbar">Top bar</h3>
-<figure><img src="docs/topbar.png" width="970" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
+<figure><img src="docs/topbar.png" width="1010" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
 <ul>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
     <span class="b">midi mapping</span> (<a href="#mapping">MIDI controllers</a>) and
-    <span class="b">ai</span> (<a href="#aitab">the ai tab</a>) and <span class="b">shader editor</span>
-    (<a href="#editor">Shader editor</a>). The output keeps playing in every tab. Mapping and sequencer
-    come later.</li>
+    <span class="b">ai</span> (<a href="#aitab">the ai tab</a>), <span class="b">shader editor</span>
+    (<a href="#editor">Shader editor</a>) and <span class="b">projection mapping</span> (<a href="#projmap">projection
+    mapping</a>). The output keeps playing in every tab. The sequencer comes later.</li>
   <li>A status message appears for a few seconds (saved, loaded, recording to …).</li>
   <li><b>GPU · VRAM · CPU</b>: what videoping uses right now (see <a href="#performance">Performance</a>).</li>
   <li><b>fps counter</b> <code>measured / target fps</code>: grey = fine; white with ⚠ = the output does
@@ -448,7 +449,7 @@ header (or its <code>NAME</code>). The last column is the description. Edits to 
 within a second.</p>
 
 <!-- ================================================================== -->
-<h2 id="output"><span class="n">6</span>Output: screen, NDI, recording</h2>
+<h2 id="output"><span class="n">6</span>Output: screen, NDI, recording, mapping</h2>
 
 <p>Settings are in <b>output options</b> (column 2).</p>
 <ul>
@@ -481,6 +482,39 @@ within a second.</p>
   <li>It needs a hardware video encoder (NVIDIA, or Intel / AMD via VA-API). Without one REC is greyed
     out; hover it to see why.</li>
   <li>About 300 MB per minute at 1080p60.</li>
+</ul>
+
+<h3 id="projmap">Projection mapping (tab "projection mapping")</h3>
+<p>Shape the screen output for the surfaces you project onto: boxes, stage objects, a screen hit at
+an angle. The mapping is applied at the very end (after master) to the <b>screen output</b>; the
+previews in the live tab stay unmapped.</p>
+<figure><img src="docs/mapping.png" width="900" alt="the mapping tab: slices and masks, the input view with the test grid, the output view with a corner-pinned slice and a mask"></figure>
+<ul>
+  <li><b>Slices</b>: each takes a rectangle of the composition (<b>input</b> view, top) and puts it on
+    the output with its own four corners (<b>output</b> view, bottom) — the corners can be dragged
+    anywhere, the picture is bent with correct perspective. Drag a corner, or drag inside to move
+    the whole slice.</li>
+  <li><b>Masks</b>: polygons on the output that black out what is behind them (a DJ booth, a door).
+    Drag the points, drag inside to move it; <b>double click</b> on an edge adds a point,
+    <b>right click</b> on a point removes it. <b>soft edge</b> fades the border; <b>invert</b> keeps only
+    the inside.</li>
+  <li>Select a slice or mask in the list on the left (rename it there) to see its numbers in pixels
+    and type exact values; <span class="b">output = input</span> puts the corners back without
+    distortion.</li>
+  <li><b>Handles</b>: corners and points catch the mouse from about 16 pixels away (also just
+    outside the view, for corners on its border); the pointer shows a cross over a handle and a move
+    cross over a slice or mask. A grabbed handle follows the mouse without jumping to it. The last
+    grabbed handle gets a white ring with its position in pixels: the <b>arrow keys</b> fine-tune it by
+    1 pixel (Shift: 10 pixels).</li>
+  <li><b>test grid</b>: the slices show a grid instead of the composition, on the projector too —
+    for lining everything up on the real surfaces.</li>
+  <li><b>mapping on</b> switches it for the screen. The output window shows every change at once, so
+    you can adjust while looking at the projection.</li>
+  <li><b>also on NDI</b> / <b>also on the recording</b>: by default NDI and REC get the clean
+    composition; tick these to send / record the mapped picture instead.</li>
+  <li><b>Presets</b>: a mapping belongs to a venue, not to a set. Presets are saved by themselves in
+    <code>~/.config/videoping/mapping/</code> (new, duplicate, rename, delete in the bar); the session
+    only remembers which one is active and whether it is on.</li>
 </ul>
 
 <!-- ================================================================== -->
@@ -799,6 +833,7 @@ read only).</p>
   <tr><td>window and column layout</td><td><code>~/.local/share/videoping/</code></td></tr>
   <tr><td>sessions (save / load)</td><td>the path in the top bar, default <code>~/videoping-session.json</code></td></tr>
   <tr><td>recordings</td><td>recording folder, default <code>~/Videos/videoping/</code></td></tr>
+  <tr><td>mapping presets</td><td><code>~/.config/videoping/mapping/</code> (one file per preset, saved automatically)</td></tr>
   <tr><td>MIDI profiles</td><td><code>~/.config/videoping/midi/</code> (one file per profile, saved automatically)</td></tr>
 </table>
 
