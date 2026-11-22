@@ -150,10 +150,14 @@ src/
                list / get / set / snapshot+changes; the base for MIDI, MCP (and OSC); unit tested
   mcp.rs       MCP server: streamable HTTP on 127.0.0.1 (tiny_http thread), JSON-RPC (initialize,
                tools/list, tools/call), tool definitions; tool calls go to the app through a channel
-  mcp_tools.rs the MCP tools, answered by the app at the next frame (child module of app)
+  mcp_tools.rs the MCP tools, answered by the app at the next frame (child module of app); also used by the ai tab
   midi_tab.rs  the tab "midi mapping" (devices, bindings table, addresses + learn); child module of app
   midi.rs      MIDI engine: profiles of bindings (MIDI message <-> control address), modes, LED
                feedback, port scan every 2 s; built-in Bhoreal profile; unit tested
+  ai.rs        ai tab client: Anthropic Messages API / OpenAI-compatible chat completions (ureq, blocking,
+               worker thread); tool list from mcp.rs, request / answer formats
+  ai_tab.rs    the tab "ai": chat, tool loop (calls run in mcp_tools at a frame), undo, ask before changes
+  shader_doc.rs the .md next to a shader: summary, parameter descriptions, warnings, view text
   meter.rs     resource meters (GPU timer queries, VRAM bookkeeping, process CPU / RAM)
   record.rs    REC: NV12 frames -> hardware H.264 -> crash-safe mp4
 ```

@@ -330,9 +330,9 @@ decided 2026-11-21: midi and mcp are two front ends to the same thing, so there 
      - general config: mcp server on/off (default on), port, read only, the claude code command to copy
      - paths given to load_file / add_effect are stored absolute, like the finder does
   4. midifighter twister (midi learn and the "midi mapping" tab are done)
-- after the mcp server (decided 2026-11-21, both for later):
-  - ai tab: a thin chat client inside videoping on the same tools as the mcp server
-    - provider + model setting (anthropic, openai-compatible incl. local ollama / lm studio), api key in the general config
+- after the mcp server (decided 2026-11-21):
+  - ai tab: a thin chat client inside videoping on the same tools as the mcp server — built 2026-11-22, see "ai tab"
+    - provider + model setting (anthropic, openai-compatible incl. local ollama / lm studio); settings and key in the ai tab itself (stored in config.json)
     - every tool call visible (what the ai changed), undo; "ask before applying" for shows; output / preview frames as images when the model supports them
     - caveats: local models are often weak at tool use; the key lives in a config file; every message costs api usage; for playing live the controller stays faster
   - shader editor tab, with ai: write / change isf shaders inside videoping with a live preview (hot reload), the ai sees the output frame and the compile errors

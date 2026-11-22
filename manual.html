@@ -143,7 +143,7 @@
         <li><a href="#mapping">midi mapping tab</a></li>
       </ol>
     </li>
-    <li><a href="#mcp">8 AI control (MCP)</a></li>
+    <li><a href="#mcp">8 AI control: ai tab and MCP</a></li>
     <li><a href="#performance">9 Performance</a></li>
     <li><a href="#files">10 Files and settings</a></li>
     <li><a href="#trouble">11 Troubleshooting</a></li>
@@ -208,8 +208,10 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <h3 id="topbar">Top bar</h3>
 <figure><img src="docs/topbar.png" width="650" alt="top bar: totals, fps counter, session file, new / save / load"></figure>
 <ul>
-  <li><span class="b on">live</span> is the only tab so far (mapping, shader editor, midi mapping and
-    sequencer come later).</li>
+  <li>Tabs: <span class="b on">live</span> (everything in this chapter),
+    <span class="b">midi mapping</span> (<a href="#mapping">MIDI controllers</a>) and
+    <span class="b">ai</span> (<a href="#aitab">the ai tab</a>). The output keeps playing in every tab.
+    Mapping, shader editor and sequencer come later.</li>
   <li>A status message appears for a few seconds (saved, loaded, recording to …).</li>
   <li><b>GPU · VRAM · CPU</b>: what videoping uses right now (see <a href="#performance">Performance</a>).</li>
   <li><b>fps counter</b> <code>measured / target fps</code>: grey = fine; white with ⚠ = the output does
@@ -591,7 +593,7 @@ now" in the table and simply does nothing.</p>
 </ol>
 
 <!-- ================================================================== -->
-<h2 id="mcp"><span class="n">8</span>AI control (MCP)</h2>
+<h2 id="mcp"><span class="n">8</span>AI control: ai tab and MCP</h2>
 
 <p>videoping can be read and controlled by an AI assistant such as Claude Code, through
 <b>MCP</b> (Model Context Protocol). The assistant sees what is live, changes things the same way a
@@ -657,7 +659,8 @@ every tool call is listed in the chat with its result. The output preview is on 
 <h3>Safety</h3>
 <ul>
   <li>Only programs on this computer can connect (127.0.0.1); requests from web pages are refused.</li>
-  <li>Every change shows in the status line of the top bar, e.g. "mcp: /layer/1/mix = 0.5".</li>
+  <li>Every change shows in the status line of the top bar, e.g. "mcp: /layer/1/mix = 0.5" (from the
+    ai tab: "ai: …"); in the ai tab also in the chat, with undo.</li>
   <li><b>read only (for shows)</b> in the general config: the assistant can still look, but every
     change is refused. Switch <i>MCP server</i> off to close it completely.</li>
 </ul>
@@ -797,6 +800,24 @@ shader when its file changes, so you can edit a shader in a text editor while it
     means another program uses 7466: choose another port and add the server again with that port
     (<code>claude mcp add …:PORT/mcp</code>). In Claude Code, <code>/mcp</code> shows whether it is
     connected.</dd>
+
+  <dt>The ai tab says "key not accepted" (401 / 403).</dt>
+  <dd>The key is wrong, revoked or of another provider. Create a new one with
+    <span class="b">get a key</span> and paste it (Ctrl+V). "rate limit or quota" (429): wait a moment,
+    or check the credit of the account in the Anthropic console.</dd>
+
+  <dt>The ai tab gives an error right away with a local model.</dt>
+  <dd>Check the url (Ollama: <code>http://localhost:11434/v1</code>, LM Studio:
+    <code>http://localhost:1234/v1</code>), that the server runs, and that the model name is exactly
+    the one the server lists. A model that cannot take images: switch <b>images</b> off. A model that
+    only talks instead of acting is too weak at tool use: try a bigger one.</dd>
+
+  <dt>The ai tab waits long ("thinking …").</dt>
+  <dd>Set effort to <i>low</i>, or use a faster model (<code>claude-haiku-5-5</code>). Big jobs (many
+    slots, looking at the output) take several rounds; <span class="b">stop</span> breaks off.</dd>
+
+  <dt>Paste (Ctrl+V) does nothing in a text field.</dt>
+  <dd>Builds before 22 November 2026 had no clipboard support: update and restart videoping.</dd>
 
   <dt>Some symbols show as boxes.</dt>
   <dd>Install the DejaVu fonts (<code>fonts-dejavu-core</code>).</dd>
