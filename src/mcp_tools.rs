@@ -31,17 +31,20 @@ impl App {
         }
         let calls = self.mcp.as_ref().map(|s| s.calls()).unwrap_or_default();
         for c in calls {
-            let r = self.mcp_call(gl, &c.name, &c.args);
+            let r = self.mcp_call(gl, &c.name, &c.args, false);
             c.answer(r);
         }
     }
 
-    fn mcp_changes_refused(&self) -> Option<ToolResult> {
-        self.cfg.mcp_read_only.then(|| ToolResult::error("videoping is set to read only for MCP (general config): changes are refused"))
+    /// "read only" is for MCP clients from outside; the ai tab has "ask before changes" instead
+    fn mcp_changes_refused(&self, from_ai: bool) -> Option<ToolResult> {
+        (self.cfg.mcp_read_only && !from_ai).then(|| ToolResult::error("videoping is set to read only for MCP (general config): changes are refused"))
     }
 
-    fn mcp_call(&mut self, gl: &glow::Context, name: &str, a: &J) -> ToolResult {
+    /// One tool call (from an MCP client, or from the ai tab: from_ai).
+    pub(super) fn mcp_call(&mut self, gl: &glow::Context, name: &str, a: &J, from_ai: bool) -> ToolResult {
         let s = |k: &str| a.get(k).and_then(|v| v.as_str()).map(|v| v.to_string());
+        let who = if from_ai { "ai" } else { "mcp" };
         match name {
             "state" => ToolResult::text(self.mcp_state()),
             "list_addresses" => {
@@ -76,7 +79,7 @@ impl App {
                 ToolResult::text(lines.join("\n"))
             }
             "set" => {
-                if let Some(r) = self.mcp_changes_refused() {
+                if let Some(r) = self.mcp_changes_refused(from_ai) {
                     return r;
                 }
                 let Some(addr) = s("address") else { return ToolResult::error("address missing") };
@@ -90,7 +93,7 @@ impl App {
                 match self.control_set(&addr, &v) {
                     Ok(()) => {
                         let now = self.control_get(&addr);
-                        self.set_status(format!("mcp: {addr} = {}", value_text(&v)));
+                        self.set_status(format!("{who}: {addr} = {}", value_text(&v)));
                         ToolResult::text(match now {
                             Some(n) => format!("{addr} = {}", value_text(&n)),
                             None => format!("{addr}: done"),
@@ -119,7 +122,7 @@ impl App {
                 ToolResult::text(if lines.is_empty() { "no files (add folders in the finder)".into() } else { lines.join("\n") })
             }
             "load_file" => {
-                if let Some(r) = self.mcp_changes_refused() {
+                if let Some(r) = self.mcp_changes_refused(from_ai) {
                     return r;
                 }
                 let Some(p) = s("path") else { return ToolResult::error("path missing") };
@@ -144,14 +147,14 @@ impl App {
                 self.add_file_to_slot(&path, &kind, slot);
                 match self.s.selected_instance.and_then(|id| self.s.slot_of(id)) {
                     Some(si) => {
-                        self.set_status(format!("mcp: loaded {} into slot {}", isf::display_name(&path), si + 1));
+                        self.set_status(format!("{who}: loaded {} into slot {}", isf::display_name(&path), si + 1));
                         ToolResult::text(format!("slot {}", si + 1))
                     }
                     None => ToolResult::error("could not load it"),
                 }
             }
             "add_effect" => {
-                if let Some(r) = self.mcp_changes_refused() {
+                if let Some(r) = self.mcp_changes_refused(from_ai) {
                     return r;
                 }
                 let Some(p) = s("path") else { return ToolResult::error("path missing") };
@@ -181,7 +184,7 @@ impl App {
                         Owner::Output => format!("/out/fx/{after}"),
                         Owner::Instance(id) => format!("/slot/{}/fx/{after}", self.s.slot_of(id).map(|x| x + 1).unwrap_or(0)),
                     };
-                    self.set_status(format!("mcp: added {} at {where_}", isf::display_name(&path)));
+                    self.set_status(format!("{who}: added {} at {where_}", isf::display_name(&path)));
                     ToolResult::text(format!("added as {where_}"))
                 } else {
                     ToolResult::error(format!("not added (max {MAX_EFFECTS} effects per instance and on the output)"))
@@ -304,7 +307,7 @@ impl App {
     }
 }
 
-fn value_text(v: &CValue) -> String {
+pub(super) fn value_text(v: &CValue) -> String {
     match v {
         CValue::Bool(b) => b.to_string(),
         CValue::Num(n) => format!("{n}"),

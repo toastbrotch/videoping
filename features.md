@@ -39,7 +39,7 @@ the ui has top-level tabs:
 - **live**: everything described below — the default tab
 - **midi mapping**: built (see "midi mapping")
 - planned, in this order (decided 2026-11-21): first the mcp server (no tab), then:
-  - **ai** (later): chat with an llm of choice inside videoping, using the same tools as the mcp server
+  - **ai**: built 2026-11-22 (see "ai tab")
   - **shader editor** (later), with ai
 - later (not planned yet):
   - mapping
@@ -484,6 +484,23 @@ earlier idea, decided 2026-11-21:
 - RGBA -> NV12 conversion in a shader on the GPU, async readback through two PBOs (like NDI), the render thread never waits
 - crash-safe: index space for 1 hour reserved at the start of the file, updated every 2 s; after a crash the file plays up to the last update (tested: killed after 7 s, plays 6 s); longer recordings are finished normally on stop
 - measured (1080p, Intel Iris Xe + NVENC): about 8 % of one CPU core (~1.6 ms per frame)
+
+## ai tab — built 2026-11-22
+- a chat inside videoping (top-level tab "ai") on the same tools as the mcp server (state, list_addresses, get, set, list_files, load_file, add_effect, frame, shader_errors, shader_info); system prompt = the mcp instructions + "be short, act with the tools, say in one line what you changed"
+- providers: Anthropic Messages API (raw HTTP with ureq, API version 2026-10-21) and OpenAI-compatible chat completions (OpenAI, Ollama, LM Studio: own url)
+  - anthropic: model default claude-opus-5-5 (▾ menu: opus 5.5, sonnet 5.5, haiku 5.5, fable 5.1, or type any), effort low / medium / high (default low: live use wants fast answers), adaptive thinking (model default), the assistant content goes back unchanged (thinking blocks), top-level prompt caching, server-side refusal fallback ("default") on the models that have it, max_tokens 16000, no streaming (answers are short; "thinking … n s" while waiting)
+  - openai-compatible: tools as functions; tool results as tool messages, images as a following user message
+- settings in the tab (stored in config.json, which is written with mode 0600 because of the keys): provider, model, key (password field, "show"), url (empty = official), ask before changes, images
+  - key: paste (clipboard: eframe feature "clipboard" was missing, so paste worked in no text field; fixed 2026-11-22), "get a key" link to the Anthropic console, empty field = env ANTHROPIC_API_KEY / OPENAI_API_KEY (the hint shows "from ...")
+  - not possible: the Claude Code / claude.ai subscription login — that is for Anthropic's own apps; videoping needs an API key (billed per use in the console)
+- every tool call is a line in the chat: name, arguments, result (4 lines, hover for all), the image of `frame` as a thumbnail; `set` has undo (the value before; the model is told with the next message)
+- "ask before changes" (default off): set / load_file / add_effect wait for apply / skip / apply all; reading tools never wait
+- the mcp "read only" setting does not apply to the ai tab (it is for clients from outside); status line shows "ai: ..." for its changes
+- requests in a worker thread; tool calls at a frame (they need the gpu for `frame`); the loop runs on in other tabs; at most 25 tool rounds per message; stop answers open calls with "stopped by the user"
+- not saved: a new start or "new chat" = a new conversation; switching provider starts a new conversation (other message format)
+- token count of the chat at the bottom right (input incl. cached)
+- self-test: VIDEOPING_SELFTEST_AI=<url of a mock server> (scratchpad mock: answers set + frame, then text) checks the whole loop without api cost
+- open: streaming, a cheaper model for quick questions, images from the prepare preview / slots in the chat, the shader editor (next)
 
 ## shader documentation (.md next to the .fs) — decided + built 2026-11-22
 - many isf shaders have a markdown file with the same name (`chaos-feedback.fs` + `chaos-feedback.md`) that explains the shader

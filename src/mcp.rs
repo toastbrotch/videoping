@@ -177,7 +177,7 @@ fn result_json(r: ToolResult) -> Value {
     json!({ "content": content, "isError": r.is_error })
 }
 
-const INSTRUCTIONS: &str = "videoping is a live VJ tool: instances (clips, ISF generators, NDI sources) sit in a prepare grid \
+pub const INSTRUCTIONS: &str = "videoping is a live VJ tool: instances (clips, ISF generators, NDI sources) sit in a prepare grid \
 of slots, 3 mixer layers play them, effects (ISF) sit on instances or on the output. Start with `state`. \
 Everything controllable has an address (see `list_addresses`): /layer/N/..., /slot/N/... (slots count top-down per \
 column, 32 per page), /slot/N/fx/K/param/P (parameter P counted like the ui), /master/..., /bpm. Read with `get`, \

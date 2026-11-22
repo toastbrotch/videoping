@@ -389,6 +389,43 @@ pub struct Config {
     /// MCP may read but not change anything (for shows)
     #[serde(default)]
     pub mcp_read_only: bool,
+    /// ai tab: "anthropic" or "openai" (openai-compatible: OpenAI, Ollama, LM Studio ...)
+    #[serde(default = "ai_provider")]
+    pub ai_provider: String,
+    #[serde(default = "ai_model")]
+    pub ai_model_anthropic: String,
+    #[serde(default)]
+    pub ai_model_openai: String,
+    /// api keys (this file is only readable by the user)
+    #[serde(default)]
+    pub ai_key_anthropic: String,
+    #[serde(default)]
+    pub ai_key_openai: String,
+    /// empty = https://api.anthropic.com
+    #[serde(default)]
+    pub ai_url_anthropic: String,
+    /// e.g. http://localhost:11434/v1 for Ollama; empty = https://api.openai.com/v1
+    #[serde(default)]
+    pub ai_url_openai: String,
+    /// anthropic: low / medium / high
+    #[serde(default = "ai_effort")]
+    pub ai_effort: String,
+    /// changes (set, load_file, add_effect) wait for "apply" in the chat
+    #[serde(default)]
+    pub ai_ask: bool,
+    /// send output frames to the model as images (some local models cannot take images)
+    #[serde(default = "yes")]
+    pub ai_images: bool,
+}
+
+fn ai_provider() -> String {
+    "anthropic".into()
+}
+fn ai_model() -> String {
+    "claude-opus-5-5".into()
+}
+fn ai_effort() -> String {
+    "low".into()
 }
 
 fn mcp_port() -> u16 {
@@ -397,7 +434,23 @@ fn mcp_port() -> u16 {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { meters: true, record_dir: String::new(), mcp: true, mcp_port: mcp_port(), mcp_read_only: false }
+        Config {
+            meters: true,
+            record_dir: String::new(),
+            mcp: true,
+            mcp_port: mcp_port(),
+            mcp_read_only: false,
+            ai_provider: ai_provider(),
+            ai_model_anthropic: ai_model(),
+            ai_model_openai: String::new(),
+            ai_key_anthropic: String::new(),
+            ai_key_openai: String::new(),
+            ai_url_anthropic: String::new(),
+            ai_url_openai: String::new(),
+            ai_effort: ai_effort(),
+            ai_ask: false,
+            ai_images: true,
+        }
     }
 }
 

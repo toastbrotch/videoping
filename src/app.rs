@@ -79,6 +79,8 @@ pub struct App {
     /// shaders whose doc window is open
     doc_windows: Vec<PathBuf>,
     md_cache: egui_commonmark::CommonMarkCache,
+    /// the chat of the ai tab (runtime only)
+    ai: ai_tab::AiChat,
     prepare_div_since: Instant,
     /// GPU ms of the main mix per frame (live instances, mixer, output effects, master, REC)
     main_ms: f32,
@@ -137,7 +139,11 @@ fn save_config(c: &Config) -> Result<(), String> {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     let txt = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
-    std::fs::write(&p, txt).map_err(|e| format!("{}: {e}", p.display()))
+    std::fs::write(&p, txt).map_err(|e| format!("{}: {e}", p.display()))?;
+    // it holds the ai api keys: readable by the user only
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+    Ok(())
 }
 
 fn autosave_path() -> PathBuf {
@@ -316,6 +322,10 @@ impl App {
                     mcp: std::env::var_os("VIDEOPING_SELFTEST_MCP").is_some(),
                     mcp_port: std::env::var("VIDEOPING_SELFTEST_MCP").ok().and_then(|p| p.parse().ok()).unwrap_or(crate::mcp::DEFAULT_PORT),
                     mcp_read_only: std::env::var_os("VIDEOPING_SELFTEST_MCP_RO").is_some(),
+                    // VIDEOPING_SELFTEST_AI=<url>: the ai tab talks to a local mock server
+                    ai_url_anthropic: std::env::var("VIDEOPING_SELFTEST_AI").unwrap_or_default(),
+                    ai_key_anthropic: if std::env::var_os("VIDEOPING_SELFTEST_AI").is_some() { "selftest".into() } else { String::new() },
+                    ..Default::default()
                 }
             } else {
                 load_config()
@@ -337,7 +347,11 @@ impl App {
             frames_dropped: 0,
             last_drop: None,
             selftest_open_config: std::env::var_os("VIDEOPING_SELFTEST_CONFIG").is_some(),
-            tab: if std::env::var("VIDEOPING_SELFTEST_TAB").as_deref() == Ok("midi") { Tab::Midi } else { Tab::Live },
+            tab: match std::env::var("VIDEOPING_SELFTEST_TAB").as_deref() {
+                Ok("midi") => Tab::Midi,
+                Ok("ai") => Tab::Ai,
+                _ => Tab::Live,
+            },
             midi_sel_port: None,
             midi_sel_addr: None,
             midi_search: String::new(),
@@ -352,6 +366,7 @@ impl App {
             docs: Default::default(),
             doc_windows: std::env::var("VIDEOPING_SELFTEST_DOC").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).map(PathBuf::from).into_iter().collect(),
             md_cache: Default::default(),
+            ai: Default::default(),
             prepare_div_since: Instant::now(),
             main_ms: 0.0,
             prepare_renders: 0,
@@ -802,6 +817,9 @@ impl App {
             ui.add_enabled(false, egui::Button::new(egui::RichText::new("shader editor").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
             if widgets::choice(ui, self.tab == Tab::Midi, "midi mapping").clicked() {
                 self.tab = Tab::Midi;
+            }
+            if widgets::choice(ui, self.tab == Tab::Ai, "ai").clicked() {
+                self.tab = Tab::Ai;
             }
             ui.add_enabled(false, egui::Button::new(egui::RichText::new("sequencer").size(widgets::BTN_TEXT)).min_size(widgets::BTN));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2384,12 +2402,15 @@ impl App {
 mod midi_tab;
 #[path = "mcp_tools.rs"]
 mod mcp_tools;
+#[path = "ai_tab.rs"]
+mod ai_tab;
 
 /// Top-level tabs (mapping, shader editor and sequencer later).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Tab {
     Live,
     Midi,
+    Ai,
 }
 
 impl eframe::App for App {
@@ -2399,11 +2420,13 @@ impl eframe::App for App {
         self.update_preview(&gl);
         self.render(&gl);
 
+        self.ai_poll(&gl, &ctx);
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui, &gl));
         // the output keeps rendering in every tab (render() above)
         match self.tab {
             Tab::Live => self.live_tab(ui, frame, &ctx),
             Tab::Midi => self.midi_tab(ui),
+            Tab::Ai => self.ai_tab(ui, frame),
         }
 
         self.doc_windows(&ctx);
@@ -3031,6 +3054,18 @@ impl App {
         }
         let Some(t) = self.selftest.as_mut() else { return };
         let secs = t.start.elapsed().as_secs_f32();
+        // VIDEOPING_SELFTEST_AI=<mock url>: a chat message at 2 s, the result at 5.5 s
+        if std::env::var_os("VIDEOPING_SELFTEST_AI").is_some() {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            if secs > 2.0 && STEP.load(Ordering::Relaxed) == 0 {
+                STEP.store(1, Ordering::Relaxed);
+                self.ai_selftest_send("dim the output to half and look at it");
+            } else if secs > 5.5 && STEP.load(Ordering::Relaxed) == 1 {
+                STEP.store(2, Ordering::Relaxed);
+                eprintln!("selftest ai: brightness = {:.2} (expected 0.50); chat: {}", self.s.master.brightness, self.ai_selftest_summary());
+            }
+        }
         // NDI input test: receive our own NDI output as soon as it is discovered
         if std::env::var("VIDEOPING_SELFTEST_NDI").is_ok() && !self.s.slots.iter().flatten().any(|i| matches!(i.source, SourceKind::Ndi { .. })) {
             let own = self.ndi_finder.as_ref().and_then(|f| f.sources().into_iter().find(|s| s.ends_with("(videoping)")));

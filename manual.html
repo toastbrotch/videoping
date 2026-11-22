@@ -601,7 +601,40 @@ assistant looks at the result and keeps going), for <b>preparing a set</b> ("put
 folder X into page 2, each with VHS glitch") and for <b>asking</b> ("what is live, why is it
 slow?").</p>
 
-<h3>Connect</h3>
+<p>Two ways: the <a href="#aitab">ai tab</a> inside videoping (chat, nothing else to install), or an
+assistant outside, like Claude Code, connected through the MCP server.</p>
+
+<h3 id="aitab">The ai tab</h3>
+<p>A chat inside videoping. Type what you want; the assistant uses the tools below directly, and
+every tool call is listed in the chat with its result. The output preview is on the right.</p>
+<ul>
+  <li><b>Provider</b>: <span class="b on">Anthropic</span> (Claude) or <span class="b">OpenAI-compatible</span>:
+    OpenAI, or a model on your own computer with <b>Ollama</b> (url
+    <code>http://localhost:11434/v1</code>) or <b>LM Studio</b> (<code>http://localhost:1234/v1</code>).
+    Local models are free but often weak at using tools.</li>
+  <li><b>model</b>: for Anthropic pick one with <span class="b">▾</span>
+    (<code>claude-opus-5-5</code> is the default, <code>claude-haiku-5-5</code> the fastest and
+    cheapest). <b>effort</b>: how much the model thinks before it answers; <i>low</i> is the
+    fastest, <i>high</i> for harder jobs.</li>
+  <li><b>key</b>: your API key. <span class="b">get a key</span> opens the Anthropic console (API keys →
+    create key); copy it and paste it into the field (Ctrl+V). It is stored in the general config
+    file, readable only by you. Empty field = the environment variable <code>ANTHROPIC_API_KEY</code>
+    (<code>OPENAI_API_KEY</code>), if set. <b>url</b>: empty = the provider's own server.</li>
+  <li><b>Enter</b> sends, Shift+Enter makes a new line. <span class="b">stop</span> breaks off,
+    <span class="b">new chat</span> forgets the conversation. The chat is not saved.</li>
+  <li><b>undo</b> next to a <code>set</code> puts the value back (the assistant is told).</li>
+  <li><b>ask before changes</b> (for shows): every change (set, load, add effect) waits in the chat
+    for <span class="b">apply</span>, <span class="b">skip</span> or <span class="b">apply all</span>.
+    Looking (state, frame …) never waits.</li>
+  <li><b>images</b>: the assistant may look at the output (<code>frame</code>); switch off for
+    models that cannot take images.</li>
+  <li>The chat goes on when you switch to another tab. Every message costs API usage; the token
+    count of the chat is at the bottom right.</li>
+  <li>The ai tab is not limited by the MCP <i>read only</i> setting (that is for assistants from
+    outside); use <i>ask before changes</i> instead.</li>
+</ul>
+
+<h3>Connect an assistant from outside (Claude Code)</h3>
 <ol>
   <li>Start videoping. The MCP server runs by itself (general config → <i>MCP server</i>, port 7466).</li>
   <li>Once, in a terminal:
@@ -698,7 +731,7 @@ read only).</p>
 <table>
   <tr><th>what</th><th>where</th></tr>
   <tr><td>autosave</td><td><code>~/.local/share/videoping/autosave.json</code></td></tr>
-  <tr><td>general config</td><td><code>~/.config/videoping/config.json</code></td></tr>
+  <tr><td>general config (incl. the ai tab settings and API keys, readable only by you)</td><td><code>~/.config/videoping/config.json</code></td></tr>
   <tr><td>window and column layout</td><td><code>~/.local/share/videoping/</code></td></tr>
   <tr><td>sessions (save / load)</td><td>the path in the top bar, default <code>~/videoping-session.json</code></td></tr>
   <tr><td>recordings</td><td>recording folder, default <code>~/Videos/videoping/</code></td></tr>

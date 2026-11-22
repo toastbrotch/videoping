@@ -1,5 +1,6 @@
 //! videoping — personal live vjing tool. See features.md.
 
+mod ai;
 mod app;
 mod control;
 mod gfx;
