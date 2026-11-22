@@ -40,7 +40,7 @@ const FINDER_CATS: [(&str, FileKind); 5] = [
     ("generators", FileKind::Generator),
     ("effects", FileKind::Effect),
     ("NDI sources", FileKind::Ndi),
-    ("videopong", FileKind::Videopong),
+    ("videopong.net", FileKind::Videopong),
 ];
 
 /// Entries grouped by folder, in folder order (indices into the list).
@@ -112,6 +112,9 @@ pub struct App {
     md_cache: egui_commonmark::CommonMarkCache,
     /// the chat of the ai tab (runtime only)
     ai: ai_tab::AiChat,
+    /// the quit question is open / was answered with quit
+    confirm_quit: bool,
+    quit_ok: bool,
     /// the shader editor (runtime only)
     shed: shader_editor::ShaderEd,
     /// projection mapping presets (config folder) and the tab's state
@@ -288,6 +291,9 @@ fn scan_with_dirs(roots: &[PathBuf]) -> (Vec<FinderEntry>, Vec<(PathBuf, Option<
     for r in roots {
         walk(r, r, 0, &mut out, &mut dirs);
     }
+    // nested finder folders (e.g. ~/Videos and ~/Videos/videopong): every file once
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|e| seen.insert(e.path.clone()));
     (out, dirs)
 }
 
@@ -418,6 +424,8 @@ impl App {
             doc_windows: std::env::var("VIDEOPING_SELFTEST_DOC").ok().filter(|_| std::env::var_os("VIDEOPING_SELFTEST").is_some()).map(PathBuf::from).into_iter().collect(),
             md_cache: Default::default(),
             ai: Default::default(),
+            confirm_quit: false,
+            quit_ok: false,
             shed: Default::default(),
             maps: crate::mapping::Presets::load(),
             map_test: false,
@@ -853,6 +861,56 @@ impl App {
     }
 
     /// Confirmation dialog for "new".
+    /// The × of the main window (or Alt+F4): ask first. The self-test closes without asking
+    /// (VIDEOPING_SELFTEST_QUIT tests the question).
+    fn guard_quit(&mut self, ctx: &egui::Context) {
+        let guarded = self.selftest.is_none() || std::env::var_os("VIDEOPING_SELFTEST_QUIT").is_some();
+        if guarded && !self.quit_ok && ctx.input(|i| i.viewport().close_requested()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.confirm_quit = true;
+        }
+        if !self.confirm_quit {
+            return;
+        }
+        let rec = self.r.as_ref().is_some_and(|r| r.rec.is_some());
+        let ndi = self.s.output.ndi_enabled;
+        let window = self.s.output.window_open;
+        let editor = self.shed.dirty();
+        let mut quit = false;
+        let mut cancel = false;
+        let resp = egui::Modal::new(egui::Id::unique("confirm_quit")).show(ctx, |ui| {
+            ui.set_width(340.0);
+            ui.label(egui::RichText::new("quit videoping?").strong());
+            ui.add_space(4.0);
+            if window || ndi {
+                ui.label(format!("the output stops{}{}.", if window { ": the output window closes" } else { "" }, if ndi { if window { ", NDI ends" } else { ": NDI ends" } } else { "" }));
+            }
+            if rec {
+                ui.label(egui::RichText::new("a recording is running: it is finished and saved.").color(Color32::from_gray(235)));
+            }
+            if editor {
+                ui.label(egui::RichText::new(format!("the shader editor has unsaved changes ({}): they are lost.", self.shed.name())).color(Color32::from_gray(235)));
+            }
+            ui.label(egui::RichText::new("the session is saved by itself and comes back at the next start.").weak());
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if widgets::choice(ui, true, "quit").clicked() {
+                    quit = true;
+                }
+                if widgets::btn(ui, "cancel").clicked() {
+                    cancel = true;
+                }
+            });
+        });
+        if quit {
+            self.confirm_quit = false;
+            self.quit_ok = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if cancel || resp.should_close() {
+            self.confirm_quit = false;
+        }
+    }
+
     fn confirm_new_dialog(&mut self, ctx: &egui::Context, gl: &glow::Context) {
         if !self.confirm_new {
             return;
@@ -1365,6 +1423,12 @@ impl App {
 
     fn vp_apply(&mut self, path: PathBuf, after: crate::videopong::After) {
         use crate::videopong::After;
+        // the download folder joins the finder folders (the clips are then also under "clips")
+        let dir = crate::videopong::clip_dir();
+        if !self.s.finder_roots.contains(&dir) {
+            self.s.finder_roots.push(dir);
+            self.rescan_finder();
+        }
         match after {
             After::Preview => self.finder_sel = Some((path, FileKind::Clip)),
             After::FirstFree => self.add_file_to_slot(&path, &FileKind::Clip, None),
@@ -2825,6 +2889,7 @@ impl eframe::App for App {
 
         self.doc_windows(&ctx);
         self.confirm_new_dialog(&ctx, &gl);
+        self.guard_quit(&ctx);
         self.output_window(&ctx, frame);
         if self.selftest.is_some() {
             self.selftest_step(&ctx, &gl);
@@ -2848,7 +2913,7 @@ impl eframe::App for App {
             return;
         }
         // the MIDI self-test plays without the simulated mouse (its clicks select layers too)
-        if std::env::var_os("VIDEOPING_SELFTEST_MIDI").is_some() || std::env::var_os("VIDEOPING_SELFTEST_VP").is_some() {
+        if ["VIDEOPING_SELFTEST_MIDI", "VIDEOPING_SELFTEST_VP", "VIDEOPING_SELFTEST_QUIT"].iter().any(|v| std::env::var_os(v).is_some()) {
             return;
         }
         let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
@@ -3471,6 +3536,26 @@ impl App {
         let secs = t.start.elapsed().as_secs_f32();
         // VIDEOPING_SELFTEST_EDIT=<.fs>: open in the shader editor; at 1.5 s an error is typed in,
         // at 2.5 s the mapped error line is printed and the error taken out again
+        // VIDEOPING_SELFTEST_QUIT: at 2 s the window's close is requested (like its ×): the question
+        // must come and videoping must still run at 3 s; then "quit" is answered
+        if std::env::var_os("VIDEOPING_SELFTEST_QUIT").is_some() {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            match STEP.load(Ordering::Relaxed) {
+                0 if secs > 2.0 => {
+                    STEP.store(1, Ordering::Relaxed);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                1 if secs > 3.0 => {
+                    STEP.store(2, Ordering::Relaxed);
+                    eprintln!("selftest quit: after the close request still running, question open = {} (expected true)", self.confirm_quit);
+                    self.confirm_quit = false;
+                    self.quit_ok = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                _ => {}
+            }
+        }
         // VIDEOPING_SELFTEST_VP=<query>: videopong in the finder: search at once, at 3.5 s the
         // results + thumbnails, then the first clip downloaded into slot 3 (without the mouse script
         // of the regular self-test, its "new" would clear it); as soon as it is there (max 20 s)
@@ -3501,7 +3586,13 @@ impl App {
                 2 if self.s.slots[2].is_some() || secs > 20.0 => {
                     STEP.store(3, Ordering::Relaxed);
                     let slot3 = self.s.slots[2].as_ref().map(|i| (i.name.clone(), match &i.source { SourceKind::Clip { path, .. } => path.exists(), _ => false }));
-                    eprintln!("selftest videopong: slot 3 = {slot3:?} (expected the first clip, file present); downloads running {}", self.vp.downloads.len());
+                    let dir = crate::videopong::clip_dir();
+                    eprintln!(
+                        "selftest videopong: slot 3 = {slot3:?} (expected the first clip, file present); downloads running {}; download folder in the finder folders = {}, its clips under \"clips\" = {}",
+                        self.vp.downloads.len(),
+                        self.s.finder_roots.contains(&dir),
+                        self.finder.iter().filter(|e| e.kind == FileKind::Clip && e.path.starts_with(&dir)).count()
+                    );
                 }
                 _ => {}
             }

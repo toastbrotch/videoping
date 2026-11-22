@@ -81,6 +81,9 @@ everything below belongs to the tab "live".
 
 # column 1
 
+## quit guard
+- (2026-11-22) the main window's × / Alt+F4 asks "quit videoping?" (modal: what stops — output window, NDI, a running recording is finished and saved, unsaved shader editor changes are lost; the session autosaves); quit / cancel, Esc or a click beside = cancel; the output window's own × only closes the output window
+
 ## finder preview
 
 - shows preview if something is clicked in the finder
@@ -104,6 +107,7 @@ finder finds these:
   - folders as groups: inside a category the files are grouped by the folder they are in (shown from the finder folder's name on, e.g. "clips/loops/abstract", with the number of files); groups are collapsible, open by default when a category has 3 or fewer, always open while searching; a folder with one file and a category with one folder show the files without a header
   - favorites: ☆ appears left of a file on hover, a click pins it (★, accent) under "★ favorites" on top of its category (it stays in its folder too); saved in the session, kept by "new" (like the finder folders)
   - later: "in use" marker (files in the grid / live), clip thumbnails, recently used
+- nested finder folders (a folder inside another finder folder): every file is listed once (2026-11-22)
 - the finder folders are watched: every 2 s the known folders are checked (modification time only, cheap); a new, deleted or renamed file (e.g. a finished recording, copied clips) appears without a manual refresh
 - videopong clips (decided 2026-11-22, see "videopong")
 - glslop.com shaders or https://editor.isf.video/shaders? (prio2)
@@ -512,9 +516,9 @@ earlier idea, decided 2026-11-21:
 ## videopong (videopong.net clips in the finder) — decided + built 2026-11-22
 - like the Resolume plugin ../ffgl/source/plugins/VideoPong: the public JSON API https://www.videopong.net/api (no key): /clip/search/<query>/<offset>/<count> (count max 50), /clip/random/<n>; answer {status: {error, errorstring}, data: [[clip, user], ...], count}; clip: id, title, duration, framerate, resolution, license, url_thumb (jpg), url_preview_mp4, url_videopong; user: name
 - only the public preview mp4 (480x360 H.264): the full-quality download (url_download) needs a videopong login -> later, if wanted
-- finder: a 5th category "videopong" in the accordion: search field (Enter) + "random"; results 50 at a time, "more" loads the next 50; each row: thumbnail, title, duration, original resolution, author, license; ✓ = downloaded
+- finder: a 5th category "videopong.net" (named so 2026-11-22) in the accordion: search field (Enter) + "random"; results 50 at a time, "more" loads the next 50; each row: thumbnail, title, duration, original resolution, author, license; ✓ = downloaded
 - click = download (if needed) + finder preview; double click = download + first free slot; drag onto a slot = download + into that slot (status line shows the download); a downloaded clip is a normal mp4 (same as a finder clip)
-- clips cached in ~/Videos/videopong/<title> [<id>].mp4 (visible, reusable, sessions find them offline); thumbnails cached in ~/.cache/videoping/videopong-thumbs/
+- clips cached in ~/Videos/videopong/<title> [<id>].mp4 (visible, reusable, sessions find them offline); with the first download (any download, also an already cached one used again) the folder is added to the finder folders (2026-11-22), so the downloads also appear under "clips"; thumbnails cached in ~/.cache/videoping/videopong-thumbs/
 - network in background threads (search, 4 thumbnail workers, downloads with progress); the ui never waits
 - built: src/videopong.rs (ureq + image/jpeg for the thumbnails, 160x120 max), finder category FileKind::Videopong, Drag::Videopong (downloaded on drop), instance name = the title (without " [id]"); a global "search all" never switches to videopong (its count is the result list, not hits)
 - self-test: VIDEOPING_SELFTEST_VP=<query> (real network: search, thumbnails, first clip into slot 3)

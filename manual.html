@@ -233,7 +233,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     <li><b>folders</b>: the folders the finder shows; add one with its path, remove one with
       <span class="b">×</span>.</li>
     <li>Five categories: <b>clips</b>, <b>generators</b>, <b>effects</b>, <b>NDI sources</b>
-      (found automatically on the network) and <b>videopong</b> (below). Their headers always stay visible, with the number of
+      (found automatically on the network) and <b>videopong.net</b> (below). Their headers always stay visible, with the number of
       files; one is open at a time and scrolls on its own. Click another header to switch: each keeps
       its scroll position, so from deep in the clips the effects are one click away. Click the open
       header to close it. Whether a shader
@@ -242,13 +242,15 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       folder to open or close it.</li>
     <li><b>search all</b> searches every category at once: the headers show the hits, and a category
       with hits opens by itself. <b>Esc</b> clears the search.</li>
-    <li><b>videopong</b> (the fifth category): clips from <a href="https://www.videopong.net">videopong.net</a>,
+    <li><b>videopong.net</b> (the fifth category): clips from <a href="https://www.videopong.net">videopong.net</a>,
       the VJ footage platform. Type a search and press Enter (or <span class="b">search</span>), or
       <span class="b">random</span> for 50 random clips; <span class="b">more</span> loads the next 50. Each
       clip shows its thumbnail, title, length, author and license. <b>Click</b> = download and preview,
       <b>double click</b> = download into the first free slot, <b>drag</b> onto a slot = download into that
       slot (the row shows the progress). Downloaded clips get a <b>✓</b>, are stored in
-      <code>~/Videos/videopong/</code> and then work like any clip, also offline. Only the public preview
+      <code>~/Videos/videopong/</code> and then work like any clip, also offline. With the first
+      download that folder is added to the finder <b>folders</b>, so the downloads also show up under
+      <b>clips</b>. Only the public preview
       quality (480×360) is downloaded; please respect each clip's license.</li>
     <li><b>Favorites</b>: hover over a file and click the <b>☆</b> on its left: it is pinned under
       <b>★ favorites</b> on top of its category. Click ★ again to remove it. Favorites are saved with
@@ -823,6 +825,9 @@ mixer layers, output effects, bpm, master, output options, finder folders and fa
 <ul>
   <li><b>Autosave</b>: the session is saved every 2 s when something changed, and on quit. After a
     restart or a crash everything is back.</li>
+  <li><b>Quitting</b> (the window's ×, or Alt+F4) asks first, so a stray click can't end a show. The
+    question says what stops: the output window, NDI, a running recording (it is finished and saved)
+    and unsaved changes in the shader editor. Esc or a click beside it = cancel.</li>
   <li><span class="b">save</span> <span class="b">load</span> write / read the session file named in
     the text field (default <code>~/videoping-session.json</code>). Media are referenced by path, never
     copied: keep your files where they are, or the instances show an error.</li>
