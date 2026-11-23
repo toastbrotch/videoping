@@ -581,6 +581,12 @@ earlier idea, decided 2026-11-21:
 - features.md = spec (decisions), website/manual.html = end-user manual as one HTML page (dark like videoping, table of contents; concept, tour with screenshots in website/img/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
 - user-visible changes go into website/manual.html in the same step as features.md
 
+## license — decided 2026-11-23
+- the program: GPL-3.0-or-later (`LICENSE`, `license` in Cargo.toml); forks that are distributed stay open; all dependencies are permissive (MIT / Apache / BSD / Zlib / ISC, one MPL-2.0), GStreamer (LGPL) is linked dynamically, libndi is loaded at runtime and never shipped
+- the shaders that come with videoping (isf-effect/, isf-generator/, their .md docs): CC BY-NC-SA 4.0 (`LICENSE-shaders.md`); they are data loaded at runtime, not part of the program; the basic shaders are still to be written; third-party shaders keep their own license
+- the name "videoping" and the logo are covered by neither license
+- shown in install.md (and so install.html) and in the website footer
+
 ## single instance
 - only one videoping at a time (decided 2026-11-22): two would fight over the midi controllers (leds), the output window, NDI and the autosave
 - an exclusive lock on $XDG_RUNTIME_DIR/videoping.lock, released by the system when the process ends (also after a crash); a second start ends at once with "videoping is already running" (terminal + desktop notification via notify-send)
