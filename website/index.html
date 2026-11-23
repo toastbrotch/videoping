@@ -115,6 +115,25 @@ h3 { font-size: 20px; margin: 0 0 8px; }
 .quote code { color: var(--accent2); }
 .tall { max-width: 360px; margin: 0 auto; }
 
+/* badge + made with claude */
+.badges { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: -10px 0 22px; }
+.badge { font-size: 13px; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted); }
+.badge.alpha { color: #f0c36a; border-color: rgba(240, 195, 106, .45); }
+.badge.claude { color: var(--accent2); border-color: rgba(201, 153, 197, .45); }
+.made { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: start; margin-top: 34px; }
+.made .how { display: grid; gap: 14px; }
+.made .how div { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+.made .how b { color: var(--text); }
+.made .how p { color: var(--muted); margin: 4px 0 0; font-size: 15.5px; }
+.nums { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.nums > div { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+.nums .big { font-size: 34px; }
+.nums span { color: var(--muted); font-size: 14px; display: block; margin-top: 6px; }
+.alphabox { margin-top: 36px; border: 1px solid rgba(240, 195, 106, .4); background: rgba(240, 195, 106, .06); border-radius: var(--radius); padding: 22px 26px; }
+.alphabox h3 { color: #f0c36a; }
+.alphabox ul { margin: 8px 0 0; padding-left: 20px; color: #d6d3da; }
+.alphabox li { margin: 6px 0; }
+
 /* the controllers, drawn */
 .rig { display: grid; grid-template-columns: 1.25fr 1fr; gap: 26px; align-items: end; }
 .dev { background: #0b0b0c; border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
@@ -165,7 +184,7 @@ footer .wrap { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
 footer .sp { margin-left: auto; }
 
 @media (max-width: 900px) {
-  .rig { grid-template-columns: 1fr; }
+  .rig, .made { grid-template-columns: 1fr; }
   .usps, .community { grid-template-columns: 1fr 1fr; }
   .row, .row.flip { grid-template-columns: 1fr; gap: 30px; }
   .row.flip .text { order: 0; }
@@ -200,6 +219,7 @@ footer .sp { margin-left: auto; }
       <a href="#mapping">mapping</a>
       <a href="#videopong">videopong.net</a>
       <a href="#community">community</a>
+      <a href="#claude">made with Claude</a>
     </div>
     <a class="btn small" href="#get">get videoping</a>
   </div>
@@ -208,6 +228,7 @@ footer .sp { margin-left: auto; }
 <header class="hero">
   <div class="wrap">
     <img class="logo" src="../docs/logo/videoping-v2-logo.png" alt="videoping">
+    <div class="badges"><span class="badge alpha">early alpha</span><span class="badge claude">vibecoded with Claude</span></div>
     <h1>Play video like an <em>instrument</em>.</h1>
     <p class="lead">videoping is a live VJ tool for Linux. Three layers, a prepare lane, every parameter on your
       MIDI controller, projection mapping built in — and an AI that writes shaders with you while the
@@ -457,6 +478,45 @@ footer .sp { margin-left: auto; }
   </div>
 </section>
 
+<!-- ============================================================ claude -->
+<section id="claude">
+  <div class="wrap">
+    <div class="kicker">made with claude · early alpha</div>
+    <h2>Completely vibecoded with Claude.</h2>
+    <p class="sub">Not a single line of videoping was typed by hand. All of it — the code, the self-tests, the
+      manual, even this page — was written by <b>Claude</b>, Anthropic's AI, in Claude Code. The maker of
+      videopong.net directed it: what to build, how it has to feel on stage, and what was wrong.</p>
+    <div class="made">
+      <div class="how">
+        <div><b>A VJ describes</b><p>“the Twister should control the effect I just opened”, “the corner is hard to
+          catch”, “clear the controller when it quits” — in plain words, from real use.</p></div>
+        <div><b>Claude builds and tests</b><p>It writes the Rust, then proves it: unit tests, and self-tests that
+          drive the real program — simulated mouse clicks and keys, virtual MIDI controllers, mock AI servers,
+          pixel checks of the output.</p></div>
+        <div><b>Every decision is written down</b><p>The spec (features.md), the end-user manual and the
+          developer notes grow with every change, so nothing lives only in a chat.</p></div>
+      </div>
+      <div class="nums">
+        <div><div class="big">~14,000</div><span>lines of Rust</span></div>
+        <div><div class="big">0</div><span>lines typed by hand</span></div>
+        <div><div class="big">17.11.2026</div><span>first line</span></div>
+        <div><div class="big">1 week</div><span>to everything on this page</span></div>
+      </div>
+    </div>
+    <div class="alphabox">
+      <h3>Early alpha — what that means</h3>
+      <ul>
+        <li>It is young: expect rough edges, missing pieces and things that change.</li>
+        <li>Tested on very few machines so far (Pop!_OS 24.04 on Intel Iris Xe and NVIDIA). Your setup may find
+          new bugs — please report them.</li>
+        <li>No packages yet: you build it from source.</li>
+        <li>Sessions, profiles and presets are plain JSON; their format may still change between versions. Keep
+          backups of what matters.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <!-- ============================================================ show-safe -->
 <section id="safe">
   <div class="wrap">
@@ -511,8 +571,8 @@ footer .sp { margin-left: auto; }
   <div class="wrap">
     <div class="kicker">get it</div>
     <h2>Ready to play?</h2>
-    <p class="sub" style="margin:0 auto">videoping is built from source on Linux — one command once the
-      requirements are installed.</p>
+    <p class="sub" style="margin:0 auto">videoping is an <b>early alpha</b>, built from source on Linux — one
+      command once the requirements are installed.</p>
     <pre><span class="c"># Ubuntu / Debian / Pop!_OS — see install.md for the details</span>
 git clone &lt;videoping repository&gt; &amp;&amp; cd videoping
 cargo build --release
@@ -527,7 +587,7 @@ cargo build --release
 
 <footer>
   <div class="wrap">
-    <span>videoping — live VJ for Linux</span>
+    <span>videoping — live VJ for Linux · early alpha · vibecoded with Claude</span>
     <span>· from the maker of <a href="https://www.videopong.net">videopong.net</a> and <a href="https://linux4vjs.net">linux4vjs.net</a></span>
     <span class="sp"><div class="stripes" style="width:90px"><i></i><i></i><i></i></div></span>
   </div>
