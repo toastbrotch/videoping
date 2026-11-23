@@ -15,9 +15,9 @@ full of footage tabs, a MIDI bridge. videoping is one program, built for playing
 
 ## features
 
-- **made for your hands**: an 8×8 pad grid (Bhoreal) launches clips with coloured LEDs, a 4×4
-  encoder box (Midi Fighter Twister) mixes the layers, and its encoders follow the effect you
-  open; any other controller via MIDI learn
+- **made for your hands**: any MIDI controller (pads, faders, knobs, endless encoders): press
+  learn, touch a control, done; LEDs and rings show the real state, knobs can follow the effect
+  you open, one profile per device; example profiles for a pad grid and an encoder box built in
 - **every effect is an ISF shader**: generators and effects are plain [ISF](https://isf.video)
   files (GLSL with a JSON header); videoping builds the controls from the header, reloads on save
   and shows an optional `.md` doc next to each shader
