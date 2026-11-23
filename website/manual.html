@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>videoping manual</title>
-<link rel="icon" type="image/png" sizes="32x32" href="docs/logo/videoping-icon-32.png">
-<link rel="icon" type="image/png" sizes="128x128" href="docs/logo/videoping-v2-icon-128.png">
-<link rel="apple-touch-icon" href="docs/logo/videoping-v2-icon-256.png">
+<link rel="icon" type="image/png" sizes="32x32" href="logo/videoping-icon-32.png">
+<link rel="icon" type="image/png" sizes="128x128" href="logo/videoping-v2-icon-128.png">
+<link rel="apple-touch-icon" href="logo/videoping-v2-icon-256.png">
 <style>
   :root {
     --bg: #141414;   /* same as videoping and the logo background */
@@ -120,7 +120,7 @@
 <div class="layout">
 
 <nav>
-  <a class="brand" href="#top"><img src="docs/logo/videoping-v2-icon-128.png" alt="">manual</a>
+  <a class="brand" href="#top"><img src="logo/videoping-v2-icon-128.png" alt="">manual</a>
   <ol>
     <li><a href="#concept">1 Concept</a></li>
     <li><a href="#screen">2 The screen</a>
@@ -154,14 +154,14 @@
 
 <main id="top">
 
-<h1><img class="logo" src="docs/logo/videoping-v2-logo.png" width="1076" height="384" alt="videoping"><span class="muted" style="font-size:20px;font-weight:500">manual</span></h1>
+<h1><img class="logo" src="logo/videoping-v2-logo.png" width="1076" height="384" alt="videoping"><span class="muted" style="font-size:20px;font-weight:500">manual</span></h1>
 <p class="lead">videoping is a live VJ tool for Linux: clips, ISF generators and NDI sources are prepared
 in a grid, get effects, and are mixed live on 3 layers into one output, which goes to a screen, to NDI
 and to a recording. This manual explains how to play with it. Installation is in
-<a href="install.md">install.md</a>.</p>
+<a href="../install.md">install.md</a>.</p>
 
 <figure>
-  <img src="docs/overview.png" width="1500" alt="videoping: finder, prepare grid, prepare detail, mixer and output">
+  <img src="img/overview.png" width="1500" alt="videoping: finder, prepare grid, prepare detail, mixer and output">
 </figure>
 
 <!-- ================================================================== -->
@@ -208,7 +208,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <p>Four areas from left to right; all column borders can be dragged.</p>
 
 <h3 id="topbar">Top bar</h3>
-<figure><img src="docs/topbar.png" width="970" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
+<figure><img src="img/topbar.png" width="970" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
 <ul>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
     <span class="b">midi mapping</span> (<a href="#mapping">MIDI controllers</a>) and
@@ -261,7 +261,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     <li>A shader with <a href="#shaderdocs">documentation</a> shows its description when you hover
       over it; a grey <b>⚠</b> after the name means the documentation has a warning (e.g. flashing).</li>
   </ul>
-  <figure><img src="docs/finder.png" width="195" alt="finder: the open category clips with its folders, the other category headers at the bottom"></figure>
+  <figure><img src="img/finder.png" width="195" alt="finder: the open category clips with its folders, the other category headers at the bottom"></figure>
 </div>
 
 <h3 id="prepare">Column 2: prepare grid, master, bpm, record, settings</h3>
@@ -285,7 +285,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     <li><b>output options</b> (fold open): resolution, frame rate, screen, output window, NDI, GPU.</li>
     <li><b>general config</b> (fold open): resource meters, recording folder, MCP server.</li>
   </ul>
-  <figure><img src="docs/prepare.png" width="310" alt="prepare grid with master, bpm and record"></figure>
+  <figure><img src="img/prepare.png" width="310" alt="prepare grid with master, bpm and record"></figure>
 </div>
 
 <h3 id="detail">Column 3: prepare detail</h3>
@@ -301,11 +301,11 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       <li>the <b>effect stack</b> (see <a href="#effects">Effects</a>)</li>
     </ul>
   </div>
-  <figure><img src="docs/detail.png" width="445" alt="prepare detail: preview, clip controls, effects with ◎ (Twister focus), ? (documentation) and ⚠ (warning)"></figure>
+  <figure><img src="img/detail.png" width="445" alt="prepare detail: preview, clip controls, effects with ◎ (Twister focus), ? (documentation) and ⚠ (warning)"></figure>
 </div>
 
 <h3 id="mixer">Column 4: mixer and output</h3>
-<figure><img src="docs/mixer.png" width="540" alt="main output preview and the 3 mixer layers"></figure>
+<figure><img src="img/mixer.png" width="540" alt="main output preview and the 3 mixer layers"></figure>
 <ul>
   <li><b>main output preview</b> on top (stays visible). The two previews always have the same size.</li>
   <li><b>mixer</b>: 3 layers, layer 1 on top. Each layer: on / off checkbox, <span class="b">↑</span>
@@ -470,7 +470,7 @@ within a second.</p>
     <kbd>F</kbd> for fullscreen on the chosen <b>screen</b>, <kbd>Esc</kbd> to leave fullscreen.
     "connected" lists the screens the system sees.</li>
   <li><b>NDI output</b>: sends the output to the network under the <b>ndi name</b>. Needs the NDI
-    runtime (see <a href="install.md">install.md</a>); if videoping cannot find it, set the
+    runtime (see <a href="../install.md">install.md</a>); if videoping cannot find it, set the
     <b>NDI library folder</b>.</li>
   <li><b>NDI input</b>: NDI sources on the network show up in the finder; use them like clips.</li>
   <li><b>GPU</b>: shows the graphics card in use; on hybrid laptops "render on NVIDIA GPU" restarts
@@ -499,7 +499,7 @@ within a second.</p>
 <p>Shape the screen output for the surfaces you project onto: boxes, stage objects, a screen hit at
 an angle. The mapping is applied at the very end (after master) to the <b>screen output</b>; the
 previews in the live tab stay unmapped.</p>
-<figure><img src="docs/mapping.png" width="900" alt="the mapping tab: slices and masks, the input view with the test grid, the output view with a corner-pinned slice and a mask"></figure>
+<figure><img src="img/mapping.png" width="900" alt="the mapping tab: slices and masks, the input view with the test grid, the output view with a corner-pinned slice and a mask"></figure>
 <ul>
   <li><b>Slices</b>: each takes a rectangle of the composition (<b>input</b> view, top) and puts it on
     the output with its own four corners (<b>output</b> view, bottom) — the corners can be dragged
@@ -594,7 +594,7 @@ remembered.</p>
 <h3 id="mapping">The tab "midi mapping"</h3>
 <p>Here every controller is mapped, also the two built-in ones (their profiles can be changed like
 any other; <span class="b">built-in</span> brings the original back).</p>
-<figure><img src="docs/midi.png" width="1500" alt="the midi mapping tab: devices, bindings, addresses"></figure>
+<figure><img src="img/midi.png" width="1500" alt="the midi mapping tab: devices, bindings, addresses"></figure>
 <ul>
   <li><b>Devices</b> (left): every connected controller, also plugged in while videoping runs (found
     within 2 s). The dot lights up when it sends something. Choose its profile in the dropdown. Below:
@@ -668,7 +668,7 @@ assistant outside, like Claude Code, connected through the MCP server.</p>
 <h3 id="aitab">The ai tab</h3>
 <p>A chat inside videoping. Type what you want; the assistant uses the tools below directly, and
 every tool call is listed in the chat with its result. The output preview is on the right.</p>
-<figure><img src="docs/ai.png" width="1500" alt="the ai tab: provider, model, key; the chat with a set (undo) and a frame; output preview"></figure>
+<figure><img src="img/ai.png" width="1500" alt="the ai tab: provider, model, key; the chat with a set (undo) and a frame; output preview"></figure>
 <ul>
   <li><b>Provider</b>: <span class="b on">Anthropic</span> (Claude) or <span class="b">OpenAI-compatible</span>:
     OpenAI, or a model on your own computer with <b>Ollama</b> (url
@@ -730,7 +730,7 @@ every tool call is listed in the chat with its result. The output preview is on 
 
 <p>Write and change ISF shaders inside videoping, with a live preview — by hand, or by telling the
 AI what you want.</p>
-<figure><img src="docs/editor.png" width="1500" alt="the shader editor: code with line numbers, preview with parameters, the ai chat"></figure>
+<figure><img src="img/editor.png" width="1500" alt="the shader editor: code with line numbers, preview with parameters, the ai chat"></figure>
 
 <h3>Open, new, save</h3>
 <ul>
@@ -867,10 +867,10 @@ shader when its file changes, so you can edit a shader in a text editor while it
   <dt>The fps counter shows ⚠ although nothing is heavy.</dt>
   <dd>On Wayland the desktop limits how often videoping may draw; on some laptops that is below 60 fps
     (e.g. ~53 fps on Intel, 30 fps with the NVIDIA card). Set the output frame rate to 50 or 30, or see
-    the NVIDIA / X11 notes in <a href="install.md">install.md</a>.</dd>
+    the NVIDIA / X11 notes in <a href="../install.md">install.md</a>.</dd>
 
   <dt>NDI does not work ("libndi not found").</dt>
-  <dd>Install the NDI runtime (<a href="install.md">install.md</a>, section 2), or set the folder with
+  <dd>Install the NDI runtime (<a href="../install.md">install.md</a>, section 2), or set the folder with
     <code>libndi.so.6</code> in output options → NDI library folder.</dd>
 
   <dt>Wrong graphics card.</dt>
@@ -886,7 +886,7 @@ shader when its file changes, so you can edit a shader in a text editor while it
 
   <dt>REC is greyed out.</dt>
   <dd>No working hardware encoder was found; hover REC for the reason. NVIDIA needs the NVIDIA driver,
-    Intel / AMD the VA-API GStreamer plugins (<a href="install.md">install.md</a>, section 1).</dd>
+    Intel / AMD the VA-API GStreamer plugins (<a href="../install.md">install.md</a>, section 1).</dd>
 
   <dt>A recording does not appear in the finder.</dt>
   <dd>Add the recording folder to the finder: general config → "add to finder".</dd>

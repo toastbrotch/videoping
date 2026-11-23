@@ -114,9 +114,9 @@ cargo run --example ndi_loop_test -- [ndi lib dir] # NDI loopback: send, discove
 | file | for whom |
 |---|---|
 | `features.md` | the spec: every design decision, thresholds, measurements, open points |
-| `manual.html` | end users: how to play with videoping; one self-contained HTML page (styles inline), screenshots in `docs/`; open it in a browser |
+| `website/manual.html` | end users: how to play with videoping; one self-contained HTML page (styles inline), screenshots in `website/img/`; open it in a browser |
 | `install.md` | installation only |
-| `docs/logo/` | the logo (v1 calm, v2 glitch = official): SVG, PNG sizes, editable `videoping-logo.vectorcraft` (VectorCraft) |
+| `website/logo/` | the logo (v1 calm, v2 glitch = official): SVG, PNG sizes, editable `videoping-logo.vectorcraft` (VectorCraft) |
 | `packaging/videoping.desktop` | launcher entry; icons and install commands in install.md |
 | `dev.md` | this file |
 
@@ -127,7 +127,7 @@ in the finder, and clears the status line before the screenshot):
 S=/tmp/vp-docs; mkdir -p $S; cp <testclip.mp4> $S/testclip.mp4
 VIDEOPING_SELFTEST=$S ./target/release/videoping   # no REC: the record box shows the default folder
 U=$S/ui_3000x1818.rgba   # size depends on the screen
-c(){ ffmpeg -y -f rawvideo -pix_fmt rgba -s 3000x1818 -i $U -vf "$1" docs/$2; }
+c(){ ffmpeg -y -f rawvideo -pix_fmt rgba -s 3000x1818 -i $U -vf "$1" website/img/$2; }
 c "scale=1500:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160[p];[b][p]paletteuse=dither=none" overview.png
 c "crop=1300:36:1700:0" topbar.png
 c "crop=390:1300:0:36" finder.png
@@ -143,7 +143,7 @@ filter to stay small)
 
 ```
 website/
-  index.html   the sales page (static, opens from the repo; screenshots from docs/)
+  index.html   the sales page (static, opens from the repo; everything it shows is inside website/: img/, logo/, manual.html)
 src/
   main.rs      eframe setup (glow / OpenGL renderer)
   app.rs       the "live" tab: 5 columns, drag & drop, autosave, output window, self-test

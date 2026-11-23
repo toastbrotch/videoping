@@ -1,4 +1,4 @@
-<img src="docs/logo/videoping-v2-logo.png" alt="videoping" width="480">
+<img src="website/logo/videoping-v2-logo.png" alt="videoping" width="480">
 
 install videoping
 =================
@@ -125,12 +125,12 @@ window icon also comes from here):
 ```sh
 install -Dm644 packaging/videoping.desktop ~/.local/share/applications/videoping.desktop
 for n in 512 256 128 64 48; do
-  install -Dm644 docs/logo/videoping-v2-icon-$n.png ~/.local/share/icons/hicolor/${n}x${n}/apps/videoping.png
+  install -Dm644 website/logo/videoping-v2-icon-$n.png ~/.local/share/icons/hicolor/${n}x${n}/apps/videoping.png
 done
 # 32 and 16 px: the calm v1 logo (the glitch version turns into mud that small)
-install -Dm644 docs/logo/videoping-icon-32.png ~/.local/share/icons/hicolor/32x32/apps/videoping.png
-install -Dm644 docs/logo/videoping-icon-16.png ~/.local/share/icons/hicolor/16x16/apps/videoping.png
-install -Dm644 docs/logo/videoping-v2-icon.svg ~/.local/share/icons/hicolor/scalable/apps/videoping.svg
+install -Dm644 website/logo/videoping-icon-32.png ~/.local/share/icons/hicolor/32x32/apps/videoping.png
+install -Dm644 website/logo/videoping-icon-16.png ~/.local/share/icons/hicolor/16x16/apps/videoping.png
+install -Dm644 website/logo/videoping-v2-icon.svg ~/.local/share/icons/hicolor/scalable/apps/videoping.svg
 gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
 ```
 
@@ -227,5 +227,5 @@ Notes:
 
 # 5. using videoping
 
-See the [manual](manual.html) (open it in a browser): concept, a tour of the screen, playing a set, effects, output and
+See the [manual](website/manual.html) (open it in a browser): concept, a tour of the screen, playing a set, effects, output and
 recording, performance, files and settings, troubleshooting.

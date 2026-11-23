@@ -56,7 +56,7 @@ fn maybe_restart_on_nvidia() {
 /// Window icon: the v2 (glitch) logo, built into the binary. Wayland desktops take the icon from
 /// the installed videoping.desktop / icon theme instead (see install.md).
 pub(crate) fn app_icon() -> std::sync::Arc<egui::IconData> {
-    let png = include_bytes!("../docs/logo/videoping-v2-icon-256.png");
+    let png = include_bytes!("../website/logo/videoping-v2-icon-256.png");
     std::sync::Arc::new(eframe::icon_data::from_png_bytes(png).unwrap_or_default())
 }
 

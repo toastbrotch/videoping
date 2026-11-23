@@ -17,16 +17,16 @@ videoping is a live vjing application, 5 columns, all column-borders are moveabl
 - connected to videopong.net (vj footage sharing) only by name: no ping-pong ball or paddles, the logo is about the live part
 - wordmark: "videoping" in Inter Semi Bold, lowercase, "video" light grey #e6e6e6, "ping" plum #8B4A87
 - icon: the mark on a dark rounded square (#141414, like the app); still readable at 32 px
-- files in docs/logo/: videoping-icon.svg / -512 / -128 / -32.png, videoping-logo.svg / .png (lockup, text as outlines), videoping-logo.vectorcraft (editable source, made with VectorCraft)
+- files in website/logo/: videoping-icon.svg / -512 / -128 / -32.png, videoping-logo.svg / .png (lockup, text as outlines), videoping-logo.vectorcraft (editable source, made with VectorCraft)
 - v2 "glitch" (same mark, broken like a damaged video signal): files videoping-v2-icon.svg / -512 / -128 / -32.png, videoping-v2-logo.svg / .png
   - displacement: 4 horizontal bands of the mark cut out and shifted sideways (tearing / datamosh)
   - channel split: ghost copies of the play triangle (and of "ping" in the lockup) offset left in blue and right in orange, like the R G B switches drifting apart
   - scanlines over the icon (20 %)
   - no displacement band through the wordmark: at the top / bottom of the letters the shifted curves read as strike lines, the word stays readable
   - large sizes only (splash, manual, posters): at 32 px the glitch turns into mud, so window / taskbar icon stays v1
-- all four artboards (icon, lockup, icon v2, lockup v2) are in docs/logo/videoping-logo.vectorcraft
+- all four artboards (icon, lockup, icon v2, lockup v2) are in website/logo/videoping-logo.vectorcraft
 - v2 is the official logo; where it is used:
-  - window icon of videoping and of the output window (built into the binary: docs/logo/videoping-v2-icon-256.png)
+  - window icon of videoping and of the output window (built into the binary: website/logo/videoping-v2-icon-256.png)
   - launcher / dock icon: packaging/videoping.desktop (app id "videoping") + icon theme in ~/.local/share/icons/hicolor: v2 from 48 px up and scalable, v1 for 16 and 32 px (install.md); on Wayland the window icon comes from there
   - manual.html: v2 lockup as page header, v2 icon in the table of contents, favicon (v1 32 px for the browser tab, v2 128 px)
   - install.md: v2 lockup on top
@@ -575,9 +575,9 @@ earlier idea, decided 2026-11-21:
   X11 (XWayland) 60 fps on both but the ui is upscaled (blurry) on the HiDPI panel — open decision
 
 ## documentation
-- website/index.html = the sales page for videoping (2026-11-23): one static HTML file in the repo (not published), images from ../docs; unique selling points: made for your hands (pad grid + encoders, learn), an ai in the booth, shaders live (editor + ai), prepare then go live (render priority), map any surface, videopong.net built in; the community story (from the maker of videopong.net and linux4vjs.net); show-safe details, "one program instead of five", specs, build from source; only real facts and numbers (videopong.net: 27,000+ clips, Creative Commons, non-profit, ad-free; linux4vjs.net archived since 2020); it says clearly (hero badges, section "made with Claude", footer) that videoping is an early alpha and completely vibecoded with Claude (Claude Code): ~14,000 lines of Rust, 0 typed by hand, first line 17.11.2026, one week; what early alpha means (rough edges, few tested machines, build from source, formats may change)
-- features.md = spec (decisions), manual.html = end-user manual as one HTML page (dark like videoping, table of contents; concept, tour with screenshots in docs/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
-- user-visible changes go into manual.html in the same step as features.md
+- website/index.html = the sales page for videoping (2026-11-23): one static HTML file in the repo (not published), images in website/img/ and website/logo/ (moved there 2026-11-23, with the manual: website/manual.html); unique selling points: made for your hands (pad grid + encoders, learn), an ai in the booth, shaders live (editor + ai), prepare then go live (render priority), map any surface, videopong.net built in; the community story (from the maker of videopong.net and linux4vjs.net); show-safe details, "one program instead of five", specs, build from source; only real facts and numbers (videopong.net: 27,000+ clips, Creative Commons, non-profit, ad-free; linux4vjs.net archived since 2020); it says clearly (hero badges, section "made with Claude", footer) that videoping is an early alpha and completely vibecoded with Claude (Claude Code): ~14,000 lines of Rust, 0 typed by hand, first line 17.11.2026, one week; what early alpha means (rough edges, few tested machines, build from source, formats may change)
+- features.md = spec (decisions), website/manual.html = end-user manual as one HTML page (dark like videoping, table of contents; concept, tour with screenshots in website/img/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
+- user-visible changes go into website/manual.html in the same step as features.md
 
 ## single instance
 - only one videoping at a time (decided 2026-11-22): two would fight over the midi controllers (leds), the output window, NDI and the autosave
