@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>install videoping</title>
+<meta name="description" content="How to install videoping on Linux: requirements, NDI, build, launcher, NVIDIA on hybrid laptops.">
+<link rel="icon" href="logo/videoping-v2-icon.svg">
+<!-- generated from install.md by scripts/install-html.py: edit install.md, then run the script -->
+<style>
+:root { --bg:#141414; --card:#1e1e23; --line:#2a2a31; --text:#e9e7ec; --muted:#9b98a3; --accent:#8b4a87; --accent2:#c999c5;
+  --l1:#1b6898; --l2:#388e3c; --l3:#c8640a; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:16.5px/1.65 system-ui,-apple-system,"Segoe UI",Ubuntu,Cantarell,"DejaVu Sans",sans-serif; }
+a { color:var(--accent2); }
+.stripes { display:flex; height:4px; } .stripes i { flex:1; }
+.stripes i:nth-child(1) { background:var(--l1); } .stripes i:nth-child(2) { background:var(--l2); } .stripes i:nth-child(3) { background:var(--l3); }
+nav.top { border-bottom:1px solid var(--line); }
+nav.top .in { max-width:900px; margin:0 auto; padding:0 20px; display:flex; gap:20px; align-items:center; height:56px; }
+nav.top .in a { color:var(--muted); text-decoration:none; } nav.top .in a:hover { color:var(--text); }
+nav.top .in .brand { color:var(--text); font-weight:700; margin-right:auto; display:flex; gap:8px; align-items:center; }
+nav.top .in .brand img { width:24px; height:24px; }
+main { max-width:900px; margin:0 auto; padding:30px 20px 80px; }
+img.logo { width:min(420px,80%); display:block; margin:10px 0 20px; }
+h1 { font-size:38px; margin:0 0 10px; letter-spacing:-.5px; }
+h2 { font-size:26px; margin:46px 0 10px; padding-top:18px; border-top:1px solid var(--line); }
+h3 { font-size:19px; margin:28px 0 8px; }
+.toc { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 20px; margin:20px 0; }
+.toc b { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:1px; }
+.toc ol { margin:6px 0 0; }
+code { font-family:ui-monospace,"DejaVu Sans Mono",Menlo,monospace; font-size:.92em; background:#25252b; padding:1px 5px; border-radius:4px; }
+pre { background:#0b0b0c; border:1px solid var(--line); border-radius:8px; padding:14px 16px; overflow-x:auto; scrollbar-color:#3a3a40 #0b0b0c; }
+pre code { background:none; padding:0; font-size:14px; color:#d6d3da; }
+li { margin:5px 0; }
+table { border-collapse:collapse; margin:14px 0; }
+th, td { border:1px solid var(--line); padding:7px 12px; text-align:left; }
+th { background:var(--card); }
+.alpha { border:1px solid rgba(240,195,106,.4); background:rgba(240,195,106,.06); color:#f0c36a; border-radius:8px; padding:10px 14px; font-size:15px; }
+@media (max-width:560px) { nav.top .in a:not(.brand) { display:none; } h1 { font-size:30px; } }
+</style>
+</head>
+<body>
+<div class="stripes"><i></i><i></i><i></i></div>
+<nav class="top"><div class="in">
+  <a class="brand" href="index.html"><img src="logo/videoping-v2-icon.svg" alt="">videoping</a>
+  <a href="index.html">home</a><a href="manual.html">manual</a><a href="install.html">install</a>
+</div></nav>
+<main>
+<img class="logo" src="logo/videoping-v2-logo.png" alt="videoping">
+<h1>install videoping</h1>
+<p>videoping is a personal live vjing tool for Linux. There are no binary packages yet: you build it from source once (see the build step below; details in <code>dev.md</code>).</p>
+<p>Tested on Pop!_OS 24.04 (Ubuntu 24.04 base), Intel Iris Xe, Wayland.</p>
+<p>This guide is also a page of the website: <code>website/install.html</code> (generated from this file).</p>
+
+<p class="alpha">videoping is an early alpha, vibecoded with Claude: expect rough edges.</p>
+<div class="toc"><b>contents</b><ol><li><a href="#1-runtime-requirements">runtime requirements</a></li><li><a href="#2-ndi-runtime-optional">NDI runtime (optional)</a></li><li><a href="#3-build-and-install">build and install</a></li><li><a href="#4-run-on-the-discrete-nvidia-card-hybrid-laptops">run on the discrete NVIDIA card (hybrid laptops)</a></li><li><a href="#5-using-videoping">using videoping</a></li></ol></div>
+<h2 id="1-runtime-requirements">1. runtime requirements</h2>
+<ul><li>
+a GPU driver with <b>OpenGL 3.3</b> or newer (Mesa / NVIDIA / AMD are all fine)
+</li><li>
+<b>GStreamer 1.20+</b> with the usual plugins, for mp4 playback
+</li><li>
+<b>DejaVu Sans</b> font (ui symbols like ▶ ◀ ↑ ↓; without it some icons show as boxes)
+</li><li>
+optional: the <b>NDI 6 runtime</b> for NDI output
+</li><li>
+MIDI controllers: ALSA (<code>libasound2</code>, installed on every desktop); class-compliant USB MIDI devices need no driver
+</li></ul>
+<p>Ubuntu / Debian / Pop!_OS:</p>
+<pre><code>sudo apt install \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+  gstreamer1.0-libav gstreamer1.0-vaapi \
+  fonts-dejavu-core</code></pre>
+<p><code>gstreamer1.0-vaapi</code> (or the <code>va</code> plugins in plugins-bad) gives hardware H.264 decoding on Intel/AMD. Recording (REC) needs a hardware H.264 encoder: NVENC on NVIDIA (<code>nvcodec</code> in plugins-bad, with the NVIDIA driver) or VA-API on Intel / AMD (<code>va</code> in plugins-bad or <code>gstreamer1.0-vaapi</code>). Without one, REC is disabled.</p>
+<h2 id="2-ndi-runtime-optional">2. NDI runtime (optional)</h2>
+<p>videoping does not ship NDI. It loads <code>libndi.so.6</code> at runtime, searched in this order:</p>
+<ol><li>
+the <b>NDI library folder</b> set in the ui (output options, saved with the session)
+</li><li>
+<code>$NDI_RUNTIME_DIR_V6</code>
+</li><li>
+<code>/usr/local/lib</code>, <code>/usr/lib</code>, <code>/usr/lib/x86_64-linux-gnu</code>, <code>/opt/ndi/lib</code>, <code>~/.local/lib</code>
+</li><li>
+the system library path
+</li></ol>
+<h3 id="install-the-regular-ndi-sdk-free">install the regular NDI SDK (free)</h3>
+<ol><li>
+Download the "NDI SDK for Linux" (free, the license is shown during install):
+<ul><li>
+website: <a href="https://ndi.video/for-developers/ndi-sdk/">https://ndi.video/for-developers/ndi-sdk/</a> (asks for name / email), or
+</li><li>
+direct link:
+<pre><code>cd ~/Downloads
+wget https://downloads.ndi.tv/SDK/NDI_SDK_Linux/Install_NDI_SDK_v6_Linux.tar.gz</code></pre>
+</li></ul>
+</li><li>
+Unpack it and run the installer script. It shows the NDI license; read it and accept with <code>y</code>. The script creates the folder <code>NDI SDK for Linux</code> next to itself:
+<pre><code>tar -xzf Install_NDI_SDK_v6_Linux.tar.gz
+sh Install_NDI_SDK_v6_Linux.sh
+ls &quot;NDI SDK for Linux/lib/x86_64-linux-gnu/&quot;     # libndi.so  libndi.so.6  libndi.so.6.x.x</code></pre>
+<p>(ARM boards: use <code>lib/aarch64-rpi4-linux-gnueabi</code> or the matching folder instead.)</p>
+</li><li>
+Make the library findable. Pick <b>one</b>:
+<ul><li>
+just for your user (only videoping looks there, nothing else is affected):
+<pre><code>mkdir -p ~/.local/lib
+cp -P ~/Downloads/&quot;NDI SDK for Linux/lib/x86_64-linux-gnu/&quot;libndi.so* ~/.local/lib/</code></pre>
+</li><li>
+system-wide:
+<pre><code>sudo cp -P ~/Downloads/&quot;NDI SDK for Linux/lib/x86_64-linux-gnu/&quot;libndi.so* /usr/local/lib/
+sudo ldconfig</code></pre>
+</li><li>
+or leave it where it is and enter the folder <code>~/Downloads/NDI SDK for Linux/lib/x86_64-linux-gnu</code> as <b>NDI library folder</b> in the output options.
+<p>If an older copy (e.g. the Varda development build) is already in that place, the new files replace it.</p>
+</li></ul>
+</li><li>
+Make sure discovery works: <code>avahi-daemon</code> must run (<code>systemctl status avahi-daemon</code>) and the firewall must allow mDNS (5353/udp) and the NDI ports (5960+ tcp/udp).
+</li><li>
+Check that you have the regular build and not the 30-minute development build. This should print <code>0</code>:
+<pre><code>strings ~/.local/lib/libndi.so.6 | grep -c &quot;30 minutes&quot;</code></pre>
+</li><li>
+Start videoping, open <b>output options</b>, turn on <b>NDI output</b>. It shows "NDI sending" in green; hover it to see which libndi was loaded. Check it on another machine with NDI Studio Monitor (Windows / macOS, part of the free NDI Tools) or any NDI receiver.
+</li><li>
+NDI input: sources on the network show up in the finder under <b>NDI sources</b> (also videoping's own output). Double-click one to put it into the prepare grid.
+</li></ol>
+<p>If NDI can't be loaded, the output options show the error in red. When it works they show "NDI sending" (hover shows which libndi was loaded).</p>
+<p>Note: some apps bundle the <i>NDI Advanced SDK development build</i> (e.g. Varda), which stops sending after 30 minutes. It works for testing (copy its <code>libndi.so*</code> the same way), but use the regular NDI runtime for shows. libndi is never committed to this repo (proprietary license).</p>
+<h2 id="3-build-and-install">3. build and install</h2>
+<p>Needs the build tools from <code>dev.md</code> (Rust + GStreamer dev packages).</p>
+<pre><code>cd videoping
+cargo build --release
+install -Dm755 target/release/videoping ~/.local/bin/videoping</code></pre>
+<p>Launcher entry and icon (so videoping shows up in the app menu / dock with its logo; on Wayland the window icon also comes from here):</p>
+<pre><code>install -Dm644 packaging/videoping.desktop ~/.local/share/applications/videoping.desktop
+for n in 512 256 128 64 48; do
+  install -Dm644 website/logo/videoping-v2-icon-$n.png ~/.local/share/icons/hicolor/${n}x${n}/apps/videoping.png
+done
+# 32 and 16 px: the calm v1 logo (the glitch version turns into mud that small)
+install -Dm644 website/logo/videoping-icon-32.png ~/.local/share/icons/hicolor/32x32/apps/videoping.png
+install -Dm644 website/logo/videoping-icon-16.png ~/.local/share/icons/hicolor/16x16/apps/videoping.png
+install -Dm644 website/logo/videoping-v2-icon.svg ~/.local/share/icons/hicolor/scalable/apps/videoping.svg
+gtk-update-icon-cache ~/.local/share/icons/hicolor 2&gt;/dev/null || true</code></pre>
+<p>The desktop entry starts <code>videoping</code> from <code>~/.local/bin</code>. If that folder is not in your <code>PATH</code>, put the full path into <code>Exec=</code> in the installed file.</p>
+<p>Run it from the folder that holds your clips/shaders, or add folders in the finder (column 1 → "folders").</p>
+<pre><code>videoping</code></pre>
+<h2 id="4-run-on-the-discrete-nvidia-card-hybrid-laptops">4. run on the discrete NVIDIA card (hybrid laptops)</h2>
+<p>On a laptop with Intel/AMD + NVIDIA in <b>hybrid</b> mode, apps render on the integrated GPU by default. videoping logs the GPU it uses at startup (stderr and the top bar status):</p>
+<pre><code>gpu: Mesa Intel(R) Iris(R) Xe Graphics (RPL-P) (Intel)</code></pre>
+<p>The easiest way to render on the NVIDIA card:</p>
+<ul><li>
+output options → <b>render on NVIDIA GPU (applies on restart)</b>, then restart videoping, or
+</li><li>
+one-off: <code>videoping --nvidia</code>
+</li></ul>
+<p>videoping then restarts itself once with PRIME render offload; the output options show <code>gpu: NVIDIA GeForce ...</code>.</p>
+<p><b>Measured on this laptop (Pop!_OS, Wayland, 120 Hz 3K panel), output set to 60 fps:</b></p>
+<table><tr><th></th><th>native Wayland (default)</th><th>X11 / XWayland</th></tr>
+<tr><td>Intel</td><td>~53 fps, sharp</td><td>60 fps, ui upscaled (blurry)</td></tr>
+<tr><td>NVIDIA (offload)</td><td><b>30 fps</b>, sharp</td><td>60 fps, ui upscaled (blurry)</td></tr>
+</table>
+<p>So on the laptop screen, NVIDIA under Wayland is <i>slower</i> than Intel: every frame is copied to the Intel GPU that drives the panel. To try X11: <code>env -u WAYLAND_DISPLAY videoping</code> (or with <code>--nvidia</code>). For gigs with a projector on the NVIDIA-wired port, <code>system76-power graphics nvidia</code> (see below) avoids the copy completely.</p>
+<p>Manually, the same as <code>--nvidia</code> (both variable sets are needed: EGL on Wayland, GLX on X11):</p>
+<pre><code>__NV_PRIME_RENDER_OFFLOAD=1 \
+__GLX_VENDOR_LIBRARY_NAME=nvidia \
+__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json \
+videoping</code></pre>
+<p>You should then see <code>gpu: NVIDIA GeForce RTX 4050 Laptop GPU/PCIe/SSE2 (NVIDIA Corporation)</code>. (Tested on Pop!_OS 24.04, Wayland, driver 595.)</p>
+<p>Shortcut: a small wrapper <code>~/.local/bin/videoping-nvidia</code>:</p>
+<pre><code>#!/bin/sh
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+exec videoping &quot;$@&quot;</code></pre>
+<p>(<code>chmod +x ~/.local/bin/videoping-nvidia</code>)</p>
+<p>Alternatives:</p>
+<ul><li>
+<code>switcherooctl launch videoping</code> (sets the same variables for you)
+</li><li>
+a desktop entry with <code>PrefersNonDefaultGPU=true</code>: launchers (Pop!_OS / GNOME / COSMIC) then start it on the discrete GPU, or offer "Launch using Discrete Graphics" on right-click:
+<pre><code># ~/.local/share/applications/videoping.desktop
+[Desktop Entry]
+Type=Application
+Name=videoping
+Exec=videoping
+Terminal=false
+PrefersNonDefaultGPU=true</code></pre>
+</li><li>
+Pop!_OS: <code>system76-power graphics nvidia</code> (needs a reboot) runs the <i>whole</i> desktop on NVIDIA. This is useful for gigs where the projector hangs on an HDMI port wired to the NVIDIA card. <code>system76-power graphics</code> shows the current mode.
+</li></ul>
+<p>Notes:</p>
+<ul><li>
+video decoding stays on GStreamer's default decoder (VA-API on the Intel GPU); frames go through system memory anyway, so this is fine.
+</li><li>
+in hybrid mode every frame shown on a screen driven by the Intel GPU gets copied from the NVIDIA card. For fullscreen output on an external screen it is best when that screen is connected to the GPU that renders.
+</li></ul>
+<h2 id="5-using-videoping">5. using videoping</h2>
+<p>See the <a href="manual.html">manual</a> (open it in a browser): concept, a tour of the screen, playing a set, effects, output and recording, performance, files and settings, troubleshooting.</p>
+</main>
+</body>
+</html>

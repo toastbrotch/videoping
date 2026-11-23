@@ -115,7 +115,7 @@ cargo run --example ndi_loop_test -- [ndi lib dir] # NDI loopback: send, discove
 |---|---|
 | `features.md` | the spec: every design decision, thresholds, measurements, open points |
 | `website/manual.html` | end users: how to play with videoping; one self-contained HTML page (styles inline), screenshots in `website/img/`; open it in a browser |
-| `install.md` | installation only |
+| `install.md` | installation only; the source of `website/install.html` (`python3 scripts/install-html.py`) |
 | `website/logo/` | the logo (v1 calm, v2 glitch = official): SVG, PNG sizes, editable `videoping-logo.vectorcraft` (VectorCraft) |
 | `packaging/videoping.desktop` | launcher entry; icons and install commands in install.md |
 | `dev.md` | this file |
@@ -143,7 +143,8 @@ filter to stay small)
 
 ```
 website/
-  index.html   the sales page (static, opens from the repo; everything it shows is inside website/: img/, logo/, manual.html)
+  index.html   the sales page (static, opens from the repo; everything it shows is inside website/: img/, logo/, manual.html, install.html)
+  install.html generated from install.md: after changing install.md run `python3 scripts/install-html.py` (never edit install.html by hand)
 src/
   main.rs      eframe setup (glow / OpenGL renderer)
   app.rs       the "live" tab: 5 columns, drag & drop, autosave, output window, self-test

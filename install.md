@@ -8,6 +8,8 @@ you build it from source once (see the build step below; details in `dev.md`).
 
 Tested on Pop!_OS 24.04 (Ubuntu 24.04 base), Intel Iris Xe, Wayland.
 
+This guide is also a page of the website: `website/install.html` (generated from this file).
+
 # 1. runtime requirements
 
 - a GPU driver with **OpenGL 3.3** or newer (Mesa / NVIDIA / AMD are all fine)

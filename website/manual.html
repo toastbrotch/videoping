@@ -158,7 +158,7 @@
 <p class="lead">videoping is a live VJ tool for Linux: clips, ISF generators and NDI sources are prepared
 in a grid, get effects, and are mixed live on 3 layers into one output, which goes to a screen, to NDI
 and to a recording. This manual explains how to play with it. Installation is in
-<a href="../install.md">install.md</a>.</p>
+<a href="install.html">installation guide</a>.</p>
 
 <figure>
   <img src="img/overview.png" width="1500" alt="videoping: finder, prepare grid, prepare detail, mixer and output">
@@ -470,7 +470,7 @@ within a second.</p>
     <kbd>F</kbd> for fullscreen on the chosen <b>screen</b>, <kbd>Esc</kbd> to leave fullscreen.
     "connected" lists the screens the system sees.</li>
   <li><b>NDI output</b>: sends the output to the network under the <b>ndi name</b>. Needs the NDI
-    runtime (see <a href="../install.md">install.md</a>); if videoping cannot find it, set the
+    runtime (see <a href="install.html">installation guide</a>); if videoping cannot find it, set the
     <b>NDI library folder</b>.</li>
   <li><b>NDI input</b>: NDI sources on the network show up in the finder; use them like clips.</li>
   <li><b>GPU</b>: shows the graphics card in use; on hybrid laptops "render on NVIDIA GPU" restarts
@@ -867,10 +867,10 @@ shader when its file changes, so you can edit a shader in a text editor while it
   <dt>The fps counter shows ⚠ although nothing is heavy.</dt>
   <dd>On Wayland the desktop limits how often videoping may draw; on some laptops that is below 60 fps
     (e.g. ~53 fps on Intel, 30 fps with the NVIDIA card). Set the output frame rate to 50 or 30, or see
-    the NVIDIA / X11 notes in <a href="../install.md">install.md</a>.</dd>
+    the NVIDIA / X11 notes in <a href="install.html">installation guide</a>.</dd>
 
   <dt>NDI does not work ("libndi not found").</dt>
-  <dd>Install the NDI runtime (<a href="../install.md">install.md</a>, section 2), or set the folder with
+  <dd>Install the NDI runtime (<a href="install.html">installation guide</a>, section 2), or set the folder with
     <code>libndi.so.6</code> in output options → NDI library folder.</dd>
 
   <dt>Wrong graphics card.</dt>
@@ -886,7 +886,7 @@ shader when its file changes, so you can edit a shader in a text editor while it
 
   <dt>REC is greyed out.</dt>
   <dd>No working hardware encoder was found; hover REC for the reason. NVIDIA needs the NVIDIA driver,
-    Intel / AMD the VA-API GStreamer plugins (<a href="../install.md">install.md</a>, section 1).</dd>
+    Intel / AMD the VA-API GStreamer plugins (<a href="install.html">installation guide</a>, section 1).</dd>
 
   <dt>A recording does not appear in the finder.</dt>
   <dd>Add the recording folder to the finder: general config → "add to finder".</dd>
