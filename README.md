@@ -2,6 +2,8 @@
 
 **Live VJ software for Linux, played with MIDI controllers.**
 
+Website, manual and install guide: **[videoping.net](https://videoping.net)**
+
 > **Early alpha.** videoping is completely vibecoded with Claude (Claude Code): about
 > 14,000 lines of Rust, none of them typed by hand. Expect rough edges, few tested
 > machines and formats that may still change.
@@ -50,11 +52,13 @@ cargo build --release
 ```
 
 Requirements (OpenGL 3.3, GStreamer 1.20+, optional NDI 6 runtime), the launcher entry and
-running on NVIDIA in hybrid laptops: see [install.md](install.md).
+running on NVIDIA in hybrid laptops: see [install.md](install.md) (also on the web:
+[videoping.net/install.html](https://videoping.net/install.html)).
 
 ## documentation
 
-- [website/manual.html](website/manual.html): the end-user manual (open it in a browser)
+- [videoping.net](https://videoping.net): the website
+- [videoping.net/manual.html](https://videoping.net/manual.html): the end-user manual (source: `website/manual.html`)
 - [install.md](install.md): installation
 - [dev.md](dev.md): building, modules, self-tests
 - [features.md](features.md): the spec, with every design decision
