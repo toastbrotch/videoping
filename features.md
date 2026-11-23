@@ -575,6 +575,7 @@ earlier idea, decided 2026-11-21:
   X11 (XWayland) 60 fps on both but the ui is upscaled (blurry) on the HiDPI panel — open decision
 
 ## documentation
+- website/index.html = the sales page for videoping (2026-11-23): one static HTML file in the repo (not published), images from ../docs; unique selling points: made for your hands (pad grid + encoders, learn), an ai in the booth, shaders live (editor + ai), prepare then go live (render priority), map any surface, videopong.net built in; the community story (from the maker of videopong.net and linux4vjs.net); show-safe details, "one program instead of five", specs, build from source; only real facts and numbers (videopong.net: 27,000+ clips, Creative Commons, non-profit, ad-free; linux4vjs.net archived since 2020)
 - features.md = spec (decisions), manual.html = end-user manual as one HTML page (dark like videoping, table of contents; concept, tour with screenshots in docs/, playing, performance, files, troubleshooting), install.md = installation only, dev.md = development
 - user-visible changes go into manual.html in the same step as features.md
 

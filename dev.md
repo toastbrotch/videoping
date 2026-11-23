@@ -142,6 +142,8 @@ filter to stay small)
 # architecture
 
 ```
+website/
+  index.html   the sales page (static, opens from the repo; screenshots from docs/)
 src/
   main.rs      eframe setup (glow / OpenGL renderer)
   app.rs       the "live" tab: 5 columns, drag & drop, autosave, output window, self-test
