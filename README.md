@@ -1,6 +1,6 @@
 <img src="website/logo/videoping-v2-logo.png" alt="videoping" width="420">
 
-**Live VJ software for Linux, played with MIDI controllers.**
+**Live VJ software for Linux, built on ISF shaders, with an AI in the booth.**
 
 Website, manual and install guide: **[videoping.net](https://videoping.net)**
 
