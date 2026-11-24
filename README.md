@@ -10,6 +10,12 @@ Website, manual and install guide: **[videoping.net](https://videoping.net)**
 
 ![videoping](website/img/overview.png)
 
+## why
+
+We love Resolume and VDMX and played hundreds of gigs with them. But we love Linux too, and
+waited a decade for a Linux release of either. It never came. Now, with AI, I can build the tool
+I always wanted myself: videoping.
+
 Most VJ setups are a stack of separate tools: a player, a mapper, a shader editor, a browser
 full of footage tabs, a MIDI bridge. videoping is one program, built for playing live.
 
