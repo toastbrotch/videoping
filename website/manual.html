@@ -198,7 +198,7 @@ any layer) or on the whole output (output effects, after the mixer). An effect c
 the two with all its settings.</p>
 
 <p><b>Signal flow</b></p>
-<pre>instance:  source → effect 1 → effect 2 → …          (up to 4 effects)
+<pre>instance:  source → effect 1 → effect 2 → …          (up to 16 effects)
 mixer:     layer 3 (bottom) → layer 2 → layer 1 (top), each with mix-type, mix %, R G B
 output:    mixer → output effects → freeze → brightness / blackout → screen, NDI, REC</pre>
 
@@ -421,7 +421,8 @@ change the same settings.</p>
 <ul>
   <li><b>Add</b>: drag an effect from the finder onto a slot, onto the effect stack of the selected
     instance, or onto the output effects. Double-click adds it to the selected instance.</li>
-  <li>Up to <b>4 effects</b> per instance and 4 output effects (that is what the Bhoreal has pads for).</li>
+  <li>Up to <b>16 effects</b> per instance and 16 output effects. Every effect costs GPU time: watch the meters.
+    A MIDI profile controls as many as it has pads for (the built-in Bhoreal profile: effects 1–4).</li>
   <li>Each effect row: <span class="b">≡</span> drag handle, on / off checkbox,
     <b>▸ / ▾</b> to show / hide the parameters, the name, <span class="b">×</span>. Mix-type, R G B
     and mix % always stay visible, also when folded.</li>
@@ -716,7 +717,7 @@ every tool call is listed in the chat with its result. The output preview is on 
   <tr><th>tool</th><th>what it does</th></tr>
   <tr><td><code>state</code></td><td>overview: what plays in which layer, master, bpm, recording, the slots and their effects, output effects, frame rate and GPU load</td></tr>
   <tr><td><code>list_addresses</code> · <code>get</code> · <code>set</code></td><td>everything a controller can do, with the same <a href="#midi">addresses</a> (<code>/layer/2/mix</code>, <code>/slot/9/fx/1/param/3</code> …)</td></tr>
-  <tr><td><code>list_files</code> · <code>load_file</code> · <code>add_effect</code></td><td>the files of the finder; put a clip or generator into a slot; add an effect to a slot or the output (max 4)</td></tr>
+  <tr><td><code>list_files</code> · <code>load_file</code> · <code>add_effect</code></td><td>the files of the finder; put a clip or generator into a slot; add an effect to a slot or the output (max 16)</td></tr>
   <tr><td><code>frame</code></td><td>the output, the preview, a slot or the shader editor's preview as an image</td></tr>
   <tr><td><code>shader_errors</code> · <code>shader_info</code></td><td>which shaders do not compile and why; the parameters of a shader in videoping's numbering, and its <a href="#shaderdocs">documentation</a></td></tr>
 </table>

@@ -8,7 +8,9 @@ pub const GRID_COLS: usize = 4;
 pub const GRID_ROWS: usize = 8;
 pub const NUM_LAYERS: usize = 3;
 /// effects per instance and on the output (fits the bhoreal: 4 pads per layer + 4 for the output)
-pub const MAX_EFFECTS: usize = 4;
+/// effects per instance and on the output: a safety cap (an ai or MCP client adding effects in a
+/// loop stops here), not a design limit; midi profiles map as many as they have pads for
+pub const MAX_EFFECTS: usize = 16;
 
 /// Layer colors (ui live-marking and later bhoreal LEDs).
 /// L1 #1B6898 (blue), L2 #388E3C (green), L3 #C8640A (orange)

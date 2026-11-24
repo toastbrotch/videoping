@@ -177,7 +177,7 @@ the prepare area uses two columns (see "layout of the tab live"):
       (example: 120 bpm, 8 beats -> the limited part plays in 4 s, regardless of the clip length)
     - ½x and 2x buttons: halve / double the speed instantly (in bpm mode: double / halve the number of beats)
 
-- effects (layering top-down, max 4 per clip; decided 2026-11-21, was 8: fits the bhoreal)
+- effects (layering top-down, max 16 per clip; decided 2026-11-24, was 4 to fit the bhoreal, which is just one setup: a midi profile maps as many as it has pads for, the rest is reachable via learn, the encoders that follow the opened effect, mcp and the ai tab; the 16 is only a safety cap against an ai / MCP client adding effects in a loop during a show; every effect costs one render pass, visible in the GPU meters)
   - reorder: drag & drop
   - drag handle "≡": button-sized grab area (26x18) at the start of the effect row, hand cursor
   - the effect stack (clip effects and output effects) reaches down to the bottom of its column: the whole empty space below is a drop area
@@ -185,7 +185,7 @@ the prepare area uses two columns (see "layout of the tab live"):
     nor between the mixer layers and the output effects
   - move to the output effects and back: drag the "≡" handle onto the other effect stack (onto a row = insert there,
     onto the empty area = append); the effect keeps all its settings (parameters, ranges, animation, mix, r/g/b);
-    a clip (or the output) that already has 4 effects refuses it
+    a clip (or the output) that already has 16 effects refuses it
   - remove: small x on the effect row
   - active/inactive
   - mix-type, R G B and mix slider are always visible, also when the effect is folded in
@@ -278,7 +278,7 @@ the prepare area uses two columns (see "layout of the tab live"):
 - all three act at the very end (after the output effects), for NDI and screen output
 
 ## output effects (layering top-down)
-- max 4 output effects (decided 2026-11-21, like the effects per clip: 4 pads on the bhoreal)
+- max 16 output effects (decided 2026-11-24, like the effects per clip; was 4)
 - multiple effects, they work exactly like the effects in the prepare lane:
   - active/inactive, reorder by drag & drop, remove with x
   - can be dragged to the selected clip's effect stack and back (keeps all settings)
@@ -390,7 +390,7 @@ decided 2026-11-21: generic for any midi controller, edited in the tab "midi map
 |---|---|
 | 1 | select mixer-layer 1-3, activate/deactivate mixer-layer 1-3, global blackout, record |
 | 2-5 | select instance in the prepare lane = load it into the selected mixer-layer (4x8 = 32 instances) |
-| 6-8, rows 1-4 | activate/deactivate effects 1-4 of the clip in mixer-layer 1 / 2 / 3 (max 4 effects per clip) |
+| 6-8, rows 1-4 | activate/deactivate effects 1-4 of the clip in mixer-layer 1 / 2 / 3 (effects 5-16 have no pad) |
 | 6, rows 5-8 | activate/deactivate output effects 1-4 |
 | 7-8, rows 5-8 | free (8 pads) |
 
