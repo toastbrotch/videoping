@@ -12,7 +12,7 @@ Website, manual and install guide: **[videoping.net](https://videoping.net)**
 
 ## why
 
-We love Resolume and VDMX and played hundreds of gigs with them. But we love Linux too, and
+I love Resolume and VDMX and played hundreds of gigs with them. But I love Linux too, and
 waited a decade for a Linux release of either. It never came. Now, with AI, I can build the tool
 I always wanted myself: videoping.
 
