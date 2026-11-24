@@ -36,6 +36,11 @@ Recording (REC) needs a hardware H.264 encoder: NVENC on NVIDIA (`nvcodec` in pl
 NVIDIA driver) or VA-API on Intel / AMD (`va` in plugins-bad or `gstreamer1.0-vaapi`). Without one, REC
 is disabled.
 
+**Keep GStreamer up to date.** videoping plays video files from anywhere (also clips other people
+shared on videopong.net), and GStreamer's file parsers and decoders get security fixes regularly.
+Install system updates (`sudo apt update && sudo apt upgrade`, or your distribution's updater)
+before a tour, not only when something breaks.
+
 # 2. NDI runtime (optional)
 
 videoping does not ship NDI. It loads `libndi.so.6` at runtime, searched in this order:

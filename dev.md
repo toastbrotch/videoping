@@ -53,7 +53,11 @@ cargo run                 # debug build
 cargo run --release       # use this for real playback performance
 cargo test                # unit tests (state logic, isf parsing)
 cargo clippy
+cargo audit               # known vulnerabilities in the dependencies (cargo install cargo-audit)
 ```
+
+`scripts/mcp-test.sh` also checks that browsers are kept out of the MCP server (look-alike Origin
+/ Host, `Origin: null`, `text/plain` -> 403 / 415) and that files outside the finder are refused.
 
 Useful env vars:
 

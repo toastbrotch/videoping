@@ -128,6 +128,10 @@ impl App {
                 let Some(p) = s("path") else { return ToolResult::error("path missing") };
                 // stored like the finder does it: absolute (relative paths would break from another folder)
                 let path = std::fs::canonicalize(&p).unwrap_or_else(|_| PathBuf::from(&p));
+                // files only from the finder folders (not anything on the disk); other names are NDI sources
+                if path.exists() && !self.in_finder(&path) {
+                    return ToolResult::error(format!("{p}: not in the finder folders (see list_files)"));
+                }
                 let kind = if path.exists() { isf::classify(&path) } else { Some(FileKind::Ndi) };
                 let Some(kind) = kind else { return ToolResult::error(format!("{p}: not a clip, shader or NDI source")) };
                 if kind == FileKind::Effect {
@@ -160,6 +164,9 @@ impl App {
                 let Some(p) = s("path") else { return ToolResult::error("path missing") };
                 // stored like the finder does it: absolute (relative paths would break from another folder)
                 let path = std::fs::canonicalize(&p).unwrap_or_else(|_| PathBuf::from(&p));
+                if !self.in_finder(&path) {
+                    return ToolResult::error(format!("{p}: not in the finder folders (see list_files)"));
+                }
                 if isf::classify(&path) != Some(FileKind::Effect) {
                     return ToolResult::error(format!("{p}: not an ISF effect"));
                 }
@@ -221,6 +228,12 @@ impl App {
             }
             "shader_info" => {
                 let Some(p) = s("path") else { return ToolResult::error("path missing") };
+                // only shaders of the finder: no reading of other files (their text would go to the ai)
+                let path = std::fs::canonicalize(&p).unwrap_or_else(|_| PathBuf::from(&p));
+                if !self.in_finder(&path) {
+                    return ToolResult::error(format!("{p}: not a shader in the finder folders (see list_files)"));
+                }
+                let p = path.display().to_string();
                 match isf::parse_info(Path::new(&p)) {
                     Ok((info, _)) => {
                         let mut lines = vec![format!("{} ({})", info.name, if info.is_effect { "effect" } else { "generator" })];
@@ -243,6 +256,11 @@ impl App {
             }
             _ => ToolResult::error(format!("unknown tool {name}")),
         }
+    }
+
+    /// A file the finder lists (path as given, or both resolved).
+    fn in_finder(&self, path: &Path) -> bool {
+        self.finder.iter().any(|e| e.path == path || std::fs::canonicalize(&e.path).is_ok_and(|c| c == path))
     }
 
     fn mcp_state(&self) -> String {

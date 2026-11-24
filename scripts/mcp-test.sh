@@ -21,3 +21,11 @@ call '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"shader_er
 call '{"jsonrpc":"2.0","id":13,"method":"nope"}' > $O/unknown.json
 curl -s -o /dev/null -w "foreign origin -> %{http_code}\n" -X POST -H 'Origin: http://evil.example' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:$P/mcp
 curl -s -o /dev/null -w "GET -> %{http_code}\n" http://127.0.0.1:$P/mcp
+# browsers are kept out: exact local host names only, no "null" origin, json only
+curl -s -o /dev/null -w "rebinding origin localhost.evil.com -> %{http_code}\n" -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhost.evil.com' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:$P/mcp
+curl -s -o /dev/null -w "origin null -> %{http_code}\n" -X POST -H 'Content-Type: application/json' -H 'Origin: null' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:$P/mcp
+curl -s -o /dev/null -w "host evil.com -> %{http_code}\n" -X POST -H 'Content-Type: application/json' -H 'Host: evil.com' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:$P/mcp
+curl -s -o /dev/null -w "text/plain -> %{http_code}\n" -X POST -H 'Content-Type: text/plain' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:$P/mcp
+curl -s -o /dev/null -w "local origin -> %{http_code}\n" -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:$P/mcp
+call '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"shader_info","arguments":{"path":"/etc/passwd"}}}' > $O/outside.json
+call '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"load_file","arguments":{"path":"/etc/hostname"}}}' > $O/outside-load.json

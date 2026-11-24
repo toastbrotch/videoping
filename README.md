@@ -38,7 +38,8 @@ full of footage tabs, a MIDI bridge. videoping is one program, built for playing
 - **projection mapping**: slices with perspective-correct corner pin, soft masks, a test grid and
   presets per venue
 - **videopong.net built in**: search 27,000+ Creative Commons clips from the finder, preview, drag
-  onto a slot; downloads stay on your disk
+  onto a slot; downloads stay on your disk (for now the public 480×360 preview mp4, not the
+  original file)
 - **output**: fullscreen on any screen, NDI out, hardware-encoded recording (NVENC / VA-API)
 - no audio, by design
 

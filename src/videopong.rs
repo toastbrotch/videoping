@@ -28,7 +28,7 @@ pub struct Clip {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(60))).http_status_as_error(true).build().into()
+    ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(60))).http_status_as_error(true).https_only(true).build().into()
 }
 
 fn get_json(url: &str) -> Result<Value, String> {
@@ -63,7 +63,7 @@ pub fn parse(v: &Value) -> Result<(Vec<Clip>, usize), String> {
             preview: s(&c["url_preview_mp4"]),
             page: s(&c["url_videopong"]),
         };
-        if !clip.id.is_empty() && !clip.preview.is_empty() {
+        if !safe_id(&clip.id).is_empty() && !clip.preview.is_empty() {
             out.push(clip);
         }
     }

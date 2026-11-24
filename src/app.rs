@@ -183,10 +183,17 @@ fn save_config(c: &Config) -> Result<(), String> {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     let txt = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
-    std::fs::write(&p, txt).map_err(|e| format!("{}: {e}", p.display()))?;
-    // it holds the ai api keys: readable by the user only
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+    // it holds the ai api keys: readable by the user only, from the first byte on (created with
+    // mode 0600, then renamed over the old file, which also replaces an older 0644 file)
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let tmp = p.with_extension("json.tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let err = |e: std::io::Error| format!("{}: {e}", p.display());
+    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp).map_err(err)?;
+    f.write_all(txt.as_bytes()).map_err(err)?;
+    drop(f);
+    std::fs::rename(&tmp, &p).map_err(err)?;
     Ok(())
 }
 

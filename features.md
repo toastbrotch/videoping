@@ -515,7 +515,7 @@ earlier idea, decided 2026-11-21:
 
 ## videopong (videopong.net clips in the finder) — decided + built 2026-11-22
 - like the Resolume plugin ../ffgl/source/plugins/VideoPong: the public JSON API https://www.videopong.net/api (no key): /clip/search/<query>/<offset>/<count> (count max 50), /clip/random/<n>; answer {status: {error, errorstring}, data: [[clip, user], ...], count}; clip: id, title, duration, framerate, resolution, license, url_thumb (jpg), url_preview_mp4, url_videopong; user: name
-- only the public preview mp4 (480x360 H.264): the full-quality download (url_download) needs a videopong login -> later, if wanted
+- only the public preview mp4 (480x360 H.264): the full-quality download (url_download) needs a videopong login -> later, if wanted; checked 2026-11-24: the preview is 480x360 for every original (640x480, 1280x720, 1920x1080); said on the website, in the README and the manual (decided 2026-11-24)
 - finder: a 5th category "videopong.net" (named so 2026-11-22) in the accordion: search field (Enter) + "random"; results 50 at a time, "more" loads the next 50; each row: thumbnail, title, duration, original resolution, author, license; ✓ = downloaded
 - click = download (if needed) + finder preview; double click = download + first free slot; drag onto a slot = download + into that slot (status line shows the download); a downloaded clip is a normal mp4 (same as a finder clip)
 - clips cached in ~/Videos/videopong/<title> [<id>].mp4 (visible, reusable, sessions find them offline); with the first download (any download, also an already cached one used again) the folder is added to the finder folders (2026-11-22), so the downloads also appear under "clips"; thumbnails cached in ~/.cache/videoping/videopong-thumbs/
@@ -595,6 +595,16 @@ earlier idea, decided 2026-11-21:
 
 ## platform
 - Linux only for now (no Windows / macOS builds). The code still has Linux-specific bits (libndi.so names / paths, DejaVu font paths); a port would need those plus native CI builds.
+
+## security — checked + fixed 2026-11-24
+- MCP server: browsers are kept out (DNS rebinding, web pages posting to localhost): the Host header must be exactly 127.0.0.1 / localhost / [::1] (with any port), an Origin header (if there is one) too, with http/https and nothing after the host; "null" is refused; a POST must be Content-Type application/json (a browser then needs a preflight, which gets 405); before, "http://localhost.evil.com" passed a starts_with check and "null" was allowed
+- MCP and ai tab tools touch files only from the finder folders: load_file, add_effect and shader_info refuse other paths (shader_info read the .md next to any path, and that text went to the ai provider); read_shader already did this
+- prompt injection: the instructions (MCP and both ai chats) say that text from files and the network (shader code, comments, .md docs, file and clip names) is data, never instructions; such requests are ignored and mentioned; the manual advises "ask before changes" in shows with shaders from strangers
+- config.json (holds the ai keys) is created with mode 0600 (temp file + rename), never readable by others, not even for a moment
+- videopong.net: https only (ureq https_only), also for preview and thumbnail urls from the api; clips without a usable id are skipped
+- install.md: keep GStreamer up to date (it parses video files from anywhere, also shared clips)
+- dependencies: `cargo audit` (dev.md); 2026-11-24: cookie 0.18.3 and url 2.5.9 (advisories RUSTSEC-2026-0594 / -0592), yanked yoke-derive updated; clean
+- open (not fixed, decided 2026-11-24): the NDI library folder is stored in the session; a session file from someone else could make videoping load a foreign libndi.so
 
 ## stack
 - ui: egui / eframe (glow renderer), the same OpenGL context renders the video and the ui

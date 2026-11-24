@@ -250,8 +250,10 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       slot (the row shows the progress). Downloaded clips get a <b>✓</b>, are stored in
       <code>~/Videos/videopong/</code> and then work like any clip, also offline. With the first
       download that folder is added to the finder <b>folders</b>, so the downloads also show up under
-      <b>clips</b>. Only the public preview
-      quality (480×360) is downloaded; please respect each clip's license.</li>
+      <b>clips</b>. <b>Only the public
+      preview mp4 (480×360) is downloaded and played, not the original file</b>, whatever the clip's
+      original resolution (the row's tooltip shows it); full-quality downloads need a videopong.net
+      login and are not built in yet. Please respect each clip's license.</li>
     <li><b>Favorites</b>: hover over a file and click the <b>☆</b> on its left: it is pinned under
       <b>★ favorites</b> on top of its category. Click ★ again to remove it. Favorites are saved with
       the session and stay with "new".</li>
@@ -694,6 +696,9 @@ every tool call is listed in the chat with its result. The output preview is on 
     count of the chat is at the bottom right.</li>
   <li>The ai tab is not limited by the MCP <i>read only</i> setting (that is for assistants from
     outside); use <i>ask before changes</i> instead.</li>
+  <li><b>Shaders from strangers</b>: text inside a shader or its documentation could try to give the
+    assistant orders ("turn on blackout"). The assistant is told to ignore such text and to tell you
+    about it, but in a show with shaders you did not write, switch on <i>ask before changes</i>.</li>
 </ul>
 
 <h3>Connect an assistant from outside (Claude Code)</h3>
@@ -718,7 +723,9 @@ every tool call is listed in the chat with its result. The output preview is on 
 
 <h3>Safety</h3>
 <ul>
-  <li>Only programs on this computer can connect (127.0.0.1); requests from web pages are refused.</li>
+  <li>Only programs on this computer can connect (127.0.0.1); requests from web pages in a browser
+    are refused, also tricks with look-alike addresses.</li>
+  <li>Files only from the finder folders: the tools can not load or read other files on the disk.</li>
   <li>Every change shows in the status line of the top bar, e.g. "mcp: /layer/1/mix = 0.5" (from the
     ai tab: "ai: …"); in the ai tab also in the chat, with undo.</li>
   <li><b>read only (for shows)</b> in the general config: the assistant can still look, but every

@@ -73,6 +73,7 @@ MIDI controllers: ALSA (<code>libasound2</code>, installed on every desktop); cl
   gstreamer1.0-libav gstreamer1.0-vaapi \
   fonts-dejavu-core</code></pre>
 <p><code>gstreamer1.0-vaapi</code> (or the <code>va</code> plugins in plugins-bad) gives hardware H.264 decoding on Intel/AMD. Recording (REC) needs a hardware H.264 encoder: NVENC on NVIDIA (<code>nvcodec</code> in plugins-bad, with the NVIDIA driver) or VA-API on Intel / AMD (<code>va</code> in plugins-bad or <code>gstreamer1.0-vaapi</code>). Without one, REC is disabled.</p>
+<p><b>Keep GStreamer up to date.</b> videoping plays video files from anywhere (also clips other people shared on videopong.net), and GStreamer's file parsers and decoders get security fixes regularly. Install system updates (<code>sudo apt update &amp;&amp; sudo apt upgrade</code>, or your distribution's updater) before a tour, not only when something breaks.</p>
 <h2 id="2-ndi-runtime-optional">2. NDI runtime (optional)</h2>
 <p>videoping does not ship NDI. It loads <code>libndi.so.6</code> at runtime, searched in this order:</p>
 <ol><li>
