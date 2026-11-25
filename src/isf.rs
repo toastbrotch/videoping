@@ -332,18 +332,18 @@ mod tests {
 
     #[test]
     fn parses_project_shaders() {
-        let (fx, body) = parse_info(Path::new("isf-effect/gameboy-camera.fs")).unwrap();
+        let (fx, body) = parse_info(Path::new("isf-pack/effects/color-adjust.fs")).unwrap();
         assert!(fx.is_effect);
-        assert_eq!(fx.inputs.iter().filter(|i| i.kind != InputKind::Image).count(), 10);
+        assert_eq!(fx.inputs.iter().filter(|i| i.kind != InputKind::Image).count(), 8);
         let frag = build_fragment(&fx, &body, false);
-        assert!(frag.contains("isf_FragColor = vec4(col, 1.0)"));
+        assert!(frag.contains("isf_FragColor = vec4(clamp(c, 0.0, 1.0), s.a)"));
         assert!(!frag.contains("gl_FragColor"));
 
-        let (gen_info, body) = parse_info(Path::new("isf-generator/0-id-display.fs")).unwrap();
+        let (gen_info, body) = parse_info(Path::new("isf-pack/generators/hex-pulse.fs")).unwrap();
         assert!(!gen_info.is_effect);
         let frag = build_fragment(&gen_info, &body, false);
         assert!(frag.contains("uniform float uInstanceSeed;"));
-        assert_eq!(classify(Path::new("isf-generator/0-id-display.fs")), Some(FileKind::Generator));
+        assert_eq!(classify(Path::new("isf-pack/generators/hex-pulse.fs")), Some(FileKind::Generator));
     }
 
     #[test]

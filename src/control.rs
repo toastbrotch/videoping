@@ -574,8 +574,8 @@ mod tests {
 
     fn setup() -> (Session, Infos, u64) {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let fx_path = root.join("isf-effect/gameboy-camera.fs");
-        let gen_path = root.join("isf-generator/0-id-display.fs");
+        let fx_path = root.join("isf-pack/effects/color-adjust.fs");
+        let gen_path = root.join("isf-pack/generators/hex-pulse.fs");
         let fx_info = crate::isf::parse_info(&fx_path).unwrap().0;
         let gen_info = crate::isf::parse_info(&gen_path).unwrap().0;
         let mut s = Session::default();
@@ -673,12 +673,12 @@ mod tests {
         // the clip (slot 1) selected, no focus: its first effect
         s.selected_instance = Some(clip);
         assert_eq!(sel_param_prefix(&s).as_deref(), Some("/slot/1/fx/1/param"));
-        set(&mut s, &infos, "/sel/param/1", &Value::Num(200.0)).unwrap();
-        assert_eq!(get(&s, &infos, Ext::default(), "/slot/1/fx/1/param/1"), Some(Value::Num(200.0)));
-        assert_eq!(range(&s, &infos, "/sel/param/1"), Some((32.0, 288.0)));
-        // reset: back to the isf default (112)
+        set(&mut s, &infos, "/sel/param/1", &Value::Num(0.5)).unwrap();
+        assert_eq!(get(&s, &infos, Ext::default(), "/slot/1/fx/1/param/1"), Some(Value::Num(0.5)));
+        assert_eq!(range(&s, &infos, "/sel/param/1"), Some((-1.0, 1.0)));
+        // reset: back to the isf default (0)
         set(&mut s, &infos, "/sel/param/1/reset", &Value::Bool(true)).unwrap();
-        assert_eq!(get(&s, &infos, Ext::default(), "/sel/param/1"), Some(Value::Num(112.0)));
+        assert_eq!(get(&s, &infos, Ext::default(), "/sel/param/1"), Some(Value::Num(0.0)));
         // the generator (slot 2) selected: its own parameters
         let gen_id = s.slots[1].as_ref().unwrap().id;
         s.selected_instance = Some(gen_id);
@@ -693,17 +693,17 @@ mod tests {
     fn params_clamped_and_listed() {
         let (mut s, infos, clip) = setup();
         let _ = clip;
-        // parameter 1 of gameboy-camera is uResolution (32..288)
+        // parameter 1 of color-adjust is brightness (-1..1)
         let a = "/slot/1/fx/1/param/1".to_string();
         set(&mut s, &infos, &a, &Value::Num(9999.0)).unwrap();
-        assert_eq!(get(&s, &infos, Ext::default(), &a), Some(Value::Num(288.0)), "clamped to the ISF MAX");
+        assert_eq!(get(&s, &infos, Ext::default(), &a), Some(Value::Num(1.0)), "clamped to the ISF MAX");
         let l = list(&s, &infos);
         let desc = l.iter().find(|d| d.addr == a).expect("listed");
-        assert!(desc.label.contains("slot 1 (clip)") && desc.label.contains("gameboy-camera"), "{}", desc.label);
+        assert!(desc.label.contains("slot 1 (clip)") && desc.label.contains("color-adjust"), "{}", desc.label);
         // the page alias reaches the same parameter
-        assert_eq!(get(&s, &infos, Ext::default(), "/page/slot/1/fx/1/param/1"), Some(Value::Num(288.0)));
+        assert_eq!(get(&s, &infos, Ext::default(), "/page/slot/1/fx/1/param/1"), Some(Value::Num(1.0)));
         assert!(set(&mut s, &infos, "/slot/1/fx/1/param/99", &Value::Num(1.0)).is_err(), "no parameter 99");
-        assert_eq!(desc.kind, Kind::Range { min: 32.0, max: 288.0, integer: false });
+        assert_eq!(desc.kind, Kind::Range { min: -1.0, max: 1.0, integer: false });
         // every listed, readable address round-trips through get
         let snap = snapshot(&s, &infos, Ext::default());
         assert!(snap.len() > 100);

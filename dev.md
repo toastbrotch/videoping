@@ -69,10 +69,10 @@ Useful env vars:
 |---|---|
 | `NDI_RUNTIME_DIR_V6` | folder with `libndi.so.6` |
 | `GST_DEBUG=3` | GStreamer warnings (codec / decoding problems) |
-| `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (id-display generator over a clip with gameboy-camera), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, also simulates mouse input (drags the "[" limiter, clicks "Lk" of mixer layer L2, clicks an empty prepare slot, opens "new" and clicks "clear everything", blackout + click on the brightness slider) and prints `selftest drag: …` / `selftest click: …` / `selftest empty slot click: …` / `selftest new: …` / `selftest fade in: …`, quits after ~7 s. Never touches the autosave or the stored ui layout. |
+| `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (the hex-pulse generator from the pack over a clip with color-adjust), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, also simulates mouse input (drags the "[" limiter, clicks "Lk" of mixer layer L2, clicks an empty prepare slot, opens "new" and clicks "clear everything", blackout + click on the brightness slider) and prints `selftest drag: …` / `selftest click: …` / `selftest empty slot click: …` / `selftest new: …` / `selftest fade in: …`, quits after ~7 s. Never touches the autosave or the stored ui layout. |
 | `VIDEOPING_SELFTEST_CLIP=<mp4>` | clip for the self-test (default `<dir>/testclip.mp4`) |
 | `VIDEOPING_PACK=<dir>` | where the shader pack is (default: `<exe>/../share/videoping/isf-pack`, the repository when run from `target/`, `./isf-pack`); a new session puts it into the finder |
-| `VIDEOPING_SELFTEST_EFFECT=<fs>` | first (open) clip effect of the self-test (default `isf-effect/gameboy-camera.fs`) |
+| `VIDEOPING_SELFTEST_EFFECT=<fs>` | first (open) clip effect of the self-test (default `isf-pack/effects/color-adjust.fs`) |
 | `VIDEOPING_SELFTEST_RESET=1` | change the first parameter of the first clip effect, right click its row, print value before / after (expected: default) |
 | `VIDEOPING_SELFTEST_NOMETERS=1` | self-test with the resource meters off (overhead comparison: `time` both runs); with meters on, the self-test prints the meter of each instance |
 | `VIDEOPING_SELFTEST_REC=<seconds>` | record from 1.5 s to the given time (default 4) into the self-test folder (without it the recording folder is the default and nothing is recorded); the self-test stays open until then; check the file with `cargo run --release --example transport_test -- <file>` |
@@ -89,7 +89,7 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
 | `VIDEOPING_SELFTEST_CONFIG=1` | output options and general config folded open, column 2 scrolled to the bottom (screenshot of the settings) |
 | `VIDEOPING_SELFTEST_AI=<url>` | the ai tab talks to a mock Anthropic server at that url (key "selftest"); at 2 s it sends a message, at 5.5 s it prints the brightness and the chat. The mock must answer with `set /master/brightness 0.5` + `frame`, then a text (see features.md "ai tab") |
-| `VIDEOPING_SELFTEST_FINDER=<search>` | two favorites (gameboy-camera, chaos-feedback) and that search typed into the finder (screenshot of the accordion / search; empty = favorites only) |
+| `VIDEOPING_SELFTEST_FINDER=<search>` | two favorites (color-adjust, trails) and that search typed into the finder (screenshot of the accordion / search; empty = favorites only) |
 | `VIDEOPING_SELFTEST_QUIT=1` | the quit question is active in the self-test: at 2 s the window's close is requested, at 3 s it must still run with the question open; then it quits (mouse script off) |
 | `VIDEOPING_SELFTEST_LONGNAME=1` | the clip in slot 9 gets a very long name (screenshot: cut with "…" before the ×) |
 | `VIDEOPING_SELFTEST_VP=<query>` | needs the internet: the finder's videopong category searches the query; at 3.5 s results and thumbnails are printed and the first clip is downloaded into slot 3 (into the self-test folder); the mouse script is off. Use `VIDEOPING_SELFTEST_STAY=22` (videopong.net can be slow) |

@@ -584,7 +584,7 @@ earlier idea, decided 2026-11-21:
 
 ## license — decided 2026-11-23
 - the program: GPL-3.0-or-later (`LICENSE`, `license` in Cargo.toml); forks that are distributed stay open; all dependencies are permissive (MIT / Apache / BSD / Zlib / ISC, one MPL-2.0), GStreamer (LGPL) is linked dynamically, libndi is loaded at runtime and never shipped
-- the shaders that come with videoping (isf-effect/, isf-generator/, their .md docs): CC BY-NC-SA 4.0 (`LICENSE-shaders.md`); they are data loaded at runtime, not part of the program; the basic shaders are still to be written; third-party shaders keep their own license
+- the shaders that come with videoping (isf-pack/, their .md docs): CC BY-NC-SA 4.0 (`LICENSE-shaders.md`); they are data loaded at runtime, not part of the program; the basic shaders are still to be written; third-party shaders keep their own license
 - the name "videoping" and the logo are covered by neither license
 - shown in install.md (and so install.html) and in the website footer
 
@@ -594,7 +594,12 @@ earlier idea, decided 2026-11-21:
 - the self-test is exempt and leaves the real midi controllers alone (only the midi self-test uses its own virtual device), so it can run beside a session
 
 ## platform
-- Linux only for now (no Windows / macOS builds). The code still has Linux-specific bits (libndi.so names / paths, DejaVu font paths); a port would need those plus native CI builds.
+- Linux only, confirmed 2026-11-26 after looking at Windows / macOS releases: it stays (the pitch, the support
+  load, no test machines). For the record, a port would need: switching off the NVIDIA PRIME restart and
+  notify-send, CPU / RAM via sysinfo instead of /proc, screens from winit instead of /sys/class/drm, the font built
+  in, the encoder / decoder names (mfh264enc, qsvh264enc, nvd3d11h264enc, d3d11 / d3d12; vtenc_h264, vt*), the
+  NDI library names, the pack next to the exe / in the .app; then GStreamer bundled, an installer / .dmg, code
+  signing (Windows SmartScreen; macOS notarization is mandatory) and macOS's deprecated OpenGL as a long-term risk
 
 ## security — checked + fixed 2026-11-24
 - MCP server: browsers are kept out (DNS rebinding, web pages posting to localhost): the Host header must be exactly 127.0.0.1 / localhost / [::1] (with any port), an Origin header (if there is one) too, with http/https and nothing after the host; "null" is refused; a POST must be Content-Type application/json (a browser then needs a preflight, which gets 405); before, "http://localhost.evil.com" passed a starts_with check and "null" was allowed
@@ -614,7 +619,7 @@ earlier idea, decided 2026-11-21:
 - install / dev setup: see install.md and dev.md
 
 ## shader pack — generators built 2026-11-24
-- folder `isf-pack/generators/` (committed; the user's own shaders in isf-effect/, isf-generator/, ivo-isf-* stay private): 13 ISF
+- folder `isf-pack/generators/` (committed; the user's own shaders in ivo-isf-* stay private): 13 ISF
   generators written from scratch by Claude (18 written; removed 2026-11-24: truchet weave "boring", noise bars "too cheesy", ink in water, flow field; 2026-11-25: reaction-diffusion), CC BY-NC-SA 4.0 (LICENSE-shaders.md), each with a .md doc (slider table, tips, a ⚠
   line for the heavy ones)
 - contour map, moire, scanline terrain, lissajous, voronoi cells,
@@ -686,8 +691,7 @@ earlier idea, decided 2026-11-21:
 - a new session's finder folders: the current folder only when it is not the home folder or / (from the menu
   that would scan the whole home), the Videos folder, the pack (not twice when the current folder contains it);
   existing sessions keep their folders
-- isf-effect/gameboy-camera.fs and isf-generator/0-id-display.fs are in git (tests, self-test), so a clean
-  checkout works; they are not part of the pack
+- the tests and the self-test use pack shaders (color-adjust, hex-pulse), so a clean checkout works
 
 ## packages and releases (2026-11-25)
 - .deb (cargo-deb, metadata in Cargo.toml) and tar.gz (scripts/release-tar.sh, made from the .deb: one layout)
@@ -704,6 +708,16 @@ earlier idea, decided 2026-11-21:
 - 0.0.1 released 2026-11-26 (tag v0.0.1, GitHub release with .deb, tar.gz, SHA256SUMS); the website's "get it"
   section points to releases/latest (download button, apt install line), the alpha box no longer says "no
   packages", the specs name .deb and tar.gz; install.md: the .deb brings the runtime requirements itself
+
+## isf-effect/ and isf-generator/ out of the repository (2026-11-26)
+- the only tracked files there were two test shaders (gameboy-camera, 0-id-display): removed; the tests, control
+  tests and the self-test use pack shaders instead (decided by the user): color-adjust (parameter 1 = brightness
+  -1..1, default 0: clamp, reset, Twister ring checks) and hex-pulse; the self-test's finder is the pack;
+  scripts/mcp-test.sh uses pack shaders (rutt-etra, contour map)
+- the user's private shaders in the two folders were byte-identical copies of ../shader/ivo-isf-*: the folders
+  and the ivo-isf-* symlinks are gone from the working folder (the shaders stay in ../shader/)
+- LICENSE-shaders.md: CC BY-NC-SA for isf-pack/
+- checked: cargo test, the full self-test (all expected values), scripts/mcp-test.sh
 
 # future ideas (not planned)
 

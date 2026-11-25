@@ -11,9 +11,9 @@ call '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"state","ar
 call '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"set","arguments":{"address":"/layer/1/mixtype","value":"iLk"}}}' > $O/set.json
 call '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get","arguments":{"addresses":["/layer/1/mixtype","/slot/9/fx/1/param/1","/layer/9/mix"]}}}' > $O/get.json
 call '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"list_files","arguments":{"kind":"effect","filter":"rutt"}}}' > $O/files.json
-call '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"shader_info","arguments":{"path":"isf-effect/rutt-etra.fs"}}}' > $O/info.json
-call '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"add_effect","arguments":{"path":"isf-effect/rutt-etra.fs","target":"output"}}}' > $O/addfx.json
-call '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"load_file","arguments":{"path":"isf-generator/fractal-terrain.fs","slot":5}}}' > $O/load.json
+call '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"shader_info","arguments":{"path":"isf-pack/effects/rutt-etra.fs"}}}' > $O/info.json
+call '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"add_effect","arguments":{"path":"isf-pack/effects/rutt-etra.fs","target":"output"}}}' > $O/addfx.json
+call '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"load_file","arguments":{"path":"isf-pack/generators/contour-map.fs","slot":5}}}' > $O/load.json
 call '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"list_addresses","arguments":{"filter":"out/fx"}}}' > $O/addr.json
 sleep 0.5
 call '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"frame","arguments":{"source":"output","width":480}}}' > $O/frame.json

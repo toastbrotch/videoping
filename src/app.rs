@@ -3200,17 +3200,17 @@ fn selftest_session(t: &SelfTest) -> Session {
     let mut s = Session::default();
     let mut rng = Rng::new();
     let root = std::env::current_dir().unwrap_or_default();
-    let gen_path = root.join("isf-generator/0-id-display.fs");
+    let gen_path = root.join("isf-pack/generators/hex-pulse.fs");
     let fx_path = std::env::var("VIDEOPING_SELFTEST_EFFECT")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| root.join("isf-effect/gameboy-camera.fs"));
+        .unwrap_or_else(|_| root.join("isf-pack/effects/color-adjust.fs"));
     let clip = std::env::var("VIDEOPING_SELFTEST_CLIP").map(PathBuf::from).unwrap_or_else(|_| t.dir.join("testclip.mp4"));
     let gen_info = isf::parse_info(&gen_path).expect("generator").0;
     let fx_info = isf::parse_info(&fx_path).expect("effect").0;
     let gen_id = s.new_id();
     s.slots[0] = Some(Instance {
         id: gen_id,
-        name: "0-id-display".into(),
+        name: "hex-pulse".into(),
         source: SourceKind::Generator { path: gen_path, params: isf::default_params(&gen_info) },
         effects: vec![],
         seed: rng.next_f32(),
@@ -3233,7 +3233,7 @@ fn selftest_session(t: &SelfTest) -> Session {
         }, EffectInst {
             // second effect, folded in (shows mix controls only)
             uid: fx2_uid,
-            path: root.join("isf-effect/gameboy-camera.fs"),
+            path: root.join("isf-pack/effects/color-adjust.fs"),
             active: false,
             mix: Mix { mix_type: MixType::Add, amount: 0.5, rgb: [true, false, true] },
             params: isf::default_params(&fx_info),
@@ -3276,10 +3276,10 @@ fn selftest_session(t: &SelfTest) -> Session {
     }
     s.selected_instance = Some(clip_id);
     // finder: only the repo shaders and the self-test folder (no private files in screenshots)
-    s.finder_roots = vec![root.join("isf-generator"), root.join("isf-effect"), t.dir.clone()];
+    s.finder_roots = vec![root.join("isf-pack"), t.dir.clone()];
     // VIDEOPING_SELFTEST_FINDER=<search>: two favorites, that search typed (screenshot of the finder)
     if std::env::var_os("VIDEOPING_SELFTEST_FINDER").is_some() {
-        s.finder_favs = vec![root.join("isf-effect/gameboy-camera.fs"), root.join("isf-effect/chaos-feedback.fs")];
+        s.finder_favs = vec![root.join("isf-pack/effects/color-adjust.fs"), root.join("isf-pack/effects/trails.fs")];
     }
     // VIDEOPING_SELFTEST_PREPARE=<generator .fs>: a (heavy) generator in slot 3, selected but not
     // live -> prepare priority test
@@ -3518,8 +3518,8 @@ impl App {
                     leds.get(&crate::midi::bhoreal_note(0, 2)),
                 );
             }
-            // Twister: the clip (slot 9) selected, focus on its effect 1 (gameboy-camera:
-            // parameter 1 = uResolution 32..288, default 112); encoder 1 to full, then push
+            // Twister: the clip (slot 9) selected, focus on its effect 1 (color-adjust:
+            // parameter 1 = brightness -1..1, default 0); encoder 1 to full, then push
             100 => {
                 self.s.selected_instance = self.s.slots[8].as_ref().map(|i| i.id);
                 self.s.focus_fx = self.s.slots[8].as_ref().and_then(|i| i.effects.first()).map(|e| e.uid);
@@ -3532,7 +3532,7 @@ impl App {
             108 => {
                 let v = sel1.clone();
                 let ring = sim.rings.lock().unwrap().get(&0).copied();
-                eprintln!("selftest twister: encoder 1 turned to 127 -> /sel/param/1 = {v:?} (expected 288), ring {ring:?} (127)");
+                eprintln!("selftest twister: encoder 1 turned to 127 -> /sel/param/1 = {v:?} (expected 1), ring {ring:?} (127)");
                 if let Some(o) = sim.tw_out.as_mut() {
                     let _ = o.send(&[0xB1, 0, 127]); // push (channel 2)
                     let _ = o.send(&[0xB1, 0, 0]);
@@ -3542,7 +3542,7 @@ impl App {
                 let v = sel1.clone();
                 let ring = sim.rings.lock().unwrap().get(&0).copied();
                 let brightness_ring = sim.rings.lock().unwrap().get(&15).copied();
-                eprintln!("selftest twister: pushed -> /sel/param/1 = {v:?} (expected the default 112), ring {ring:?} (~42); brightness ring {brightness_ring:?} (127 = 100 %)");
+                eprintln!("selftest twister: pushed -> /sel/param/1 = {v:?} (expected the default 0), ring {ring:?} (~64); brightness ring {brightness_ring:?} (127 = 100 %)");
             }
             62 => {
                 let m = self.midi.as_ref();
