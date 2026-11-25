@@ -87,6 +87,15 @@ fn single_instance() -> Option<std::fs::File> {
 }
 
 fn main() -> eframe::Result {
+    // --version: the version and where the shader pack was found (checks an installed package)
+    if std::env::args().skip(1).any(|a| a == "--version" || a == "-V") {
+        println!("videoping {}", env!("CARGO_PKG_VERSION"));
+        match state::pack_dir() {
+            Some(p) => println!("shader pack: {}", p.display()),
+            None => println!("shader pack: not found"),
+        }
+        return Ok(());
+    }
     maybe_restart_on_nvidia();
     // after the NVIDIA restart decision: the restarted process takes the lock
     let _lock = single_instance();

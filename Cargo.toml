@@ -3,6 +3,10 @@ name = "videoping"
 version = "0.0.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
+description = "Live VJ software for Linux: ISF shaders, clips and NDI on 3 layers, MIDI controllers, an AI in the booth"
+homepage = "https://videoping.net"
+repository = "https://github.com/toastbrotch/videoping"
+authors = ["mr.shintla <mr.shintla@videopong.net>"]
 
 [dependencies]
 base64 = "0.23.1"
@@ -22,3 +26,36 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tiny_http = "0.12.0"
 ureq = { version = "3", features = ["json"] }
+
+# Debian package: cargo deb (see dev.md, "release"). The same layout goes into the tar.gz.
+[package.metadata.deb]
+maintainer = "mr.shintla <mr.shintla@videopong.net>"
+copyright = "2026 mr.shintla; the shaders: CC BY-NC-SA 4.0 (LICENSE-shaders.md); the name and logo are not covered by either license"
+section = "video"
+priority = "optional"
+extended-description = """\
+videoping is live VJ software for Linux. Every generator and every effect is an ISF \
+shader; clips (GStreamer, hardware decoding), NDI sources and videopong.net clips play \
+on 3 layers with a prepare lane, output effects, projection mapping, NDI output and \
+recording. MIDI controllers with LED feedback, and an AI in the booth (MCP). Comes \
+with a pack of 15 generators and 35 effects."""
+depends = "$auto, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good"
+recommends = "gstreamer1.0-plugins-bad, gstreamer1.0-libav, gstreamer1.0-vaapi, fonts-dejavu-core"
+assets = [
+    ["target/release/videoping", "usr/bin/", "755"],
+    ["isf-pack/generators/*", "usr/share/videoping/isf-pack/generators/", "644"],
+    ["isf-pack/effects/*", "usr/share/videoping/isf-pack/effects/", "644"],
+    ["packaging/videoping.desktop", "usr/share/applications/", "644"],
+    ["website/logo/videoping-v2-icon-512.png", "usr/share/icons/hicolor/512x512/apps/videoping.png", "644"],
+    ["website/logo/videoping-v2-icon-256.png", "usr/share/icons/hicolor/256x256/apps/videoping.png", "644"],
+    ["website/logo/videoping-v2-icon-128.png", "usr/share/icons/hicolor/128x128/apps/videoping.png", "644"],
+    ["website/logo/videoping-v2-icon-64.png", "usr/share/icons/hicolor/64x64/apps/videoping.png", "644"],
+    ["website/logo/videoping-v2-icon-48.png", "usr/share/icons/hicolor/48x48/apps/videoping.png", "644"],
+    ["website/logo/videoping-icon-32.png", "usr/share/icons/hicolor/32x32/apps/videoping.png", "644"],
+    ["website/logo/videoping-icon-16.png", "usr/share/icons/hicolor/16x16/apps/videoping.png", "644"],
+    ["website/logo/videoping-v2-icon.svg", "usr/share/icons/hicolor/scalable/apps/videoping.svg", "644"],
+    ["README.md", "usr/share/doc/videoping/", "644"],
+    ["install.md", "usr/share/doc/videoping/", "644"],
+    ["LICENSE", "usr/share/doc/videoping/", "644"],
+    ["LICENSE-shaders.md", "usr/share/doc/videoping/", "644"],
+]

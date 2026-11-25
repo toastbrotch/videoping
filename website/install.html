@@ -48,13 +48,13 @@ th { background:var(--card); }
 <main>
 <img class="logo" src="logo/videoping-v2-logo.png" alt="videoping">
 <h1>install videoping</h1>
-<p>videoping is a personal live vjing tool for Linux. There are no binary packages yet: you build it from source once (see the build step below; details in <code>dev.md</code>).</p>
+<p>videoping is a personal live vjing tool for Linux. Each release has a <b>.deb</b> (Ubuntu / Debian / Pop!_OS 22.04 or newer) and a <b>tar.gz</b> (other distributions) on <a href="https://github.com/toastbrotch/videoping/releases">GitHub Releases</a>; or build it from source (see step 3; details in <code>dev.md</code>).</p>
 <p>Tested on Pop!_OS 24.04 (Ubuntu 24.04 base), Intel Iris Xe, Wayland.</p>
 <p>This guide is also a page of the website: <code>website/install.html</code> (generated from this file).</p>
 <p>License: videoping is free software under the GPL 3.0 or later (<code>LICENSE</code>); the shaders that come with it are CC BY-NC-SA 4.0 (<code>LICENSE-shaders.md</code>).</p>
 
 <p class="alpha">videoping is an early alpha, vibecoded with Claude: expect rough edges.</p>
-<div class="toc"><b>contents</b><ol><li><a href="#1-runtime-requirements">runtime requirements</a></li><li><a href="#2-ndi-runtime-optional">NDI runtime (optional)</a></li><li><a href="#3-build-and-install">build and install</a></li><li><a href="#4-run-on-the-discrete-nvidia-card-hybrid-laptops">run on the discrete NVIDIA card (hybrid laptops)</a></li><li><a href="#5-using-videoping">using videoping</a></li></ol></div>
+<div class="toc"><b>contents</b><ol><li><a href="#1-runtime-requirements">runtime requirements</a></li><li><a href="#2-ndi-runtime-optional">NDI runtime (optional)</a></li><li><a href="#3-install">install</a></li><li><a href="#4-run-on-the-discrete-nvidia-card-hybrid-laptops">run on the discrete NVIDIA card (hybrid laptops)</a></li><li><a href="#5-using-videoping">using videoping</a></li></ol></div>
 <h2 id="1-runtime-requirements">1. runtime requirements</h2>
 <ul><li>
 a GPU driver with <b>OpenGL 3.3</b> or newer (Mesa / NVIDIA / AMD are all fine)
@@ -127,11 +127,18 @@ NDI input: sources on the network show up in the finder under <b>NDI sources</b>
 </li></ol>
 <p>If NDI can't be loaded, the output options show the error in red. When it works they show "NDI sending" (hover shows which libndi was loaded).</p>
 <p>Note: some apps bundle the <i>NDI Advanced SDK development build</i> (e.g. Varda), which stops sending after 30 minutes. It works for testing (copy its <code>libndi.so*</code> the same way), but use the regular NDI runtime for shows. libndi is never committed to this repo (proprietary license).</p>
-<h2 id="3-build-and-install">3. build and install</h2>
-<p>Needs the build tools from <code>dev.md</code> (Rust + GStreamer dev packages).</p>
+<h2 id="3-install">3. install</h2>
+<p><b>Package (Ubuntu / Debian / Pop!_OS 22.04 or newer):</b> download <code>videoping_&lt;version&gt;_amd64.deb</code> from the <a href="https://github.com/toastbrotch/videoping/releases">releases</a>, then</p>
+<pre><code>sudo apt install ./videoping_*_amd64.deb
+videoping --version        # the version and where the shader pack is</code></pre>
+<p>It brings the menu entry, the icon and the shader pack (<code>/usr/share/videoping/isf-pack</code>) and pulls in GStreamer; the recommended packages add hardware decoding and recording.</p>
+<p><b>tar.gz (other distributions):</b> unpack it anywhere and run <code>bin/videoping</code>; <code>INSTALL.txt</code> inside shows how to install it for your user.</p>
+<p><b>From source:</b> needs the build tools from <code>dev.md</code> (Rust + GStreamer dev packages).</p>
 <pre><code>cd videoping
 cargo build --release
-install -Dm755 target/release/videoping ~/.local/bin/videoping</code></pre>
+install -Dm755 target/release/videoping ~/.local/bin/videoping
+# the shader pack next to it (videoping looks in &lt;bin&gt;/../share/videoping/isf-pack)
+mkdir -p ~/.local/share/videoping &amp;&amp; cp -r isf-pack ~/.local/share/videoping/</code></pre>
 <p>Launcher entry and icon (so videoping shows up in the app menu / dock with its logo; on Wayland the window icon also comes from here):</p>
 <pre><code>install -Dm644 packaging/videoping.desktop ~/.local/share/applications/videoping.desktop
 for n in 512 256 128 64 48; do

@@ -689,6 +689,19 @@ earlier idea, decided 2026-11-21:
 - isf-effect/gameboy-camera.fs and isf-generator/0-id-display.fs are in git (tests, self-test), so a clean
   checkout works; they are not part of the pack
 
+## packages and releases (2026-11-25)
+- .deb (cargo-deb, metadata in Cargo.toml) and tar.gz (scripts/release-tar.sh, made from the .deb: one layout)
+  for 0.0.1; Flatpak later (sandbox permissions for folders, MIDI, NDI), AppImage not (bundling GStreamer with
+  VA-API / NVENC is fragile), rpm when someone asks
+- the deb: Depends on the base + good GStreamer plugins (and the libraries it links, found by dpkg-shlibdeps);
+  Recommends bad, libav, vaapi (hardware decoding, recording) and the DejaVu font
+- GitHub Actions on a v* tag (or by hand without a release): Ubuntu 22.04 (oldest supported glibc), the tag must
+  match Cargo.toml, cargo test, then a DRAFT release with the .deb, the tar.gz and SHA256SUMS; the maker writes
+  the notes and publishes
+- `videoping --version` prints the version and where the shader pack was found (checks an install)
+- tested locally: the .deb and the tar.gz unpacked elsewhere find their pack from / and from home
+- install.md: install from source also copies the pack to ~/.local/share/videoping/
+
 # future ideas (not planned)
 
 Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.

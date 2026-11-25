@@ -3,8 +3,10 @@
 install videoping
 =================
 
-videoping is a personal live vjing tool for Linux. There are no binary packages yet:
-you build it from source once (see the build step below; details in `dev.md`).
+videoping is a personal live vjing tool for Linux. Each release has a **.deb** (Ubuntu / Debian /
+Pop!_OS 22.04 or newer) and a **tar.gz** (other distributions) on
+[GitHub Releases](https://github.com/toastbrotch/videoping/releases); or build it from source
+(see step 3; details in `dev.md`).
 
 Tested on Pop!_OS 24.04 (Ubuntu 24.04 base), Intel Iris Xe, Wayland.
 
@@ -119,14 +121,30 @@ Note: some apps bundle the *NDI Advanced SDK development build* (e.g. Varda), wh
 sending after 30 minutes. It works for testing (copy its `libndi.so*` the same way), but use the
 regular NDI runtime for shows. libndi is never committed to this repo (proprietary license).
 
-# 3. build and install
+# 3. install
 
-Needs the build tools from `dev.md` (Rust + GStreamer dev packages).
+**Package (Ubuntu / Debian / Pop!_OS 22.04 or newer):** download `videoping_<version>_amd64.deb`
+from the [releases](https://github.com/toastbrotch/videoping/releases), then
+
+```sh
+sudo apt install ./videoping_*_amd64.deb
+videoping --version        # the version and where the shader pack is
+```
+
+It brings the menu entry, the icon and the shader pack (`/usr/share/videoping/isf-pack`) and pulls
+in GStreamer; the recommended packages add hardware decoding and recording.
+
+**tar.gz (other distributions):** unpack it anywhere and run `bin/videoping`; `INSTALL.txt` inside
+shows how to install it for your user.
+
+**From source:** needs the build tools from `dev.md` (Rust + GStreamer dev packages).
 
 ```sh
 cd videoping
 cargo build --release
 install -Dm755 target/release/videoping ~/.local/bin/videoping
+# the shader pack next to it (videoping looks in <bin>/../share/videoping/isf-pack)
+mkdir -p ~/.local/share/videoping && cp -r isf-pack ~/.local/share/videoping/
 ```
 
 Launcher entry and icon (so videoping shows up in the app menu / dock with its logo; on Wayland the

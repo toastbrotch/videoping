@@ -55,7 +55,14 @@ full of footage tabs, a MIDI bridge. videoping is one program, built for playing
 
 ## install
 
-There are no binary packages yet; you build it from source once.
+**Packages:** each release has a `.deb` (Ubuntu / Debian / Pop!_OS 22.04 or newer) and a `tar.gz`
+on [GitHub Releases](https://github.com/toastbrotch/videoping/releases):
+
+```sh
+sudo apt install ./videoping_*_amd64.deb
+```
+
+**From source:**
 
 ```sh
 git clone https://github.com/toastbrotch/videoping.git && cd videoping
