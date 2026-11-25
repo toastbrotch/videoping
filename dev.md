@@ -56,6 +56,10 @@ cargo clippy
 cargo audit               # known vulnerabilities in the dependencies (cargo install cargo-audit)
 ```
 
+Shaders: `scripts/render-shaders.py <outdir> <file.fs>... [--set P=value] [--wait s] [--width px]` loads
+shaders into a self-test videoping (via MCP), saves two frames of each as PNG, prints the GPU time of the
+frame and compile errors. The shader pack lives in `isf-pack/generators/` (committed, CC BY-NC-SA).
+
 `scripts/mcp-test.sh` also checks that browsers are kept out of the MCP server (look-alike Origin
 / Host, `Origin: null`, `text/plain` -> 403 / 415) and that files outside the finder are refused.
 

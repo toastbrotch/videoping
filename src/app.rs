@@ -631,6 +631,9 @@ impl App {
             }
         }
 
+        // egui leaves blending on after painting the ui: our passes write their pixels as they are
+        // (a generator with transparent parts would otherwise blend onto its own last frame)
+        crate::gfx::reset_state(gl);
         // ---- 1. live instances (main mix), each with its own clock
         let now_beat = self.beat;
         let bpm = self.s.bpm;

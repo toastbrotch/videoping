@@ -417,6 +417,44 @@ change the same settings.</p>
 </ul>
 
 <!-- ================================================================== -->
+<h3 id="pack">The shader pack</h3>
+<p>videoping comes with 15 generators in the folder <code>isf-pack/generators/</code> of the repository,
+each with its <a href="#shaderdocs">documentation</a> (hover, or <span class="b">?</span>). They are in the
+finder when you start videoping from the repository folder; otherwise add the folder under
+<b>folders</b> in the finder.</p>
+<table>
+  <tr><td><b>Contour map</b></td><td>noise as topographic height lines, like a hiking map</td></tr>
+  <tr><td><b>Moire</b></td><td>line or ring gratings drifting over each other</td></tr>
+  <tr><td><b>Scanline terrain</b></td><td>a mountain range of ridge lines flying towards you (ridge lines, wire grid, solid, dots)</td></tr>
+  <tr><td><b>Lissajous</b></td><td>oscilloscope curves with phosphor afterglow</td></tr>
+  <tr><td><b>Voronoi cells</b></td><td>drifting, pulsing cells with glowing edges</td></tr>
+  <tr><td><b>Kaleido flower</b></td><td>a mirrored flower of noise petals; soft and smoky, or sharp, crisp and dirty</td></tr>
+  <tr><td><b>Melting blobs</b></td><td>3D metaballs melting into each other</td></tr>
+  <tr><td><b>Endless corridor</b></td><td>a flight through twisting frames; crazy, kaleidoscope and rainbow sliders</td></tr>
+  <tr><td><b>Halftone sphere</b></td><td>a 3D shape printed with halftone dots; <i>Paper</i> 0 makes the paper transparent, so only the print lies over the layer below (mix type A)</td></tr>
+  <tr><td><b>Starfield warp</b></td><td>stars rushing towards you: dots, warp streaks, or spinning wire forms (crosses, rings, squares, triangles, hexagons, sparkles, mixed)</td></tr>
+  <tr><td><b>Hex pulse</b></td><td>a honeycomb LED floor lit by waves</td></tr>
+  <tr><td><b>Dot matrix</b></td><td>an LED wall of round dots with glow; 14 patterns (waves, lines, scanner, rain, radar …)</td></tr>
+  <tr><td><b>Shape morph</b></td><td>circle → square → triangle → star outlines in rings</td></tr>
+  <tr><td><b>Synthwave</b></td><td>neon lines rolling to a synthwave horizon, each one keeping the wave it recorded; sun, floor grid, Weird and Glitch</td></tr>
+  <tr><td><b>CRT TV</b></td><td>a curved tube zapping between oscilloscope figures, test cards and static, with overlays and the tube's scanlines and glow</td></tr>
+</table>
+<ul>
+  <li><b>3D looks</b>: the 3D generators (melting blobs, endless corridor, halftone sphere, scanline
+    terrain, starfield) have a <b>Style</b> choice: shaded, <b>wireframe</b>, <b>outline</b>, dots,
+    x-ray. <i>Fill under lines</i> mixes the shaded surface back under the lines.</li>
+  <li><b>Transparent background</b>: every generator has a <i>Background (0 = transparent)</i> slider (the
+    halftone sphere: <i>Paper</i>). At 0 only the pattern stays, and with mix type <b>A</b> the layer below shows
+    through: lines over a clip, a wireframe blob over another generator. The 3D shapes stay solid, light
+    patterns cover the layer below in proportion to their brightness.</li>
+  <li><b>Black</b>: every dark background is pure black by default (projectors show it as off).</li>
+  <li><b>GPU</b>: on a laptop GPU (Intel Iris Xe, 1080p) the flat 2D ones (moire, dot matrix, hex pulse,
+    kaleido flower) need 1–4 ms per frame; the 3D ones, Lissajous and the starfield
+    up to 10–15 ms, synthwave and CRT TV 16–20 ms, depending on the GPU clock (the heaviest show a ⚠ in their documentation). On a
+    dedicated GPU all of them are light. Watch the meters.</li>
+  <li>License: CC BY-NC-SA 4.0 (<code>LICENSE-shaders.md</code>): free to use and change, not for sale.</li>
+</ul>
+
 <h2 id="effects"><span class="n">5</span>Effects</h2>
 <ul>
   <li><b>Add</b>: drag an effect from the finder onto a slot, onto the effect stack of the selected

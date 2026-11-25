@@ -613,7 +613,125 @@ earlier idea, decided 2026-11-21:
 - autosave: `~/.local/share/videoping/autosave.json`; blackout/freeze always start off
 - install / dev setup: see install.md and dev.md
 
+## shader pack — generators built 2026-11-24
+- folder `isf-pack/generators/` (committed; the user's own shaders in isf-effect/, isf-generator/, ivo-isf-* stay private): 13 ISF
+  generators written from scratch by Claude (18 written; removed 2026-11-24: truchet weave "boring", noise bars "too cheesy", ink in water, flow field; 2026-11-25: reaction-diffusion), CC BY-NC-SA 4.0 (LICENSE-shaders.md), each with a .md doc (slider table, tips, a ⚠
+  line for the heavy ones)
+- contour map, moire, scanline terrain, lissajous, voronoi cells,
+  kaleido flower, melting blobs, endless corridor, halftone sphere, starfield warp, hex pulse, dot matrix, shape morph
+- added by the user 2026-11-25: synthwave, crt tv (15 in all); fractal terrain was added too and removed again the same
+  day (based on Shadertoy "Md23RK", so not ours to license); brought in line with the pack: English labels (the NAMEs
+  stay), pack-style .md docs (⚠ line: 16-20 ms at 1080p on the Iris Xe, the heaviest in the pack), the transparent
+  background (crt tv: the cabinet; synthwave: plain sky and floor, the lines, grid, sun and solid ridges stay)
+- one license for the whole pack (2026-11-25): every generator is CC BY-NC-SA 4.0 with the pack CREDIT line (crt tv and
+  synthwave said CC0 before)
+- 3D looks (asked by the user): the raymarched ones (melting blobs, endless corridor, halftone sphere) have a Style choice: shaded,
+  wireframe (contour lines of the object-space coordinates, so the mesh sticks to the surface), outline (silhouette from the
+  closest approach of missed rays, the inner rim where the surface turns away, crease edges where the normal jumps, depth
+  steps), dots (a halftone screen of the lighting), x-ray (density glow collected through the volume); "fill under lines"
+  mixes the shaded surface under the lines; scanline terrain: ridge lines / wire grid / solid / dots; starfield: dots /
+  streaks / spinning wire forms (crosses, rings, squares, triangles, hexagons, sparkles, mixed; a form is at most half a
+  grid cell, so 4 cells per layer are enough)
+- English labels with MIN / MAX / DEFAULT, so all work as sliders and on MIDI; colors as color inputs; no audio
+- dark backgrounds are always pure black by default (decided 2026-11-24); a light paper (halftone sphere) stays light
+- wide ranges (2026-11-24, after playing): scanline terrain lines up to 24 px; voronoi down to 0.5 cells per screen height;
+  starfield forms up to 16x with a star grid that grows with them (fewer, bigger forms; still 4 cells per layer) and density
+  down to 0.01; kaleido flower: sharp edges (hard cut + color bands), crisp (finer octaves + edge / fold lines), dirt (grain,
+  specks, scratches, faded print; all 0 by default); dot matrix: 14 patterns (+ lines, diagonals, scanner, spiral,
+  checker, rain, sparkle, radar, squares); endless corridor: the user added crazy / kaleidoscope / rainbow sliders;
+  halftone sphere: dots up to 120 px, lines up to 24 px, a "Paper" slider (0 = transparent): the shader composes paper,
+  fill, shadow screen and ink with straight alpha, so only the print covers the layer below (mix type A)
+- transparent background for all generators (2026-11-25): a "Background (0 = transparent)" slider (bgAlpha, default 1,
+  appended as the last input so the other parameter numbers stay); straight alpha out of the shader; the 3D solids
+  (melting blobs, endless corridor) know their shape (hit, lines, edges, fill; fog counts as background); the other
+  ones key their light against the background color (alpha = how much brighter than the background, the color
+  un-mixed), so glow and lines fade out softly; checked in the output over another generator (mix type A)
+- videoping fix found on the way (2026-11-25): the live layers were rendered right after egui painted the ui, with its
+  blending still on; a generator with transparent parts blended onto its own last frame (trails), and multi-pass
+  shaders that keep data in alpha broke as live layers; now the GL state is reset before the
+  live instances render (the prepare renders already came after a reset)
+- videoping fix found on the way: several passes with the same TARGET declared the sampler twice (did not compile); now one
+  sampler per buffer name (unit test); the ai's shader prompt no longer promises FLOAT / WIDTH / HEIGHT for passes (ignored:
+  every buffer has the output size and 8 bits)
+- tested: every shader compiled and rendered in a running videoping (self-test + MCP load_file / frame), every 3D style
+  looked at; GPU time per frame at 1080p on Intel Iris Xe (whole frame, varies up to 2x with the GPU clock): flat 2D ones 1-4 ms,
+  3D / lissajous / starfield up to 10-15 ms (optimized: fewer segments
+  outside the figure, adaptive segment count; starfield: 4 cells instead of 9; terrain: stops at the sky; blobs: centers
+  once per pixel)
+
 # future ideas (not planned)
+
+Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.
+
+## text input for ISF shaders
+- ISF has no text input; videoping's addition, compatible with other ISF hosts: an image input with extra keys,
+  e.g. `{ "NAME": "textImage", "TYPE": "image", "TEXT": "thank you\nberlin", "FONT_SIZE": 120, "ALIGN": "center" }`
+  - other hosts see a normal image input (the shader still loads, you feed it an image)
+  - videoping sees "TEXT": a text area instead of an image picker in the parameters; the text is rendered into a
+    texture (white on transparent, rebuilt only when the text changes) and given to the shader, which does the look
+    (scroll, wave, glitch, outline, split into letters)
+- font: DejaVu Sans (already required); later an optional "FONT" key (path to a .ttf)
+- saved with the instance like any parameter; an address in the control registry so MCP / the ai tab can set it
+  ("put 'last song' on layer 1")
+- no typing on midi: prepare several text instances in slots and launch them with pads
+- basic text shaders come with the shader pack
+
+## basic shader pack (effects still to come)
+- generators: built 2026-11-24, see "shader pack" above; the effects are still an idea:
+  color balance / hsv, invert, threshold / posterize, blur, sharpen, mirror / kaleido, zoom / rotate / shift,
+  pixelate, edges, feedback / trails, rgb split, strobe, vignette, chroma / luma key
+
+
+## finder
+- "in use" marker (files in the grid / live), clip thumbnails, recently used (see "finder")
+
+## videopong.net
+- login for the full-quality download (now only the 480x360 preview mp4)
+- upload a recording to videopong.net (idea 2026-11-25): needs the login (same mechanism as the full-quality
+  download); after REC: "share on videopong.net" on the recording -> title, tags, Creative Commons license (choice),
+  upload with progress; the clip page link afterwards
+- maximum version: upload the ISF shaders used in the recording along with the clip (videopong.net can attach ISF
+  shaders to a clip): the generators / effects that were on the output while recording, each with its .md doc;
+  only own shaders or ones whose license allows it (ask before uploading)
+- MCP / ai tools to search and load videopong clips
+
+## midi
+- Twister bank 2 (see "midi")
+- import / export of profiles (now: the plain json files in the folder)
+- midi learn right in the ui (idea 2026-11-24): now learn only works in the "midi mapping" tab (pick an address, learn,
+  move a control); instead: a "learn" mode (button in the top bar or a key) where every mappable control on screen
+  (slider, button, effect on/off, mix, slot) gets a thin outline; click one, move a knob / press a pad -> bound to the
+  selected device's profile; controls that already have a binding show it (small midi badge, hover = which control);
+  right click on a control -> "learn" / "forget" as a shortcut without the mode; Esc or the button leaves the mode
+  - the address of each ui control comes from the control registry (the same addresses as the midi tab, MCP and the ai)
+  - learn picks the mode like now (button -> trigger / toggle, fader / knob -> absolute, encoder -> relative)
+
+## undo (idea 2026-11-24)
+- undo only undoes what you are looking at (decided 2026-11-24): the history belongs to the tab that is open, never a
+  change in another tab that would then happen "in the background"
+- live tab: one history for everything in it (decided 2026-11-24): prepare grid (slots loaded / cleared / moved),
+  prepare detail (parameters, ranges, animation settings, effects added / removed / reordered / moved), mixer, output
+  effects, finder favorites, "new"; also instances that are live in a layer (the output changes with the undo, that is
+  ok: it is all on screen)
+- projection mapping tab, midi mapping tab: each its own history (slices / masks of the preset; bindings of the profile)
+- shader editor: its own text undo (exists); ai tab: its own undo per change (exists)
+- Ctrl+Z / Ctrl+Shift+Z (and buttons) act on the open tab; a whole slider drag = one step; a limited history per tab
+  (e.g. 100 steps), lost on restart
+- a status line "undo: <what>" before / when undoing, so it is clear what changes
+- midi is undoable too (decided 2026-11-24): a knob / fader turn or a button press makes an undo step in the tab
+  its target belongs to (mostly the live tab), exactly like the same change with the mouse; a knob turned
+  continuously = one step (the step ends after a short pause, like a slider drag ends on release)
+- not undone (mouse or midi): one-shot actions that cannot be taken back on the output: REC start / stop, bpm tap
+
+## control
+- OSC (not for now, decided 2026-11-22; the control registry would carry it)
+
+## security
+- NDI library folder out of the session into the general config (open point of the security check 2026-11-24)
+
+## distribution
+- GitHub Actions: build, unit tests, `cargo audit` on every push (also proves a clean Ubuntu build)
+- ready-built program as a GitHub release: AppImage or .deb (no Rust / GStreamer dev setup needed)
 
 ## patch-bay for videosignals
 

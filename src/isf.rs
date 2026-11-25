@@ -259,9 +259,13 @@ fn uniform_decls(info: &IsfInfo, bool_as_float: bool) -> String {
         };
         s.push_str(&format!("uniform {ty} {};\n", i.name));
     }
+    // several passes may render into the same buffer (e.g. many simulation steps per frame):
+    // one sampler per buffer name
+    let mut seen: Vec<&str> = vec![];
     for p in &info.passes {
         if let Some(t) = &p.target {
-            if !info.inputs.iter().any(|i| &i.name == t) {
+            if !info.inputs.iter().any(|i| &i.name == t) && !seen.contains(&t.as_str()) {
+                seen.push(t);
                 s.push_str(&format!("uniform sampler2D {t};\n"));
             }
         }
@@ -340,6 +344,23 @@ mod tests {
         let frag = build_fragment(&gen_info, &body, false);
         assert!(frag.contains("uniform float uInstanceSeed;"));
         assert_eq!(classify(Path::new("isf-generator/0-id-display.fs")), Some(FileKind::Generator));
+    }
+
+    #[test]
+    fn one_sampler_per_pass_buffer() {
+        // a feedback shader that renders 3 passes into the same buffer, then shows it
+        let src = r#"/*{ "ISFVSN": "2", "INPUTS": [], "PASSES": [
+            { "TARGET": "state", "PERSISTENT": true }, { "TARGET": "state", "PERSISTENT": true },
+            { "TARGET": "state", "PERSISTENT": true }, { } ] }*/
+void main() { gl_FragColor = IMG_PIXEL(state, gl_FragCoord.xy) * 0.99; }
+"#;
+        let path = std::env::temp_dir().join(format!("videoping-test-passes-{}.fs", std::process::id()));
+        std::fs::write(&path, src).unwrap();
+        let (info, body) = parse_info(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(info.passes.len(), 4);
+        let frag = build_fragment(&info, &body, false);
+        assert_eq!(frag.matches("uniform sampler2D state;").count(), 1);
     }
 
     #[test]
