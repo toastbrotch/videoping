@@ -210,6 +210,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <h3 id="topbar">Top bar</h3>
 <figure><img src="img/topbar.png" width="970" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
 <ul>
+  <li>The <b>version</b> (e.g. 0.0.1) next to the name; tell it when you report a problem.</li>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
     <span class="b">midi mapping</span> (<a href="#mapping">MIDI controllers</a>) and
     <span class="b">ai</span> (<a href="#aitab">the ai tab</a>), <span class="b">shader editor</span>
@@ -232,7 +233,8 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     <li><b>search</b> filters the list; <span class="b">↻</span> rescans the folders (normally not
       needed: new files appear by themselves within 2 s).</li>
     <li><b>folders</b>: the folders the finder shows; add one with its path, remove one with
-      <span class="b">×</span>.</li>
+      <span class="b">×</span>. A new session starts with your Videos folder and the shader pack (and the
+      folder you started videoping in, unless that is your home folder).</li>
     <li>Five categories: <b>clips</b>, <b>generators</b>, <b>effects</b>, <b>NDI sources</b>
       (found automatically on the network) and <b>videopong.net</b> (below). Their headers always stay visible, with the number of
       files; one is open at a time and scrolls on its own. Click another header to switch: each keeps
@@ -420,9 +422,9 @@ change the same settings.</p>
 <!-- ================================================================== -->
 <h3 id="pack">The shader pack</h3>
 <p>videoping comes with 15 generators in the folder <code>isf-pack/generators/</code> of the repository,
-each with its <a href="#shaderdocs">documentation</a> (hover, or <span class="b">?</span>). They are in the
-finder when you start videoping from the repository folder; otherwise add the folder under
-<b>folders</b> in the finder.</p>
+each with its <a href="#shaderdocs">documentation</a> (hover, or <span class="b">?</span>). videoping finds the
+pack by itself (installed: <code>/usr/share/videoping/isf-pack</code>; or the repository) and puts it into the
+finder of every new session. In an older session add it under <b>folders</b> in the finder.</p>
 <table>
   <tr><td><b>Contour map</b></td><td>noise as topographic height lines, like a hiking map</td></tr>
   <tr><td><b>Moire</b></td><td>line or ring gratings drifting over each other</td></tr>

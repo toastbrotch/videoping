@@ -503,15 +503,52 @@ pub struct Session {
     pub next_id: u64,
 }
 
-impl Default for Session {
-    fn default() -> Self {
-        let mut roots = vec![];
-        if let Ok(cwd) = std::env::current_dir() {
+/// The shader pack that comes with videoping (generators and effects), first found of:
+/// $VIDEOPING_PACK, <exe>/../share/videoping/isf-pack (a package: /usr/bin -> /usr/share, Flatpak
+/// /app/bin -> /app/share, the tarball's bin/ -> share/), the repository when run from
+/// target/release or target/debug, ./isf-pack.
+pub fn pack_dir() -> Option<PathBuf> {
+    find_pack(std::env::var_os("VIDEOPING_PACK").map(PathBuf::from), std::env::current_exe().ok(), std::env::current_dir().ok())
+}
+
+fn find_pack(env: Option<PathBuf>, exe: Option<PathBuf>, cwd: Option<PathBuf>) -> Option<PathBuf> {
+    let mut c: Vec<PathBuf> = env.into_iter().collect();
+    if let Some(bin) = exe.as_ref().and_then(|e| e.parent()) {
+        c.push(bin.join("../share/videoping/isf-pack"));
+        c.push(bin.join("../../isf-pack"));
+    }
+    if let Some(cwd) = cwd {
+        c.push(cwd.join("isf-pack"));
+    }
+    c.into_iter().find(|p| p.is_dir()).map(|p| p.canonicalize().unwrap_or(p))
+}
+
+/// The finder folders of a new session: the current folder (only when it is a project folder:
+/// started from the desktop menu it is the home folder or /, and scanning all of that would be
+/// slow and full of unrelated files), the Videos folder, the shader pack.
+pub fn default_finder_roots() -> Vec<PathBuf> {
+    let home = dirs::home_dir();
+    let mut roots: Vec<PathBuf> = vec![];
+    if let Ok(cwd) = std::env::current_dir() {
+        if Some(&cwd) != home.as_ref() && cwd.parent().is_some() {
             roots.push(cwd);
         }
-        if let Some(v) = dirs::video_dir() {
-            roots.push(v);
+    }
+    if let Some(v) = dirs::video_dir() {
+        roots.push(v);
+    }
+    if let Some(p) = pack_dir() {
+        // not twice: the repository folder already contains the pack
+        if !roots.iter().any(|r| p.starts_with(r)) {
+            roots.push(p);
         }
+    }
+    roots
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        let roots = default_finder_roots();
         Session {
             slots: vec![None; SLOTS_PER_PAGE],
             page: 0,
@@ -645,6 +682,29 @@ impl Rng {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn finds_the_shader_pack() {
+        let t = std::env::temp_dir().join(format!("vp-pack-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&t);
+        // an installed package: <prefix>/bin/videoping and <prefix>/share/videoping/isf-pack
+        std::fs::create_dir_all(t.join("usr/bin")).unwrap();
+        std::fs::create_dir_all(t.join("usr/share/videoping/isf-pack/effects")).unwrap();
+        let installed = super::find_pack(None, Some(t.join("usr/bin/videoping")), Some(t.join("nowhere")));
+        assert_eq!(installed, Some(t.join("usr/share/videoping/isf-pack").canonicalize().unwrap()));
+        // the repository: target/release/videoping
+        std::fs::create_dir_all(t.join("repo/target/release")).unwrap();
+        std::fs::create_dir_all(t.join("repo/isf-pack")).unwrap();
+        let repo = super::find_pack(None, Some(t.join("repo/target/release/videoping")), None);
+        assert_eq!(repo, Some(t.join("repo/isf-pack").canonicalize().unwrap()));
+        // $VIDEOPING_PACK wins; nothing found: None
+        assert_eq!(super::find_pack(Some(t.join("repo/isf-pack")), Some(t.join("usr/bin/videoping")), None), repo);
+        assert_eq!(super::find_pack(None, Some(t.join("x/y")), Some(t.join("nowhere"))), None);
+        let _ = std::fs::remove_dir_all(&t);
+        // here (cargo test runs in the repository): the real pack
+        assert!(super::pack_dir().is_some_and(|p| p.join("generators").is_dir() && p.join("effects").is_dir()));
+    }
+
     use super::*;
 
     fn inst(s: &mut Session, slot: usize) -> u64 {

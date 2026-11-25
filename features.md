@@ -673,6 +673,22 @@ earlier idea, decided 2026-11-21:
   connected controller with such bindings: says so and how to map them (the "selected · …" parameters in the midi
   mapping tab); the manual explains ◎ with the effect rows too, not only in the Twister section
 
+## version (2026-11-25)
+- 0.0.1 (Cargo.toml is the one place); shown small next to the name in the top bar (hover: early alpha, licenses),
+  also in the MCP server info and the videopong user agent
+
+## finding the shader pack (2026-11-25, before the first packages)
+- an installed videoping is started from the menu, not from the repository: the pack was found only because the
+  current folder was a finder folder
+- pack_dir(): $VIDEOPING_PACK, <exe>/../share/videoping/isf-pack (deb / rpm: /usr/bin -> /usr/share; Flatpak
+  /app; the tarball's bin/ -> share/), the repository when run from target/release or target/debug, ./isf-pack;
+  unit-tested with both layouts
+- a new session's finder folders: the current folder only when it is not the home folder or / (from the menu
+  that would scan the whole home), the Videos folder, the pack (not twice when the current folder contains it);
+  existing sessions keep their folders
+- isf-effect/gameboy-camera.fs and isf-generator/0-id-display.fs are in git (tests, self-test), so a clean
+  checkout works; they are not part of the pack
+
 # future ideas (not planned)
 
 Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.

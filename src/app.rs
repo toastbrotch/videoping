@@ -961,6 +961,8 @@ impl App {
     fn top_bar(&mut self, ui: &mut Ui, gl: &glow::Context) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("videoping").strong().color(ACCENT));
+            ui.label(egui::RichText::new(env!("CARGO_PKG_VERSION")).weak().small())
+                .on_hover_text(concat!("videoping ", env!("CARGO_PKG_VERSION"), " (early alpha)\nGPL 3.0 or later; the shaders: CC BY-NC-SA 4.0"));
             ui.separator();
             if widgets::choice(ui, self.tab == Tab::Live, "live").clicked() {
                 self.tab = Tab::Live;

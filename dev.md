@@ -71,6 +71,7 @@ Useful env vars:
 | `GST_DEBUG=3` | GStreamer warnings (codec / decoding problems) |
 | `VIDEOPING_SELFTEST=<dir>` | self-test: builds a session (id-display generator over a clip with gameboy-camera), writes `out_WxH.rgba` (output, rows bottom-up) and `ui_WxH.rgba` (screenshot) into `<dir>`, also simulates mouse input (drags the "[" limiter, clicks "Lk" of mixer layer L2, clicks an empty prepare slot, opens "new" and clicks "clear everything", blackout + click on the brightness slider) and prints `selftest drag: …` / `selftest click: …` / `selftest empty slot click: …` / `selftest new: …` / `selftest fade in: …`, quits after ~7 s. Never touches the autosave or the stored ui layout. |
 | `VIDEOPING_SELFTEST_CLIP=<mp4>` | clip for the self-test (default `<dir>/testclip.mp4`) |
+| `VIDEOPING_PACK=<dir>` | where the shader pack is (default: `<exe>/../share/videoping/isf-pack`, the repository when run from `target/`, `./isf-pack`); a new session puts it into the finder |
 | `VIDEOPING_SELFTEST_EFFECT=<fs>` | first (open) clip effect of the self-test (default `isf-effect/gameboy-camera.fs`) |
 | `VIDEOPING_SELFTEST_RESET=1` | change the first parameter of the first clip effect, right click its row, print value before / after (expected: default) |
 | `VIDEOPING_SELFTEST_NOMETERS=1` | self-test with the resource meters off (overhead comparison: `time` both runs); with meters on, the self-test prints the meter of each instance |
