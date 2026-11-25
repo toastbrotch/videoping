@@ -34,6 +34,9 @@ struct FinderEntry {
     group: String,
 }
 
+/// The end-user manual online (source: website/manual.html); the help button adds the chapter.
+const MANUAL_URL: &str = "https://videoping.net/manual.html";
+
 /// The finder categories, top-down (accordion: one is open).
 const FINDER_CATS: [(&str, FileKind); 5] = [
     ("clips", FileKind::Clip),
@@ -975,6 +978,19 @@ impl App {
                 self.tab = Tab::Ai;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // the online manual, at the chapter of the tab you are in
+                let chapter = match self.tab {
+                    Tab::Live => "screen",
+                    Tab::Mapping => "projmap",
+                    Tab::Shader => "editor",
+                    Tab::Midi => "mapping",
+                    Tab::Ai => "aitab",
+                };
+                let url = format!("{MANUAL_URL}#{chapter}");
+                if widgets::btn(ui, "help").on_hover_text(format!("open the manual in the browser\n{url}")).clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                }
+                ui.separator();
                 if widgets::btn(ui, "load").clicked() {
                     let p = PathBuf::from(self.file_path.trim());
                     match load_session(&p) {

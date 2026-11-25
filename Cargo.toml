@@ -7,7 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 base64 = "0.23.1"
 dirs = "7.0.0"
-eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts", "wayland", "x11", "persistence", "clipboard"] }
+eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts", "wayland", "x11", "persistence", "clipboard", "links"] }
 egui = "0.37.0"
 egui_commonmark = { version = "0.26", default-features = false, features = ["pulldown_cmark"] }
 glow = "0.17"

@@ -659,6 +659,12 @@ earlier idea, decided 2026-11-21:
   outside the figure, adaptive segment count; starfield: 4 cells instead of 9; terrain: stops at the sky; blobs: centers
   once per pixel)
 
+## help button (2026-11-25)
+- top bar, far right: "help" opens the online manual (https://videoping.net/manual.html) in the browser, at the
+  chapter of the current tab (live: the screen, projection mapping, shader editor, midi mapping, ai tab); the hover
+  shows the URL
+- opened through egui's open_url (eframe feature "links", webbrowser crate: xdg-open on Linux)
+
 # future ideas (not planned)
 
 Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.
