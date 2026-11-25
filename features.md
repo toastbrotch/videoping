@@ -701,6 +701,9 @@ earlier idea, decided 2026-11-21:
 - `videoping --version` prints the version and where the shader pack was found (checks an install)
 - tested locally: the .deb and the tar.gz unpacked elsewhere find their pack from / and from home
 - install.md: install from source also copies the pack to ~/.local/share/videoping/
+- 0.0.1 released 2026-11-26 (tag v0.0.1, GitHub release with .deb, tar.gz, SHA256SUMS); the website's "get it"
+  section points to releases/latest (download button, apt install line), the alpha box no longer says "no
+  packages", the specs name .deb and tar.gz; install.md: the .deb brings the runtime requirements itself
 
 # future ideas (not planned)
 

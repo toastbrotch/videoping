@@ -56,6 +56,7 @@ th { background:var(--card); }
 <p class="alpha">videoping is an early alpha, vibecoded with Claude: expect rough edges.</p>
 <div class="toc"><b>contents</b><ol><li><a href="#1-runtime-requirements">runtime requirements</a></li><li><a href="#2-ndi-runtime-optional">NDI runtime (optional)</a></li><li><a href="#3-install">install</a></li><li><a href="#4-run-on-the-discrete-nvidia-card-hybrid-laptops">run on the discrete NVIDIA card (hybrid laptops)</a></li><li><a href="#5-using-videoping">using videoping</a></li></ol></div>
 <h2 id="1-runtime-requirements">1. runtime requirements</h2>
+<p>The <b>.deb installs these by itself</b> (GStreamer as dependencies; hardware decoding, recording and the font as recommended packages). You need this step for the tar.gz or a build from source.</p>
 <ul><li>
 a GPU driver with <b>OpenGL 3.3</b> or newer (Mesa / NVIDIA / AMD are all fine)
 </li><li>
@@ -139,7 +140,7 @@ cargo build --release
 install -Dm755 target/release/videoping ~/.local/bin/videoping
 # the shader pack next to it (videoping looks in &lt;bin&gt;/../share/videoping/isf-pack)
 mkdir -p ~/.local/share/videoping &amp;&amp; cp -r isf-pack ~/.local/share/videoping/</code></pre>
-<p>Launcher entry and icon (so videoping shows up in the app menu / dock with its logo; on Wayland the window icon also comes from here):</p>
+<p>From source, the launcher entry and icon (the .deb and the tar.gz bring them; so videoping shows up in the app menu / dock with its logo; on Wayland the window icon also comes from here):</p>
 <pre><code>install -Dm644 packaging/videoping.desktop ~/.local/share/applications/videoping.desktop
 for n in 512 256 128 64 48; do
   install -Dm644 website/logo/videoping-v2-icon-$n.png ~/.local/share/icons/hicolor/${n}x${n}/apps/videoping.png

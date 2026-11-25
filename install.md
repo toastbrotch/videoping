@@ -17,6 +17,9 @@ come with it are CC BY-NC-SA 4.0 (`LICENSE-shaders.md`).
 
 # 1. runtime requirements
 
+The **.deb installs these by itself** (GStreamer as dependencies; hardware decoding, recording and the
+font as recommended packages). You need this step for the tar.gz or a build from source.
+
 - a GPU driver with **OpenGL 3.3** or newer (Mesa / NVIDIA / AMD are all fine)
 - **GStreamer 1.20+** with the usual plugins, for mp4 playback
 - **DejaVu Sans** font (ui symbols like ▶ ◀ ↑ ↓; without it some icons show as boxes)
@@ -147,8 +150,8 @@ install -Dm755 target/release/videoping ~/.local/bin/videoping
 mkdir -p ~/.local/share/videoping && cp -r isf-pack ~/.local/share/videoping/
 ```
 
-Launcher entry and icon (so videoping shows up in the app menu / dock with its logo; on Wayland the
-window icon also comes from here):
+From source, the launcher entry and icon (the .deb and the tar.gz bring them; so videoping shows up in
+the app menu / dock with its logo; on Wayland the window icon also comes from here):
 
 ```sh
 install -Dm644 packaging/videoping.desktop ~/.local/share/applications/videoping.desktop

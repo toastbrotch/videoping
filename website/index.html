@@ -638,7 +638,8 @@ footer .sp { margin-left: auto; }
         <li>It is young: expect rough edges, missing pieces and things that change.</li>
         <li>Tested on very few machines so far (Pop!_OS 24.04 on Intel Iris Xe and NVIDIA). Your setup may find
           new bugs — please report them.</li>
-        <li>No packages yet: you build it from source.</li>
+        <li>Packages: a .deb for Ubuntu / Debian / Pop!_OS 22.04 or newer, a tar.gz for other distributions;
+          or build it from source.</li>
         <li>Sessions, profiles and presets are plain JSON; their format may still change between versions. Keep
           backups of what matters.</li>
       </ul>
@@ -682,7 +683,7 @@ footer .sp { margin-left: auto; }
     <div class="kicker">under the hood</div>
     <h2>Fast because it's simple.</h2>
     <dl class="specs">
-      <div><dt>platform</dt><dd>Linux (Wayland / X11), written in Rust</dd></div>
+      <div><dt>platform</dt><dd>Linux (Wayland / X11), written in Rust · .deb and tar.gz</dd></div>
       <div><dt>rendering</dt><dd>OpenGL 3.3, GPU-only pipeline</dd></div>
       <div><dt>shaders</dt><dd>ISF 2: multi-pass, persistent buffers, hot reload</dd></div>
       <div><dt>mixer</dt><dd>3 layers · up to 16 effects each · 16 output effects</dd></div>
@@ -700,14 +701,15 @@ footer .sp { margin-left: auto; }
   <div class="wrap">
     <div class="kicker">get it</div>
     <h2>Ready to play?</h2>
-    <p class="sub" style="margin:0 auto">videoping is an <b>early alpha</b>, built from source on Linux — one
-      command once the requirements are installed.</p>
-    <pre><span class="c"># Ubuntu / Debian / Pop!_OS — the installation guide has the details</span>
-git clone https://github.com/toastbrotch/videoping.git &amp;&amp; cd videoping
-cargo build --release
-./target/release/videoping</pre>
+    <p class="sub" style="margin:0 auto">videoping is an <b>early alpha</b> for Linux. Download the .deb
+      (Ubuntu / Debian / Pop!_OS 22.04 or newer) or the tar.gz (other distributions) from the latest release.</p>
+    <pre><span class="c"># Ubuntu / Debian / Pop!_OS: download videoping_…_amd64.deb, then</span>
+sudo apt install ./videoping_*_amd64.deb
+videoping --version
+<span class="c"># other distributions: unpack the tar.gz and run bin/videoping</span></pre>
     <div class="hero"><div class="ctas">
-      <a class="btn" href="install.html">installation guide</a>
+      <a class="btn" href="https://github.com/toastbrotch/videoping/releases/latest">download</a>
+      <a class="btn ghost" href="install.html">installation guide</a>
       <a class="btn ghost" href="manual.html">manual</a>
       <a class="btn ghost" href="https://github.com/toastbrotch/videoping">GitHub</a>
       <a class="btn ghost" href="https://www.videopong.net">videopong.net</a>
