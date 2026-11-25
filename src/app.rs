@@ -1961,6 +1961,20 @@ impl App {
             }
             _ => None,
         };
+        // the ◎ hover: which connected controls follow the focus right now
+        let focus_tip = if focus_uid.is_some() {
+            let ctl = self.midi.as_ref().map(|m| m.focus_controls()).unwrap_or_default();
+            if ctl.is_empty() {
+                "the open effect: no connected controller follows it. In the midi mapping tab, map controls to \
+                 the \"selected\" parameters (selected · …) and they control whichever effect you opened last"
+                    .to_string()
+            } else {
+                let lines: Vec<String> = ctl.iter().map(|(name, nums)| format!("{name}: parameters {}", crate::midi::ranges_text(nums))).collect();
+                format!("these controls follow this effect:\n{}\nopen another effect to switch", lines.join("\n"))
+            }
+        } else {
+            String::new()
+        };
         let mut new_focus: Option<u64> = None;
         let Some(effects) = self.effects_mut(owner) else { return };
         // the stack (= drop area) reaches down to the bottom of the visible column
@@ -1990,7 +2004,7 @@ impl App {
                         }
                     }
                     if focus_uid == Some(fx.uid) {
-                        ui.label(egui::RichText::new("◎").weak()).on_hover_text("the controller knobs that follow the open effect (e.g. Twister columns 1-3) control this effect's parameters; open another effect to switch");
+                        ui.label(egui::RichText::new("◎").weak()).on_hover_text(&focus_tip);
                     }
                     if let Some(Some((level, tip))) = fx_usage.get(i) {
                         widgets::meter(ui, *level, tip);

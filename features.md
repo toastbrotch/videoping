@@ -668,8 +668,10 @@ earlier idea, decided 2026-11-21:
 - opened through egui's open_url (eframe feature "links", webbrowser crate: xdg-open on Linux)
 
 ## ◎ focus marker (2026-11-25)
-- the hover text is generic ("the controller knobs that follow the open effect (e.g. Twister columns 1-3)"); the manual
-  explains ◎ with the effect rows too, not only in the Twister section
+- the hover shows what really follows the effect right now: per connected controller (its profile name) the
+  parameter numbers its controls set through /sel/param/N (e.g. "Midi Fighter Twister: parameters 1–12"); no
+  connected controller with such bindings: says so and how to map them (the "selected · …" parameters in the midi
+  mapping tab); the manual explains ◎ with the effect rows too, not only in the Twister section
 
 # future ideas (not planned)
 

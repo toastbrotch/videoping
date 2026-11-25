@@ -363,6 +363,22 @@ impl Midi {
         &self.profiles
     }
 
+    /// What follows the selected instance's focus (the effect opened last): per connected device
+    /// with a profile, the parameter numbers its controls set through /sel/param/N, sorted.
+    pub fn focus_controls(&self) -> Vec<(String, Vec<u32>)> {
+        let mut out: Vec<(String, Vec<u32>)> = vec![];
+        for d in &self.devices {
+            let Some(p) = d.profile.map(|pi| &self.profiles[pi]) else { continue };
+            let mut nums: Vec<u32> = p.bindings.iter().filter_map(|b| focus_param(&b.addr)).collect();
+            nums.sort_unstable();
+            nums.dedup();
+            if !nums.is_empty() && !out.iter().any(|(n, _)| n == &p.name) {
+                out.push((p.name.clone(), nums));
+            }
+        }
+        out
+    }
+
     pub fn device_profile(&self, port: &str) -> Option<usize> {
         self.devices.iter().find(|d| d.port == port).and_then(|d| d.profile)
     }
@@ -810,6 +826,28 @@ pub fn port_base(port: &str) -> String {
     port.split(':').next().unwrap_or(port).trim().to_string()
 }
 
+/// "/sel/param/3" or "/sel/param/3/x" -> 3; the reset and anything else -> None
+fn focus_param(addr: &str) -> Option<u32> {
+    let rest = addr.strip_prefix("/sel/param/")?;
+    let (n, tail) = rest.split_once('/').unwrap_or((rest, ""));
+    matches!(tail, "" | "x" | "y").then(|| n.parse().ok()).flatten()
+}
+
+/// [1, 2, 3, 5, 7, 8] -> "1–3, 5, 7–8"
+pub fn ranges_text(nums: &[u32]) -> String {
+    let mut parts: Vec<String> = vec![];
+    let mut i = 0;
+    while i < nums.len() {
+        let mut j = i;
+        while j + 1 < nums.len() && nums[j + 1] == nums[j] + 1 {
+            j += 1;
+        }
+        parts.push(if j > i { format!("{}–{}", nums[i], nums[j]) } else { nums[i].to_string() });
+        i = j + 1;
+    }
+    parts.join(", ")
+}
+
 pub fn msg_text(m: Msg) -> String {
     match m {
         Msg::Note(n) => format!("note {n}"),
@@ -1040,6 +1078,15 @@ mod tests {
         assert_eq!(find(11).unwrap().0, "/layer/3/mix");
         assert_eq!(find(15).unwrap().0, "/master/brightness");
         // columns 1-3: parameters 1-12 row by row (top left = 1, row 2 starts with 4)
+        assert_eq!(focus_param("/sel/param/12"), Some(12));
+        assert_eq!(focus_param("/sel/param/2/x"), Some(2));
+        assert_eq!(focus_param("/sel/param/2/reset"), None);
+        assert_eq!(focus_param("/slot/1/param/2"), None);
+        assert_eq!(ranges_text(&[1, 2, 3, 5, 7, 8]), "1–3, 5, 7–8");
+        let mut nums: Vec<u32> = twister_profile().bindings.iter().filter_map(|b| focus_param(&b.addr)).collect();
+        nums.sort_unstable();
+        nums.dedup();
+        assert_eq!(ranges_text(&nums), "1–12");
         assert_eq!(find(0).unwrap().0, "/sel/param/1");
         assert_eq!(find(2).unwrap().0, "/sel/param/3");
         assert_eq!(find(4).unwrap().0, "/sel/param/4");
