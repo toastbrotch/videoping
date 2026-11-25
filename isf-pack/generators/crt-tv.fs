@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "One curved CRT tube in a TV cabinet zapping between channels (oscilloscope Lissajous figures, drifting test cards, static), or staying on one. Channels can come with a fixed overlay (sync roll, sweep, grain, ASCII, Matrix rain, docking HUD); close up the tube shows scanlines, shadow mask, glow and a glass reflection.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "retro", "glitch", "crt"],
   "INPUTS": [

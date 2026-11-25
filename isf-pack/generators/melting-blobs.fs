@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Soft 3D blobs melting into each other and apart again (raymarched metaballs). Five looks: shaded, wireframe, outline, dots, x-ray.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "3d", "organic"],
   "INPUTS": [

@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Animated noise drawn as topographic height lines, like a hiking map. Every fifth line is an index line.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "lines", "organic"],
   "INPUTS": [

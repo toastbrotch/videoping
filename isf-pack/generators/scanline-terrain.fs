@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "A mountain range made of horizontal ridge lines, flying towards you, with real hidden-line removal. Styles: ridge lines, wire grid, solid shaded, dots.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "3d", "lines", "retro"],
   "INPUTS": [

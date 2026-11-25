@@ -623,6 +623,8 @@ earlier idea, decided 2026-11-21:
   day (based on Shadertoy "Md23RK", so not ours to license); brought in line with the pack: English labels (the NAMEs
   stay), pack-style .md docs (⚠ line: 16-20 ms at 1080p on the Iris Xe, the heaviest in the pack), the transparent
   background (crt tv: the cabinet; synthwave: plain sky and floor, the lines, grid, sun and solid ridges stay)
+- pack CREDIT line (2026-11-25): "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net -
+  CC BY-NC-SA 4.0" on every generator and effect
 - one license for the whole pack (2026-11-25): every generator is CC BY-NC-SA 4.0 with the pack CREDIT line (crt tv and
   synthwave said CC0 before)
 - 3D looks (asked by the user): the raymarched ones (melting blobs, endless corridor, halftone sphere) have a Style choice: shaded,
@@ -665,6 +667,10 @@ earlier idea, decided 2026-11-21:
   shows the URL
 - opened through egui's open_url (eframe feature "links", webbrowser crate: xdg-open on Linux)
 
+## ◎ focus marker (2026-11-25)
+- the hover text is generic ("the controller knobs that follow the open effect (e.g. Twister columns 1-3)"); the manual
+  explains ◎ with the effect rows too, not only in the Twister section
+
 # future ideas (not planned)
 
 Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.
@@ -682,10 +688,39 @@ Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it
 - no typing on midi: prepare several text instances in slots and launch them with pads
 - basic text shaders come with the shader pack
 
-## basic shader pack (effects still to come)
-- generators: built 2026-11-24, see "shader pack" above; the effects are still an idea:
-  color balance / hsv, invert, threshold / posterize, blur, sharpen, mirror / kaleido, zoom / rotate / shift,
-  pixelate, edges, feedback / trails, rgb split, strobe, vignette, chroma / luma key
+## shader pack — effects built 2026-11-25
+- folder `isf-pack/effects/`: 15 ISF effects written by Claude, CC BY-NC-SA 4.0, each with a .md doc (texts in
+  a docs script: slider table, tips; strobe has a ⚠ photosensitivity line): color adjust, invert, posterize,
+  threshold, blur, sharpen, edges, mirror, kaleido, transform, pixelate, trails, strobe, rgb split, vignette
+- the user's rule: at the defaults every effect looks natural / as expected (color adjust, sharpen at defaults
+  change little or nothing), but every slider goes into the extreme (blur 400 px, pixelate 600 px, contrast /
+  saturation 8, edges strength 40, rgb split 500 px, kaleido 64 segments, transform zoom 0.02-30, sharpen 20)
+- one job per effect, light on the GPU (blur: 4 separable passes, 25 taps each, two rounds so big radii have no
+  gaps; premultiplied in the buffers so transparent parts don't bleed dark)
+- the effects keep the input's alpha (and move it with the picture in mirror / kaleido / transform / blur)
+- luma key: not an effect, the mix types already do it; chroma key: waits for the alpha decision (see below)
+- strobe: rate in flashes per second, or 0 = follows the Phase slider: animate Phase with the bpm for a strobe
+  on the beat (no beat uniform in ISF); freeze mode holds the picture in a persistent buffer
+- trails: decay scaled by TIMEDELTA (same look at any frame rate); at least one 8-bit step down per frame so
+  faint echoes don't stay for ever; Clear is an event (map it to a pad)
+- 17 more from the user's own collection (2026-11-25), brought in line with the pack: composite video glitch,
+  frame difference (was framediff), halftone chaos, lidar scan (was v2), color isolate, duotone, feedback, fold
+  colors, gradient map, hue rotate, rgb gain (the mini-* ones without "mini-"), motion history, optical feedback
+  (was v2), optical feedback 3 tubes, optical feedback keyer, rutt-etra (was rutt-etra-2d), tracking hud; English
+  labels (NAMEs unchanged), descriptions without host notes / "v2" / German slider names, docs in pack form (host
+  requirements, Resolume input limits and v1/v2 comparisons taken out; ⚠ GPU line for halftone chaos, lidar scan,
+  composite video glitch, optical feedback keyer, tracking hud), CC BY-NC-SA 4.0 with the pack credit (were CC0);
+  the shader code is unchanged; the originals in ivo-isf-effects/ stay as they are; then yolo detect and blob
+  detection the same way (⚠ about 8 ms); 35 effects in all
+- color reduce (from mini-color-reduce, 2026-11-25): rewritten to work like the ColorReduce ffgl plugin (the N most
+  common colors of the frame on a 6x6x6 grid, nearest color per pixel, palette rotate); mini-color-reduce only cut
+  each channel into fixed levels, and the user's colorreduce.fs port kept counts and ranks in FLOAT buffers, which
+  videoping makes 8 bit (ranks clipped at 1, counts rounded); now 8-bit safe: counts as 16 bits in two channels,
+  ranks as whole bytes; the count split into 216 x 72 row counts plus a sum pass (one pass over all 9216 samples
+  in 216 threads cost ~9 ms, now ~1-2 ms); kept: dithering and pixel size from the mini version
+- open question (asked 2026-11-25): the effect mix writes alpha 1 and uses the effect's alpha as coverage over the
+  unprocessed input, so an effect can't make anything transparent (transparent options in transform, pixelate,
+  vignette, strobe show the unprocessed input there) and any effect makes a transparent generator opaque
 
 
 ## finder

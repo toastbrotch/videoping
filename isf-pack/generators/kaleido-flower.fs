@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "A blooming flower of mirrored noise petals in polar coordinates, breathing and turning.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "kaleidoscope", "organic"],
   "INPUTS": [

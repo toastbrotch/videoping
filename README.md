@@ -27,9 +27,11 @@ full of footage tabs, a MIDI bridge. videoping is one program, built for playing
 - **every effect is an ISF shader**: generators and effects are plain [ISF](https://isf.video)
   files (GLSL with a JSON header); videoping builds the controls from the header, reloads on save
   and shows an optional `.md` doc next to each shader
-- **shader pack**: 16 generators in `isf-pack/generators/` (contour map, synthwave, CRT TV,
+- **shader pack**: 15 generators in `isf-pack/generators/` (contour map, synthwave, CRT TV,
   dot matrix, melting blobs, endless corridor, halftone sphere ...), the 3D ones switchable to
-  wireframe, outline, dots or x-ray
+  wireframe, outline, dots or x-ray; 35 effects in `isf-pack/effects/` (color adjust, blur, edges,
+  kaleido, pixelate, trails, strobe, halftone chaos, Rutt-Etra, optical feedback, motion history,
+  tracking HUD, YOLO detect ...)
 - **plays** mp4 clips (GStreamer, hardware decoding), ISF generators, NDI sources and
   [videopong.net](https://www.videopong.net) clips
 - **prepare, then go live**: tune every clip, generator and effect in a prepare lane before it

@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "An LED wall of round dots with glow. 14 patterns: waves, noise, rings, bars, plasma, lines, diagonals, scanner, spiral, checker, rain, sparkle, radar, squares. Unlit dots stay faintly visible.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "led", "retro", "grid"],
   "INPUTS": [

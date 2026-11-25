@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Neon lines emitted at the bottom travel upward, flat or as a perspective floor to a synthwave horizon. Each line keeps the wave it recorded when it was emitted (sine, seismic, audio, digital, zigzag, heartbeat), so the floor shows the history of the signal. Sun and sky, floor grid, eight palettes, Weird and Glitch.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "synthwave", "lines", "glitch"],
   "INPUTS": [

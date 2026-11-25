@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "A honeycomb grid lit by waves that ripple out from moving points. Cells light up, hold and fade, like a hex LED floor.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "pattern", "grid"],
   "INPUTS": [

@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Drifting, pulsing cells with glowing edges. From stained glass to a living tissue to a pure wire net.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "organic", "pattern"],
   "INPUTS": [

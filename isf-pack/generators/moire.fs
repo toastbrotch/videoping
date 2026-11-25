@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Two or three line or ring patterns drifting over each other: the interference makes large, slowly moving moire waves.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "lines", "op-art"],
   "INPUTS": [

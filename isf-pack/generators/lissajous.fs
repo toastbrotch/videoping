@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Glowing oscilloscope curves with afterglow. The phase drifts, so the figure turns slowly in space; the trail buffer keeps the phosphor glow.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "lines", "retro", "feedback"],
   "INPUTS": [

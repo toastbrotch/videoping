@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Stars rushing towards you. At low speed calm points, at high speed long warp streaks; or the stars become spinning wire forms: crosses, rings, squares, triangles, hexagons, sparkles, or all of them mixed.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "3d", "space"],
   "INPUTS": [

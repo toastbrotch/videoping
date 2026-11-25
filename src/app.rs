@@ -1990,7 +1990,7 @@ impl App {
                         }
                     }
                     if focus_uid == Some(fx.uid) {
-                        ui.label(egui::RichText::new("◎").weak()).on_hover_text("the Twister encoders (columns 1-3) control this effect's parameters 1-12; open another effect to switch");
+                        ui.label(egui::RichText::new("◎").weak()).on_hover_text("the controller knobs that follow the open effect (e.g. Twister columns 1-3) control this effect's parameters; open another effect to switch");
                     }
                     if let Some(Some((level, tip))) = fx_usage.get(i) {
                         widgets::meter(ui, *level, tip);

@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Outlines that morph circle to square to triangle to star and back, repeated as rings that travel outwards.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "shapes", "lines"],
   "INPUTS": [

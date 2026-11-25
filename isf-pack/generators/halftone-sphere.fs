@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "A lit, turning 3D shape drawn with halftone dots like a print. The style switch turns it into shaded, wireframe, outline or x-ray.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "3d", "print"],
   "INPUTS": [

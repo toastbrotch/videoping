@@ -1,6 +1,6 @@
 /*{
   "DESCRIPTION": "Flying through an endless corridor of frames, twisting as it goes, fading into fog. Five looks: shaded, wireframe, outline, dots, x-ray. Crazy slider adds warping, pulsing frames, kaleidoscope, camera roll and rainbow colors.",
-  "CREDIT": "videoping shader pack, written by Claude - CC BY-NC-SA 4.0",
+  "CREDIT": "videoping shader pack, written by Claude, guided by VJ mr.shintla of videopong.net - CC BY-NC-SA 4.0",
   "ISFVSN": "2",
   "CATEGORIES": ["generator", "3d", "tunnel"],
   "INPUTS": [
