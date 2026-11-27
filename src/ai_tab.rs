@@ -148,13 +148,17 @@ impl App {
         }
     }
 
-    fn ai_settings(&self) -> Settings {
+    fn ai_settings(&self, w: Which) -> Settings {
         let c = &self.cfg;
         let provider = Provider::from_str(&c.ai_provider);
         let mut st = match provider {
             Provider::Anthropic => Settings { provider, model: c.ai_model_anthropic.trim().to_string(), key: c.ai_key_anthropic.clone(), url: c.ai_url_anthropic.clone(), effort: c.ai_effort.clone() },
             Provider::OpenAi => Settings { provider, model: c.ai_model_openai.trim().to_string(), key: c.ai_key_openai.clone(), url: c.ai_url_openai.clone(), effort: c.ai_effort.clone() },
         };
+        // the shader editor thinks more by default: reading and writing GLSL needs it
+        if w == Which::Shader {
+            st.effort = c.ai_effort_shader.clone();
+        }
         // empty key field: the usual environment variable
         if st.key.trim().is_empty() {
             st.key = std::env::var(env_key(provider)).unwrap_or_default();
@@ -163,7 +167,7 @@ impl App {
     }
 
     fn ai_request(&mut self, w: Which) {
-        let s = self.ai_settings();
+        let s = self.ai_settings(w);
         let (system, tools) = match w {
             Which::Live => (format!("{}\n\n{CHAT}", crate::mcp::INSTRUCTIONS), crate::mcp::tools()),
             Which::Shader => (shader_editor::AI_SYSTEM.to_string(), shader_editor::ai_tools()),
@@ -177,7 +181,7 @@ impl App {
         if text.is_empty() || self.chat(w).busy() {
             return;
         }
-        let s = self.ai_settings();
+        let s = self.ai_settings(w);
         if s.model.is_empty() {
             self.chat(w).view.push(Item::Error("no model set (ai tab)".into()));
             return;
@@ -198,6 +202,12 @@ impl App {
             full = format!("[{}]\n{full}", c.notes.join("; "));
             c.notes.clear();
         }
+        let fresh = c.msgs.is_empty();
+        if w == Which::Shader {
+            let ctx = self.shed_context(fresh);
+            full = format!("{ctx}\n\n{full}");
+        }
+        let c = self.chat(w);
         ai::push_user_text(s.provider, &mut c.msgs, &full);
         c.view.push(Item::User(text));
         c.input.clear();
@@ -330,9 +340,10 @@ impl App {
                 (self.mcp_call(gl, &call.name, &call.input, true), undo)
             }
             Which::Shader => {
-                let undo = (call.name == "set_shader").then(|| Undo::Text(self.shed.text.clone()));
+                let writes = call.name == "set_shader" || call.name == "edit_shader";
+                let undo = writes.then(|| Undo::Text(self.shed.text.clone()));
                 let r = self.shed_tool(gl, &call.name, &call.input);
-                if call.name == "set_shader" && !r.is_error {
+                if writes && !r.is_error {
                     // `look` right after must see the new shader: let the preview render first
                     self.ai_shed.hold = 3;
                 }
@@ -588,7 +599,7 @@ impl App {
                         });
                         ui.label("effort");
                         for e in ["low", "medium", "high"] {
-                            if widgets::choice(ui, self.cfg.ai_effort == e, e).on_hover_text("how much the model thinks: low = fastest and cheapest").clicked() {
+                            if widgets::choice(ui, self.cfg.ai_effort == e, e).on_hover_text("how much the model thinks in this chat: low = fastest and cheapest (the shader editor has its own setting)").clicked() {
                                 self.cfg.ai_effort = e.into();
                             }
                         }

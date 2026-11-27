@@ -89,25 +89,46 @@ impl App {
         egui::Panel::right("midi_addresses").resizable(true).default_size(400.0).size_range(260.0..=700.0).show(ui, |ui| {
             ui.label("addresses");
             ui.label(egui::RichText::new("choose an address, press learn, move a control on the selected device").weak().size(widgets::BTN_TEXT));
-            ui.horizontal(|ui| {
-                let learning = m.learn.is_some();
+            // learn: one big button that says what it will do (or what is still missing)
+            {
+                let learning = m.learn.clone();
                 let ready = self.midi_sel_port.is_some() && self.midi_sel_addr.is_some();
-                if learning {
-                    if widgets::choice(ui, true, "learning …").on_hover_text("move a control on the device; click to cancel").clicked() {
+                let size = vec2(ui.available_width(), 40.0);
+                let (text, tip) = match (&learning, &self.midi_sel_port, &self.midi_sel_addr) {
+                    (Some(l), _, _) => (
+                        format!("learning …  move a control on {}", crate::midi::port_base(&l.port)),
+                        format!("the next control you move becomes {}; click to cancel", l.addr),
+                    ),
+                    (None, Some(port), Some(addr)) => (
+                        format!("learn  {addr}"),
+                        format!("press, then move a control on {}: it controls {addr}", crate::midi::port_base(port)),
+                    ),
+                    (None, None, _) => ("learn  (choose a device on the left)".to_string(), "learn needs a device and an address".to_string()),
+                    (None, Some(_), None) => ("learn  (choose an address below)".to_string(), "learn needs a device and an address".to_string()),
+                };
+                // always plum: full when it can start (or is learning), dimmed while something is missing
+                let live = learning.is_some() || ready;
+                let fill = if live { ACCENT } else { ACCENT.gamma_multiply(0.45) };
+                let color = if live { widgets::readable_on(ACCENT) } else { Color32::from_gray(200) };
+                let btn = egui::Button::new(egui::RichText::new(text).strong().size(15.0).color(color)).fill(fill).min_size(size).truncate();
+                let r = ui.add(btn).on_hover_text(tip.as_str());
+                let r = if live { r } else { r.on_hover_cursor(egui::CursorIcon::NotAllowed) };
+                if r.clicked() && live {
+                    if learning.is_some() {
                         m.learn = None;
-                    }
-                } else if ui.add_enabled(ready, egui::Button::new(egui::RichText::new("learn").size(widgets::BTN_TEXT)).min_size(widgets::BTN)).clicked() {
-                    let addr = self.midi_sel_addr.clone().unwrap_or_default();
-                    let kind = self.control_list().into_iter().find(|d| d.addr == addr).map(|d| d.kind);
-                    if let (Some(port), Some(kind)) = (self.midi_sel_port.clone(), kind) {
-                        m.learned = None;
-                        m.learn = Some(Learn { port, addr, kind });
+                    } else {
+                        let addr = self.midi_sel_addr.clone().unwrap_or_default();
+                        let kind = self.control_list().into_iter().find(|d| d.addr == addr).map(|d| d.kind);
+                        if let (Some(port), Some(kind)) = (self.midi_sel_port.clone(), kind) {
+                            m.learned = None;
+                            m.learn = Some(Learn { port, addr, kind });
+                        }
                     }
                 }
                 if let Some(l) = &m.learned {
                     ui.label(egui::RichText::new(l).weak().size(widgets::BTN_TEXT));
                 }
-            });
+            }
             egui::CollapsingHeader::new(egui::RichText::new("what the addresses mean").size(widgets::BTN_TEXT)).default_open(false).show(ui, |ui| {
                 for (a, t) in [
                     ("/layer/2/…", "mixer layer 2: select, active, mix, mixtype, r g b, unload"),

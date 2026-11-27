@@ -30,5 +30,5 @@ void main(){
     // Repeats run back and forth (triangle), so bands don't jump from end to start.
     t = uRepeat < 1.5 && uShift == 0.0 && uSpeed == 0.0 ? l : 1.0 - abs(fract(t*0.5)*2.0 - 1.0);
     int p = int(floor(clamp(uPalette, 0.0, 7.0) + 0.5));
-    gl_FragColor = vec4(palette(p, t), 1.0);
+    gl_FragColor = vec4(palette(p, t), IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).a);   // keeps the input's transparency
 }

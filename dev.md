@@ -88,13 +88,14 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_STAY=<seconds>` | keep the self-test open that long (for calls from outside, e.g. `scripts/mcp-test.sh <port> <outdir>`) |
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
 | `VIDEOPING_SELFTEST_CONFIG=1` | output options and general config folded open, column 2 scrolled to the bottom (screenshot of the settings) |
-| `VIDEOPING_SELFTEST_AI=<url>` | the ai tab talks to a mock Anthropic server at that url (key "selftest"); at 2 s it sends a message, at 5.5 s it prints the brightness and the chat. The mock must answer with `set /master/brightness 0.5` + `frame`, then a text (see features.md "ai tab") |
+| `VIDEOPING_SELFTEST_AI=<url>` | the ai tab talks to a mock Anthropic server at that url (key "selftest"); at 2 s it sends a message, at 5.5 s it prints the brightness and the chat. The mock (`scripts/ai-mock-live.py <port> <log>`) answers with `set /master/brightness 0.5` + `frame`, then a text (see features.md "ai tab") |
 | `VIDEOPING_SELFTEST_FINDER=<search>` | two favorites (color-adjust, trails) and that search typed into the finder (screenshot of the accordion / search; empty = favorites only) |
 | `VIDEOPING_SELFTEST_QUIT=1` | the quit question is active in the self-test: at 2 s the window's close is requested, at 3 s it must still run with the question open; then it quits (mouse script off) |
 | `VIDEOPING_SELFTEST_LONGNAME=1` | the clip in slot 9 gets a very long name (screenshot: cut with "…" before the ×) |
 | `VIDEOPING_SELFTEST_VP=<query>` | needs the internet: the finder's videopong category searches the query; at 3.5 s results and thumbnails are printed and the first clip is downloaded into slot 3 (into the self-test folder); the mouse script is off. Use `VIDEOPING_SELFTEST_STAY=22` (videopong.net can be slow) |
 | `VIDEOPING_SELFTEST_MAP=1\|grid` | a mapping preset "selftest stage" (two slices, one corner-pinned, a soft mask) in the self-test folder, mapping on (grid: test grid); at 3 s pixels of the mapped output are checked (outside black, slices lit, mask black). With `VIDEOPING_SELFTEST_TAB=mapping`: the screenshot, and from 2 s a simulated press 12 px beside a corner of slice 2 in the output view, → → →, Shift+↓ (expected: grabbed, moved 3, 10 px) |
-| `VIDEOPING_SELFTEST_EDIT=<.fs>` | open it in the shader editor (with `VIDEOPING_SELFTEST_TAB=shader` for the screenshot); at 1.5 s an error is typed in, at 2.5 s the mapped error line is printed (and that the file on disk is unchanged), then fixed. With `VIDEOPING_SELFTEST_AI=<url>` the editor's ai runs against a mock instead (scratchpad mock_shader.py: get_shader, a broken set_shader, a fixed one + look) |
+| `VIDEOPING_SELFTEST_AI_PROMPT=<text>` | with `_EDIT` (and `_TAB=shader`, a long `_STAY`, no `_AI`): the editor's ai **for real** (key from `ANTHROPIC_API_KEY`, costs API usage): sends the prompt at 1.5 s, waits for the whole turn, prints time, effort, rounds, tokens and whether it compiles, writes the editor text to `<dir>/ai-result.fs`, quits; `VIDEOPING_SELFTEST_AI_EFFORT=low|medium|high` overrides the effort |
+| `VIDEOPING_SELFTEST_EDIT=<.fs>` | open it in the shader editor (with `VIDEOPING_SELFTEST_TAB=shader` for the screenshot); at 1.5 s an error is typed in, at 2.5 s the mapped error line is printed (and that the file on disk is unchanged), then fixed. With `VIDEOPING_SELFTEST_AI=<url>` the editor's ai runs against a mock instead (`scripts/ai-mock-shader.py <port> <log>`: get_shader, a broken set_shader, a fixed one + look) |
 | `VIDEOPING_SELFTEST_DOC=<effect .fs>` | that effect first on the clip (slot 9), its documentation window (.md) open (screenshot of the shader docs) |
 | `VIDEOPING_SELFTEST_SHADERS=<folder>` | compile every `.fs` in that folder on the GPU, print ok / FAIL per file, quit |
 | `VIDEOPING_SELFTEST_FPS=25` | self-test with this output frame rate; prints the measured video and ui fps (from second 2 on) |
@@ -139,30 +140,25 @@ the icons, the docs and licenses; the tar.gz is the same tree under `bin/` and `
 | file | for whom |
 |---|---|
 | `features.md` | the spec: every design decision, thresholds, measurements, open points |
+| `ideas.md` | ideas that are not built yet; one that is picked up moves into features.md |
+| `AGENTS.md` | notes for coding agents (rules, commands, shader conventions, traps); `CLAUDE.md` includes it |
 | `website/manual.html` | end users: how to play with videoping; one self-contained HTML page (styles inline), screenshots in `website/img/`; open it in a browser |
 | `install.md` | installation only; the source of `website/install.html` (`python3 scripts/install-html.py`) |
 | `website/logo/` | the logo (v1 calm, v2 glitch = official): SVG, PNG sizes, editable `videoping-logo.vectorcraft` (VectorCraft) |
 | `packaging/videoping.desktop` | launcher entry; icons and install commands in install.md |
 | `dev.md` | this file |
 
-Screenshots for the manual come from the self-test (it uses only the repo shaders and the test clip
-in the finder, and clears the status line before the screenshot):
+Screenshots of the website and the manual (`website/img/*.png`, 11 pictures) come from self-tests:
 
 ```sh
-S=/tmp/vp-docs; mkdir -p $S; cp <testclip.mp4> $S/testclip.mp4
-VIDEOPING_SELFTEST=$S ./target/release/videoping   # no REC: the record box shows the default folder
-U=$S/ui_3000x1818.rgba   # size depends on the screen
-c(){ ffmpeg -y -f rawvideo -pix_fmt rgba -s 3000x1818 -i $U -vf "$1" website/img/$2; }
-c "scale=1500:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160[p];[b][p]paletteuse=dither=none" overview.png
-c "crop=1300:36:1700:0" topbar.png
-c "crop=390:1300:0:36" finder.png
-c "crop=620:1440:392:36" prepare.png
-c "crop=890:1700:1022:36" detail.png
-c "crop=1080:1100:1920:36" mixer.png
+cargo build --release
+scripts/screenshots.py <testclip.mp4>          # [--no-videopong] without the internet
 ```
 
-(the crop rectangles fit a 3000x1818 window; detail.png and mixer.png also go through the palette
-filter to stay small)
+One self-test per picture (live tab, midi mapping, projection mapping, shader editor, ai tab,
+videopong.net), each in its own temporary folder, never your session or config; the ai pictures use
+the mocks `scripts/ai-mock-live.py` / `scripts/ai-mock-shader.py` (no key, nothing billed). The crops
+are made for a 3000x1818 window; on another screen size the script stops and says so.
 
 # architecture
 

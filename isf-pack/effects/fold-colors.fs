@@ -19,5 +19,5 @@ void main(){
     float n = floor(uLevels);
     if (n < 31.5) c = floor(c*n + 0.5)/n;
     c = clamp(hueRotate(c, TIME*uSpin), 0.0, 1.0);
-    gl_FragColor = vec4(c, 1.0);
+    gl_FragColor = vec4(c, IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).a);   // keeps the input's transparency
 }

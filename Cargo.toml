@@ -38,9 +38,9 @@ videoping is live VJ software for Linux. Every generator and every effect is an 
 shader; clips (GStreamer, hardware decoding), NDI sources and videopong.net clips play \
 on 3 layers with a prepare lane, output effects, projection mapping, NDI output and \
 recording. MIDI controllers with LED feedback, and an AI in the booth (MCP). Comes \
-with a pack of 15 generators and 35 effects."""
+with a pack of 15 generators and 36 effects."""
 depends = "$auto, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good"
-recommends = "gstreamer1.0-plugins-bad, gstreamer1.0-libav, gstreamer1.0-vaapi, fonts-dejavu-core"
+recommends = "gstreamer1.0-plugins-bad, gstreamer1.0-libav, gstreamer1.0-vaapi"
 assets = [
     ["target/release/videoping", "usr/bin/", "755"],
     ["isf-pack/generators/*", "usr/share/videoping/isf-pack/generators/", "644"],
@@ -58,4 +58,5 @@ assets = [
     ["install.md", "usr/share/doc/videoping/", "644"],
     ["LICENSE", "usr/share/doc/videoping/", "644"],
     ["LICENSE-shaders.md", "usr/share/doc/videoping/", "644"],
+    ["assets/fonts/LICENSE-DejaVu.txt", "usr/share/doc/videoping/", "644"],
 ]

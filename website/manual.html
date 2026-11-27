@@ -208,7 +208,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <p>Four areas from left to right; all column borders can be dragged.</p>
 
 <h3 id="topbar">Top bar</h3>
-<figure><img src="img/topbar.png" width="970" alt="top bar: tabs, totals, fps counter, session file, new / save / load"></figure>
+<figure><img src="img/topbar.png" width="1000" alt="top bar: name and version, tabs, totals, fps counter, session file, new / save / load, help"></figure>
 <ul>
   <li>The <b>version</b> (e.g. 0.0.1) next to the name; tell it when you report a problem.</li>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
@@ -306,7 +306,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
       <li>the <b>effect stack</b> (see <a href="#effects">Effects</a>)</li>
     </ul>
   </div>
-  <figure><img src="img/detail.png" width="445" alt="prepare detail: preview, clip controls, effects with ◎ (Twister focus), ? (documentation) and ⚠ (warning)"></figure>
+  <figure><img src="img/detail.png" width="445" alt="prepare detail: preview, clip controls, effects with ◎ (controller focus), ? (documentation), ✎ (edit) and a row of choice buttons"></figure>
 </div>
 
 <h3 id="mixer">Column 4: mixer and output</h3>
@@ -412,7 +412,8 @@ change the same settings.</p>
   <li>The row below <b>animates</b> the value inside that range, with the same buttons as a clip:
     forward, backward, jumpcut, pause; loop / once / bounce; free speed (per second) or bpm (beats
     per cycle); ½x / 2x.</li>
-  <li>On / off parameters are checkboxes, colors a color button, lists a dropdown.</li>
+  <li>On / off parameters are checkboxes, colors a color button, and a choice (Style, Form, Pattern …) is a
+    row of buttons: one click to any option, the active one in plum.</li>
   <li><b>Right click</b> on a parameter (its name or its control) resets it to the shader's default:
     value, full range, animation off.</li>
   <li>Long names wrap; hover over a name to see it in full, and, when the shader has
@@ -468,6 +469,11 @@ finder of every new session. In an older session add it under <b>folders</b> in 
     <b>▸ / ▾</b> to show / hide the parameters, the name, <span class="b">×</span>. Mix-type, R G B
     and mix % always stay visible, also when folded.</li>
   <li><b>Order</b>: drag the ≡ handle up or down. The first effect is applied first.</li>
+  <li><b>Transparency</b>: an effect passes on transparency, and can make things transparent itself:
+    transform / mirror / kaleido with "outside: transparent", transparent gaps in pixelate, transparent
+    edges in vignette, the strobe's "transparent" flash. In the mixer (mix type <b>A</b>) the layer below
+    shows there. A generator with its background at 0 stays transparent under effects. The effect's mix
+    (A %, Lk, iLk, add) blends its result, transparency included, with what goes into it.</li>
   <li><b>Move</b> an effect between an instance and the output effects: drag its ≡ handle onto the
     other stack. It keeps all its settings.</li>
   <li>A shader that does not compile shows a red ⚠ next to its name; hover for the error.</li>
@@ -480,8 +486,8 @@ finder of every new session. In an older session add it under <b>folders</b> in 
 </ul>
 
 <h3 id="fxpack">The effects of the shader pack</h3>
-<p>35 effects in <code>isf-pack/effects/</code>, each with its <a href="#shaderdocs">documentation</a>. The basic
-ones (the first 15 below) do what you expect at the default settings and look natural; every slider goes much
+<p>36 effects in <code>isf-pack/effects/</code>, each with its <a href="#shaderdocs">documentation</a>. The basic
+ones (the first 16 below) do what you expect at the default settings and look natural; every slider goes much
 further, into the extreme (blur up to 400 px, pixels up to 600 px, contrast and saturation up to 8 …). The others
 are bigger looks: color tools, analog video, feedback, motion and machine vision.</p>
 <table>
@@ -500,6 +506,7 @@ are bigger looks: color tools, analog video, feedback, motion and machine vision
   <tr><td><b>Strobe</b></td><td>flashes to black, white, inverted, a color, freeze or transparent; free or on the beat</td></tr>
   <tr><td><b>RGB split</b></td><td>red and blue pulled apart sideways, from the center or turning; wobble</td></tr>
   <tr><td><b>Vignette</b></td><td>dark (or any color) edges, up to a small spotlight</td></tr>
+  <tr><td><b>Chroma key</b></td><td>one color becomes transparent (green screen): spill removal, edge shrink / grow, a matte view to set it up</td></tr>
   <tr><td><b>Hue rotate</b></td><td>turn or cycle all colors; saturation up to wildly over-saturated</td></tr>
   <tr><td><b>RGB gain</b></td><td>one gain per channel: remove, boost or invert red, green, blue</td></tr>
   <tr><td><b>Color isolate</b></td><td>keep one color, the rest gray ("Sin City") or over-saturated</td></tr>
@@ -568,8 +575,10 @@ within a second.</p>
   <li><b>resolution</b> and <b>frame rate</b> (25 / 30 / 50 / 60) of the output. Screen, NDI and
     recording all use them.</li>
   <li><b>output window</b>: opens the output in its own window. Double-click it or press
-    <kbd>F</kbd> for fullscreen on the chosen <b>screen</b>, <kbd>Esc</kbd> to leave fullscreen.
-    "connected" lists the screens the system sees.</li>
+    <kbd>F</kbd> for fullscreen on the chosen <b>screen</b>, <kbd>Esc</kbd> to leave fullscreen. Below
+    the screen buttons each screen is listed with its number, name, resolution and position (and
+    "videoping is here" for the one with videoping's window): the number is exactly where the output
+    goes. A projector plugged in during setup shows up within a few seconds.</li>
   <li><b>NDI output</b>: sends the output to the network under the <b>ndi name</b>. Needs the NDI
     runtime (see <a href="install.html">installation guide</a>); if videoping cannot find it, set the
     <b>NDI library folder</b>.</li>
@@ -705,7 +714,9 @@ any other; <span class="b">built-in</span> brings the original back).</p>
     relative = endless encoder), the <b>target</b> and the LED <b>feedback</b>. The row of the control
     you just moved lights up. <span class="b">×</span> removes a binding.</li>
   <li><b>Learn</b> (right): choose what to control in the list (search helps, e.g. "blackout" or
-    "layer/2"), press <span class="b">learn</span>, move a control on the controller: done. The mode is
+    "layer/2"), press the big <span class="b">learn</span> bar at the top (it shows the address it will
+    learn, or what is still missing: a device on the left, an address), move a control on the controller:
+    done. Press it again while it says "learning …" to cancel. The mode is
     guessed (a button on an on / off, a fader or encoder on a range); change it in the table if needed.</li>
   <li><b>Profiles</b> are saved automatically in <code>~/.config/videoping/midi/</code> (one file per
     profile). They are part of your setup, not of a session. Above the table:
@@ -868,13 +879,18 @@ AI what you want.</p>
   <li>Switch the panel under the preview from <span class="b">parameters</span> to
     <span class="b">ai</span> and describe what you want: "a slow plasma in purple", "make it pulse
     with the bpm", "add a hue shift slider", "why is it so slow?".</li>
-  <li>The AI reads the shader, writes the whole file into the editor, sees the compile errors and
-    fixes them, and looks at the preview. Every step is listed; <span class="b">undo</span> next to a
-    change puts the text back as it was.</li>
+  <li>With every message the AI gets the shader, its documentation, whether it compiles and the
+    <b>slider values you have set in the preview</b> ("too dark" means something with your settings).
+    It changes only the parts that need changing (a new shader or a rewrite: the whole file), sees
+    the compile errors and fixes them, and looks at the preview when the picture matters. Every step
+    is listed; <span class="b">undo</span> next to a change puts the text back as it was.</li>
+  <li><b>effort</b> (above the message field): how much it thinks first. <b>medium</b> (the default)
+    understands the code better; <b>low</b> answers in a few seconds but makes simpler changes. A
+    small change takes about 5–20 s, a question about the code a few seconds.</li>
   <li>It only changes the text in the editor, never the file: you decide with save. It can read the
     other shaders of the finder (and their documentation) to learn from them.</li>
-  <li>It uses the provider, model and key of the <a href="#aitab">ai tab</a>; its conversation is
-    separate from the ai tab's.</li>
+  <li>It uses the provider, model and key of the <a href="#aitab">ai tab</a> (its effort is its own);
+    its conversation is separate from the ai tab's.</li>
 </ul>
 
 <!-- ================================================================== -->
@@ -1045,7 +1061,8 @@ shader when its file changes, so you can edit a shader in a text editor while it
   <dd>Builds before 22 November 2026 had no clipboard support: update and restart videoping.</dd>
 
   <dt>Some symbols show as boxes.</dt>
-  <dd>Install the DejaVu fonts (<code>fonts-dejavu-core</code>).</dd>
+  <dd>Builds before 0.0.2 needed the DejaVu fonts (<code>fonts-dejavu-core</code>); since then the font is
+    built into videoping. Update videoping.</dd>
 </dl>
 
 </main>

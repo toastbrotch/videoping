@@ -79,6 +79,23 @@ pub fn choice(ui: &mut Ui, selected: bool, label: &str) -> egui::Response {
     ui.add(egui::Button::new(egui::RichText::new(label).color(text_color).size(BTN_TEXT)).fill(fill).min_size(BTN))
 }
 
+/// All options as buttons in a row (wrapping onto more lines when needed), the active one in plum:
+/// one click to any option, no dropdown. Returns the clicked option.
+pub fn choice_row<T: PartialEq + Clone>(ui: &mut Ui, current: &T, options: &[(T, String, String)]) -> Option<T> {
+    let mut clicked = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(2.0, 2.0);
+        for (v, label, tip) in options {
+            let r = choice(ui, v == current, label);
+            let r = if tip.is_empty() { r } else { r.on_hover_text(tip) };
+            if r.clicked() {
+                clicked = Some(v.clone());
+            }
+        }
+    });
+    clicked
+}
+
 pub fn layer_color(i: usize) -> Color32 {
     let c = crate::state::LAYER_COLORS[i % crate::state::NUM_LAYERS];
     Color32::from_rgb(c[0], c[1], c[2])

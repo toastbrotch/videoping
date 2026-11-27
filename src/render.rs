@@ -536,7 +536,8 @@ impl Renderer {
             self.meter.begin(gl, Key::Fx(fx.uid));
             let ok = self.run_isf(gl, &fx.path, &mut fx.params, StateKey::Fx(fx.uid), Some(cur), &raw_t, fx.seed, fc.dt);
             if ok {
-                self.b.mix(gl, cur, raw_t.tex, &fx.mix, &ping_t);
+                // the effect's alpha becomes the alpha of what comes out (keys, transparency)
+                self.b.fx_mix(gl, cur, raw_t.tex, &fx.mix, &ping_t);
                 cur = ping_t.tex;
                 pi ^= 1;
             }

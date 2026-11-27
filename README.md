@@ -29,7 +29,7 @@ full of footage tabs, a MIDI bridge. videoping is one program, built for playing
   and shows an optional `.md` doc next to each shader
 - **shader pack**: 15 generators in `isf-pack/generators/` (contour map, synthwave, CRT TV,
   dot matrix, melting blobs, endless corridor, halftone sphere ...), the 3D ones switchable to
-  wireframe, outline, dots or x-ray; 35 effects in `isf-pack/effects/` (color adjust, blur, edges,
+  wireframe, outline, dots or x-ray; 36 effects in `isf-pack/effects/` (color adjust, blur, edges,
   kaleido, pixelate, trails, strobe, halftone chaos, Rutt-Etra, optical feedback, motion history,
   tracking HUD, YOLO detect ...)
 - **plays** mp4 clips (GStreamer, hardware decoding), ISF generators, NDI sources and
@@ -81,6 +81,8 @@ running on NVIDIA in hybrid laptops: see [install.md](install.md) (also on the w
 - [install.md](install.md): installation
 - [dev.md](dev.md): building, modules, self-tests
 - [features.md](features.md): the spec, with every design decision
+- [ideas.md](ideas.md): ideas that are not built yet
+- [AGENTS.md](AGENTS.md): notes for coding agents
 
 ## community
 

@@ -446,7 +446,10 @@ earlier idea, decided 2026-11-21:
 - parameter LABEL from the isf header is shown in the ui (falls back to NAME)
 - bool inputs are shown as the big checkbox (accent color), not as a 0..1 slider; same layout as the sliders: name in the left label column, checkbox where the slider starts
   - bool inputs are declared as `uniform bool`; if a shader then does not compile (it compares them like floats, e.g. `if (uInvert > 0.5)`), it is compiled again with them declared as `float` (0.0 / 1.0), so such shaders still run unchanged
-- color inputs and dropdowns (long inputs with VALUES/LABELS): same layout, name in the left label column, control where the slider starts
+- color inputs and choices (long inputs with VALUES/LABELS): same layout, name in the left label column, control where the slider starts
+- choices of generators and effects are a row of buttons (wrapping onto more lines), the active one in plum: one click
+  to any option, no dropdown, no scrolling (decided 2026-11-27; only there: the other dropdowns of the ui, e.g.
+  resolution, midi profile and mode, mapping preset, ai model, stay)
 - right click on a parameter (its name or its control) resets it to the default of the isf header, as freshly loaded: value, range limits back to MIN..MAX, animation off (pause); works for effect and generator parameters
 
 
@@ -665,6 +668,9 @@ earlier idea, decided 2026-11-21:
   3D / lissajous / starfield up to 10-15 ms (optimized: fewer segments
   outside the figure, adaptive segment count; starfield: 4 cells instead of 9; terrain: stops at the sky; blobs: centers
   once per pixel)
+- starfield warp, streaks at high speed (2026-11-27): a streak longer than one grid cell is cut at the cell border
+  (each pixel checks only its own cell and 3 neighbors), so at speed 3-8 with long streaks they stay about the same
+  length instead of growing towards the edges; the user likes the look: kept as it is
 
 ## help button (2026-11-25)
 - top bar, far right: "help" opens the online manual (https://videoping.net/manual.html) in the browser, at the
@@ -698,7 +704,7 @@ earlier idea, decided 2026-11-21:
   for 0.0.1; Flatpak later (sandbox permissions for folders, MIDI, NDI), AppImage not (bundling GStreamer with
   VA-API / NVENC is fragile), rpm when someone asks
 - the deb: Depends on the base + good GStreamer plugins (and the libraries it links, found by dpkg-shlibdeps);
-  Recommends bad, libav, vaapi (hardware decoding, recording) and the DejaVu font
+  Recommends bad, libav, vaapi (hardware decoding, recording); the DejaVu font is built in since 2026-11-27
 - GitHub Actions on a v* tag (or by hand without a release): Ubuntu 22.04 (oldest supported glibc), the tag must
   match Cargo.toml, cargo test, then a DRAFT release with the .deb, the tar.gz and SHA256SUMS; the maker writes
   the notes and publishes
@@ -720,25 +726,34 @@ earlier idea, decided 2026-11-21:
 - checked: cargo test, the full self-test (all expected values), scripts/mcp-test.sh
 
 ## midi mapping tab fixes (2026-11-27)
+- learn: one big full-width bar at the top of the addresses, always plum (the accent; asked: "learn should have a
+  color"), "learn <address>"; without a device or an address it is dimmed plum and says what is missing; while learning it says which device to move a
+  control on, click = cancel (asked: "learn should be more prominent")
 - crash on deleting a profile: after "really delete?" the frame went on drawing with the deleted profile's index
   (out of range for the last profile); now the panel stops for that frame (GitHub issue #1)
 
-# future ideas (not planned)
-
-Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.
-
-## text input for ISF shaders
-- ISF has no text input; videoping's addition, compatible with other ISF hosts: an image input with extra keys,
-  e.g. `{ "NAME": "textImage", "TYPE": "image", "TEXT": "thank you\nberlin", "FONT_SIZE": 120, "ALIGN": "center" }`
-  - other hosts see a normal image input (the shader still loads, you feed it an image)
-  - videoping sees "TEXT": a text area instead of an image picker in the parameters; the text is rendered into a
-    texture (white on transparent, rebuilt only when the text changes) and given to the shader, which does the look
-    (scroll, wave, glitch, outline, split into letters)
-- font: DejaVu Sans (already required); later an optional "FONT" key (path to a .ttf)
-- saved with the instance like any parameter; an address in the control registry so MCP / the ai tab can set it
-  ("put 'last song' on layer 1")
-- no typing on midi: prepare several text instances in slots and launch them with pads
-- basic text shaders come with the shader pack
+## shader editor ai: faster, understands the shader (2026-11-27)
+- the user: "not fast" and "not sure it understands the shader"; found: 3-4 round trips per request (get_shader,
+  set_shader with the whole file, look, answer), the whole file rewritten for every change (thousands of output
+  tokens), no documentation of the open shader, no slider values, effort "low" shared with the live chat, no
+  videoping conventions in the prompt
+- every user message now starts with [editor: ...]: file, compile state (errors by line), the slider values in the
+  preview (animated ones with their range), what an effect previews on, the .md documentation (once per file and
+  conversation), the shader text when the model has not seen this version (its own edits count as seen)
+- edit_shader: exact old -> new replacements (each old exactly once, applied in order, nothing changed on an error),
+  compiled at once like set_shader; set_shader only for new shaders / rewrites; undo for both
+- own effort for the editor (config ai_effort_shader, default medium), chosen above its message field; the live
+  chat keeps its own (low)
+- system prompt: understand first, edit_shader for changes, keep inputs (new ones at the end: renaming loses settings
+  and MIDI mappings), the conventions (natural defaults / extreme ranges, straight alpha + bgAlpha, black, no audio,
+  no bpm uniform, a few ms per frame)
+- streaming (text while it is written) not done: later, if it still feels slow
+- measured with the user's key (claude-opus-5-5): "make each hexagon slowly turn around its own center, with a
+  slider" on hex-pulse: medium 17 s, 1 edit_shader, compiled first try, 1.8k output tokens, it also kept the turned
+  hexagons inside their cells; low 4 s, simpler (corners clip, it said so); a code question on starfield-warp
+  ("why fewer stars for big forms, why 4 cells"): medium 6 s, no tool call, correct, and it found a real limit
+  (long streaks can cross more than one cell)
+- self-test VIDEOPING_SELFTEST_AI_PROMPT for real runs (dev.md); the mock self-test still passes
 
 ## shader pack — effects built 2026-11-25
 - folder `isf-pack/effects/`: 15 ISF effects written by Claude, CC BY-NC-SA 4.0, each with a .md doc (texts in
@@ -750,7 +765,13 @@ Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it
 - one job per effect, light on the GPU (blur: 4 separable passes, 25 taps each, two rounds so big radii have no
   gaps; premultiplied in the buffers so transparent parts don't bleed dark)
 - the effects keep the input's alpha (and move it with the picture in mirror / kaleido / transform / blur)
-- luma key: not an effect, the mix types already do it; chroma key: waits for the alpha decision (see below)
+- luma key: not an effect, the mix types already do it
+- chroma key (2026-11-27, after the alpha decision): the 16th basic effect; distance in YCbCr, the color compared
+  relative to its brightness (a shadow on the screen keys out with it; near black it fades to the plain difference),
+  a little brightness weight ("Brightness counts"); tolerance / softness; spill removal (the key color's chroma
+  direction taken off what is kept); edge shrink / grow (min / max of the matte at 8 points); views: keyed / matte /
+  only the key color; straight alpha out (matte x input alpha); tested on a green-screen test picture with a
+  shadow and a green fringe over the dot matrix: clean matte incl. the shadow, fringe gone with spill or edge -6
 - strobe: rate in flashes per second, or 0 = follows the Phase slider: animate Phase with the bpm for a strobe
   on the beat (no beat uniform in ISF); freeze mode holds the picture in a persistent buffer
 - trails: decay scaled by TIMEDELTA (same look at any frame rate); at least one 8-bit step down per frame so
@@ -770,82 +791,44 @@ Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it
   videoping makes 8 bit (ranks clipped at 1, counts rounded); now 8-bit safe: counts as 16 bits in two channels,
   ranks as whole bytes; the count split into 216 x 72 row counts plus a sum pass (one pass over all 9216 samples
   in 216 threads cost ~9 ms, now ~1-2 ms); kept: dithering and pixel size from the mini version
-- open question (asked 2026-11-25): the effect mix writes alpha 1 and uses the effect's alpha as coverage over the
-  unprocessed input, so an effect can't make anything transparent (transparent options in transform, pixelate,
-  vignette, strobe show the unprocessed input there) and any effect makes a transparent generator opaque
+- decided 2026-11-27 (the user, after a test session): **the effect's alpha becomes the layer's alpha.** Before, the
+  effect mix (the mixer's MIX_FS) wrote alpha 1 and used the effect's alpha as coverage over the unprocessed input:
+  no effect could make anything transparent (transform / pixelate / vignette / strobe "transparent" showed the
+  unprocessed picture) and any effect made a transparent generator opaque, even showing the hidden colors of its
+  transparent parts (a flat olive surface over contour-map with hue-rotate)
+  - FX_MIX_FS (gfx.rs), only for effect chains (instances and output effects); the layer mixer is unchanged: the
+    effect's output replaces its input, alpha included, blended premultiplied: A = crossfade by the amount, Lk / iLk
+    = by the luma key of the effect's output, add = the effect's light added (alpha = the larger one); channels
+    switched off keep the input
+  - the six per-pixel color effects from the user's collection (color isolate, duotone, fold colors, gradient map,
+    hue rotate, rgb gain) wrote alpha 1: now they keep the input's alpha; effects that redraw the whole frame
+    (feedback, rutt-etra, HUDs, lidar, halftone chaos, ...) keep alpha 1
+  - the user's optical-feedback-keyer is not affected (its key lives in its feedback buffer; it writes alpha 1)
+  - checked with ~/videoping-alpha-test.json (dots in layer 3, each case in layer 2): all cases as intended;
+    effects on opaque pictures look as before; tests and self-tests pass
 
+## symbol font built in, screens from the window system (2026-11-27)
+- the ui symbols (▶ ◀ ↑ ↓ ≡ ◎ ⚠ ...) come from DejaVu Sans, now built into the binary (assets/fonts/DejaVuSans.ttf,
+  unmodified 2.37, Bitstream Vera license in assets/fonts/LICENSE-DejaVu.txt, installed with the docs): before,
+  five fixed system paths (Fedora's, for one, was missing) and boxes without the font; +0.7 MB; Noto Symbols 2 from
+  the system stays an extra fallback; fonts-dejavu-core is no longer recommended by the .deb
+- the output screen list: before, the kernel's DRM connectors (/sys/class/drm, sorted by name) while the fullscreen
+  window goes to the window system's N-th monitor (egui: available_monitors().nth(N)); nothing kept the two orders
+  the same (docks, USB-C / DisplayLink, NVIDIA + Intel, replugging): "HDMI-A-1" could put the output on another
+  screen. Now the list is the window system's (winit via eframe's window), every 3 s: number, name, resolution,
+  position, "videoping is here"; Wayland lists the same screen twice here (same name, size, position): shown once,
+  the button stores its first index; a chosen screen that is gone says so
+- checked: one laptop screen shows as "1 eDP-1 · 3072×1920 · at 0, 0 · videoping is here" (was listed twice before
+  the dedupe); a second screen still needs a check with a real projector
 
-## finder
-- "in use" marker (files in the grid / live), clip thumbnails, recently used (see "finder")
+## screenshots (2026-11-27)
+- all 11 pictures in website/img renewed (they still showed a "sequencer" tab, the old gameboy effect with German
+  labels, the old test generator, "effects 2/4"); now: version and help in the top bar, the pack shaders (hex pulse,
+  pixelate with its row of choice buttons, color adjust), the learn bar, the editor's effort row
+- scripts/screenshots.py makes all of them from self-tests (one per picture, own folder, never the user's data;
+  ai pictures with the mocks scripts/ai-mock-live.py / ai-mock-shader.py, no key); crops for a 3000x1818 window;
+  the top bar is stitched (tabs + right side, without the empty middle)
 
-## videopong.net
-- login for the full-quality download (now only the 480x360 preview mp4)
-- upload a recording to videopong.net (idea 2026-11-25): needs the login (same mechanism as the full-quality
-  download); after REC: "share on videopong.net" on the recording -> title, tags, Creative Commons license (choice),
-  upload with progress; the clip page link afterwards
-- maximum version: upload the ISF shaders used in the recording along with the clip (videopong.net can attach ISF
-  shaders to a clip): the generators / effects that were on the output while recording, each with its .md doc;
-  only own shaders or ones whose license allows it (ask before uploading)
-- MCP / ai tools to search and load videopong clips
+# ideas
 
-## midi
-- Twister bank 2 (see "midi")
-- import / export of profiles (now: the plain json files in the folder)
-- midi learn right in the ui (idea 2026-11-24): now learn only works in the "midi mapping" tab (pick an address, learn,
-  move a control); instead: a "learn" mode (button in the top bar or a key) where every mappable control on screen
-  (slider, button, effect on/off, mix, slot) gets a thin outline; click one, move a knob / press a pad -> bound to the
-  selected device's profile; controls that already have a binding show it (small midi badge, hover = which control);
-  right click on a control -> "learn" / "forget" as a shortcut without the mode; Esc or the button leaves the mode
-  - the address of each ui control comes from the control registry (the same addresses as the midi tab, MCP and the ai)
-  - learn picks the mode like now (button -> trigger / toggle, fader / knob -> absolute, encoder -> relative)
-
-## undo (idea 2026-11-24)
-- undo only undoes what you are looking at (decided 2026-11-24): the history belongs to the tab that is open, never a
-  change in another tab that would then happen "in the background"
-- live tab: one history for everything in it (decided 2026-11-24): prepare grid (slots loaded / cleared / moved),
-  prepare detail (parameters, ranges, animation settings, effects added / removed / reordered / moved), mixer, output
-  effects, finder favorites, "new"; also instances that are live in a layer (the output changes with the undo, that is
-  ok: it is all on screen)
-- projection mapping tab, midi mapping tab: each its own history (slices / masks of the preset; bindings of the profile)
-- shader editor: its own text undo (exists); ai tab: its own undo per change (exists)
-- Ctrl+Z / Ctrl+Shift+Z (and buttons) act on the open tab; a whole slider drag = one step; a limited history per tab
-  (e.g. 100 steps), lost on restart
-- a status line "undo: <what>" before / when undoing, so it is clear what changes
-- midi is undoable too (decided 2026-11-24): a knob / fader turn or a button press makes an undo step in the tab
-  its target belongs to (mostly the live tab), exactly like the same change with the mouse; a knob turned
-  continuously = one step (the step ends after a short pause, like a slider drag ends on release)
-- not undone (mouse or midi): one-shot actions that cannot be taken back on the output: REC start / stop, bpm tap
-
-## control
-- OSC (not for now, decided 2026-11-22; the control registry would carry it)
-
-## security
-- NDI library folder out of the session into the general config (open point of the security check 2026-11-24)
-
-## distribution
-- GitHub Actions: build, unit tests, `cargo audit` on every push (also proves a clean Ubuntu build)
-- ready-built program as a GitHub release: AppImage or .deb (no Rust / GStreamer dev setup needed)
-
-## patch-bay for videosignals
-
-removed from the app and from the plan (2026-11-21), kept here only as an idea.
-
-goal: route video signals between any points, mainly backwards for feedback loops.
-
-- sources (tap points):
-  - each prepare entry (post effects)
-  - each mixer-layer (post)
-  - each output effect (post)
-  - global output
-- destinations: anything that takes a video input
-  - extra image inputs of isf effects (e.g. displace, mask, feedback)
-  - a "patch" source as clip/generator in the prepare lane (like an NDI source)
-- a signal routed backwards (to an earlier point in the chain) is the previous frame (1 frame delay) -> this makes feedback possible without endless loops
-
-visuals:
-- a small dropdown "source" at every video input (effect image input, patch clip) -> no extra clutter, routing is visible where it is used
-- no matrix overview (not needed)
-- no node-graph with cables (too much clutter)
-- patch indicator (small icon + source name, e.g. "⇄ L2") on the folded effect row / prepare slot that gets its input from the patch-bay, so patches are visible without folding out
-- no extra panic button: panic = global blackout + global freeze (see mixer / bhoreal)
-- not mapped to midi
+Ideas that are not built yet are collected in [ideas.md](ideas.md).

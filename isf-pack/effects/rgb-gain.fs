@@ -13,5 +13,5 @@ void main(){
     vec3 g = vec3(uRed, uGreen, uBlue);
     // Negative gain inverts the channel first, then scales it.
     vec3 v = mix(c*g, (1.0 - c)*(-g), step(g, vec3(0.0)));
-    gl_FragColor = vec4(clamp(v, 0.0, 1.0), 1.0);
+    gl_FragColor = vec4(clamp(v, 0.0, 1.0), IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).a);   // keeps the input's transparency
 }

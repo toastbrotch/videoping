@@ -162,8 +162,10 @@ pub struct App {
     proc_stats: crate::meter::ProcStats,
     /// OpenGL renderer string of the gpu in use
     gpu_name: String,
-    /// connected screens (drm connector names), refreshed every few seconds
-    screens: Vec<String>,
+    /// the screens as the window system lists them, each once: (its index in the window system's
+    /// list = what the fullscreen output uses, "HDMI-A-1 · 1920×1080 · at 1920, 0"); refreshed every
+    /// few seconds
+    screens: Vec<(usize, String)>,
     screens_read: Option<Instant>,
     /// (fullscreen, screen) last applied to the output window
     applied_output: Option<(bool, usize)>,
@@ -2387,11 +2389,6 @@ impl App {
 
     /// output options (column 2, below record)
     fn section_output_options(&mut self, ui: &mut Ui) {
-        // connected screens (refreshed every 3 s: projectors get plugged in during setup)
-        if self.screens_read.is_none_or(|t| t.elapsed().as_secs() >= 3) {
-            self.screens_read = Some(Instant::now());
-            self.screens = connected_screens();
-        }
         let screens = self.screens.clone();
         let gpu = self.gpu_name.clone();
         let ndi_state = match self.r.as_ref() {
@@ -2425,17 +2422,25 @@ impl App {
             widgets::config_group(ui, "screen", |ui| {
                 widgets::config_row(ui, "screen", |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
-                    let n = screens.len().max(o.screen + 1).max(1);
-                    for i in 0..n {
-                        if widgets::choice(ui, o.screen == i, &(i + 1).to_string()).on_hover_text("fullscreen output goes to this screen").clicked() {
-                            o.screen = i;
+                    for (k, (idx, d)) in screens.iter().enumerate() {
+                        if widgets::choice(ui, o.screen == *idx, &(k + 1).to_string()).on_hover_text(format!("fullscreen output goes here: {d}")).clicked() {
+                            o.screen = *idx;
                         }
                     }
+                    if screens.is_empty() {
+                        ui.label(egui::RichText::new("(no screens reported)").weak().size(widgets::BTN_TEXT));
+                    }
                 });
-                if !screens.is_empty() {
+                // the screens with their numbers: exactly where the output goes
+                for (k, (idx, d)) in screens.iter().enumerate() {
                     widgets::config_row(ui, "", |ui| {
-                        ui.label(egui::RichText::new(format!("connected: {}", screens.join(", "))).weak().size(widgets::BTN_TEXT))
-                            .on_hover_text("names from the system; their order can differ from the screen numbers");
+                        let t = egui::RichText::new(format!("{} {d}", k + 1)).size(widgets::BTN_TEXT);
+                        ui.label(if *idx == o.screen { t } else { t.weak() });
+                    });
+                }
+                if !screens.is_empty() && !screens.iter().any(|(idx, _)| *idx == o.screen) {
+                    widgets::config_row(ui, "", |ui| {
+                        ui.label(egui::RichText::new("the chosen screen is not connected now: choose one above").strong().size(widgets::BTN_TEXT));
                     });
                 }
                 widgets::config_row(ui, "window", |ui| {
@@ -2653,14 +2658,10 @@ fn params_ui(ui: &mut Ui, info: &IsfInfo, params: &mut [Param], doc: Option<&cra
                     ui.horizontal_top(|ui| {
                         param_label(ui, &inp.label, &tip);
                         let cur = a[0].value.round() as i32;
-                        let txt = labels.iter().find(|l| l.0 == cur).map(|l| l.1.clone()).unwrap_or(cur.to_string());
-                        egui::ComboBox::from_id_salt("long").selected_text(txt).show_ui(ui, |ui| {
-                            for (v, l) in labels {
-                                if ui.selectable_label(*v == cur, l).clicked() {
-                                    a[0].value = *v as f32;
-                                }
-                            }
-                        });
+                        let opts: Vec<(i32, String, String)> = labels.iter().map(|(v, l)| (*v, l.clone(), String::new())).collect();
+                        if let Some(v) = widgets::choice_row(ui, &cur, &opts) {
+                            a[0].value = v as f32;
+                        }
                     });
                 }
             }
@@ -2756,24 +2757,27 @@ fn source_badge(src: &SourceKind) -> &'static str {
     }
 }
 
-/// Connected screens (DRM connectors with status "connected"), e.g. ["eDP-1", "HDMI-A-1"].
-fn connected_screens() -> Vec<String> {
+/// The screens as the window system lists them, in its order: the fullscreen output on index N
+/// goes to the N-th of exactly this list (egui: `available_monitors().nth(N)`). Wayland can list the
+/// same screen twice (same name, size, position): it is shown once, with its first index.
+fn window_system_screens(w: &eframe::Frame) -> Option<Vec<(usize, String)>> {
+    let win = w.winit_window()?;
+    let here = win.current_monitor();
+    let mut seen: Vec<(String, (u32, u32), (i32, i32))> = vec![];
     let mut out = vec![];
-    if let Ok(rd) = std::fs::read_dir("/sys/class/drm") {
-        for e in rd.flatten() {
-            let name = e.file_name().to_string_lossy().to_string();
-            // card1-HDMI-A-1 -> HDMI-A-1 (skip card1, renderD128, ...)
-            let Some((card, conn)) = name.split_once('-') else { continue };
-            if !card.starts_with("card") {
-                continue;
-            }
-            if std::fs::read_to_string(e.path().join("status")).is_ok_and(|s| s.trim() == "connected") {
-                out.push(conn.to_string());
-            }
+    for (i, m) in win.available_monitors().enumerate() {
+        let s = m.size();
+        let p = m.position();
+        let name = m.name().unwrap_or_else(|| "screen".into());
+        let key = (name.clone(), (s.width, s.height), (p.x, p.y));
+        if seen.contains(&key) {
+            continue;
         }
+        seen.push(key);
+        let mark = if here.as_ref() == Some(&m) { " · videoping is here" } else { "" };
+        out.push((i, format!("{name} · {}×{} · at {}, {}{mark}", s.width, s.height, p.x, p.y)));
     }
-    out.sort();
-    out
+    Some(out)
 }
 
 /// Is there an NVIDIA GL/EGL driver that PRIME render offload can use?
@@ -2801,32 +2805,27 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
-/// egui's built-in fonts lack symbols like ▶ ◀ ↑ ↓ ≡: add system fonts as fallback.
+/// egui's built-in fonts lack symbols like ▶ ◀ ↑ ↓ ≡: DejaVu Sans (built in) as fallback.
 fn load_symbol_fonts(ctx: &egui::Context) {
-    let candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
-    ];
+    // DejaVu Sans is built in (assets/fonts, license next to it): the symbols show on every
+    // distribution, wherever (or whether) it keeps its fonts
+    const DEJAVU: &[u8] = include_bytes!("../assets/fonts/DejaVuSans.ttf");
     let mut fonts = egui::FontDefinitions::default();
-    let mut added = false;
-    for (i, path) in candidates.iter().enumerate() {
+    let add = |fonts: &mut egui::FontDefinitions, name: &str, data: egui::FontData| {
+        fonts.font_data.insert(name.into(), std::sync::Arc::new(data));
+        for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            fonts.families.entry(fam).or_default().push(name.into());
+        }
+    };
+    add(&mut fonts, "dejavu", egui::FontData::from_static(DEJAVU));
+    // a few rarer symbols: Noto Symbols 2 from the system, when it is there
+    for path in ["/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf", "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf", "/usr/share/fonts/google-noto/NotoSansSymbols2-Regular.ttf"] {
         if let Ok(bytes) = std::fs::read(path) {
-            let name = format!("symbols{i}");
-            fonts.font_data.insert(name.clone(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
-            for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-                fonts.families.entry(fam).or_default().push(name.clone());
-            }
-            added = true;
+            add(&mut fonts, "noto-symbols2", egui::FontData::from_owned(bytes));
+            break;
         }
     }
-    if added {
-        ctx.set_fonts(fonts);
-    } else {
-        eprintln!("no DejaVu / Noto Symbols font found: some ui symbols may show as boxes");
-    }
+    ctx.set_fonts(fonts);
 }
 
 fn style(ctx: &egui::Context) {
@@ -2932,6 +2931,13 @@ impl eframe::App for App {
         self.doc_windows(&ctx);
         self.confirm_new_dialog(&ctx, &gl);
         self.guard_quit(&ctx);
+        // the screens (every 3 s: projectors get plugged in during setup)
+        if self.screens_read.is_none_or(|t| t.elapsed().as_secs() >= 3) {
+            self.screens_read = Some(Instant::now());
+            if let Some(s) = window_system_screens(frame) {
+                self.screens = s;
+            }
+        }
         self.output_window(&ctx, frame);
         if self.selftest.is_some() {
             self.selftest_step(&ctx, &gl);
@@ -3669,6 +3675,39 @@ impl App {
                         lum(at(0.75, 0.7)),
                         r.mapping_on
                     );
+                }
+            }
+        }
+        // VIDEOPING_SELFTEST_EDIT + VIDEOPING_SELFTEST_AI_PROMPT (no _AI): the editor's ai for real
+        // (key from ANTHROPIC_API_KEY, effort from VIDEOPING_SELFTEST_AI_EFFORT): sends the prompt at
+        // 1.5 s, waits for the whole turn, prints time / rounds / tokens / compile state, writes the
+        // editor text to <dir>/ai-result.fs and quits (set VIDEOPING_SELFTEST_STAY long enough)
+        if let (Some(_), Ok(prompt), None) = (std::env::var_os("VIDEOPING_SELFTEST_EDIT"), std::env::var("VIDEOPING_SELFTEST_AI_PROMPT"), std::env::var_os("VIDEOPING_SELFTEST_AI")) {
+            use std::sync::Mutex;
+            static SENT: Mutex<Option<Instant>> = Mutex::new(None);
+            let mut sent = SENT.lock().unwrap();
+            if secs > 1.5 && sent.is_none() {
+                if let Ok(e) = std::env::var("VIDEOPING_SELFTEST_AI_EFFORT") {
+                    self.cfg.ai_effort_shader = e;
+                }
+                self.shed.show_ai = true;
+                self.ai_selftest_send(ai_tab::Which::Shader, &prompt);
+                *sent = Some(Instant::now());
+            } else if let Some(t0) = *sent {
+                if !self.ai_shed.busy() && t0.elapsed().as_millis() > 300 {
+                    let compiles = self.r.as_ref().is_some_and(|r| r.shader_error(&self.shed.work).is_none());
+                    eprintln!(
+                        "selftest editor ai (real): {:.1} s, effort {}, compiles = {compiles}, changed = {}; chat: {}",
+                        t0.elapsed().as_secs_f32(),
+                        self.cfg.ai_effort_shader,
+                        self.shed.dirty(),
+                        self.ai_selftest_summary(ai_tab::Which::Shader)
+                    );
+                    if let Ok(dir) = std::env::var("VIDEOPING_SELFTEST") {
+                        let _ = std::fs::write(std::path::Path::new(&dir).join("ai-result.fs"), &self.shed.text);
+                    }
+                    *sent = Some(Instant::now() + std::time::Duration::from_secs(3600));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }
         }

@@ -324,6 +324,41 @@ void main() {
 }
 ";
 
+/// One effect of a chain: its output (`top`) replaces its input (`bottom`), alpha included, so an
+/// effect can make things transparent (keys, transform outside, vignette edges, strobe) and keeps
+/// a transparent generator transparent. Straight alpha in and out; blended premultiplied.
+/// Mix types as in the mixer: A = crossfade by the mix amount, Lk / iLk = by the luma key of the
+/// effect's output (the amount moves the cut), add = the effect's light added on top.
+const FX_MIX_FS: &str = "#version 330
+in vec2 uv;
+out vec4 o;
+uniform sampler2D bottom;
+uniform sampler2D top;
+uniform int mixType;   // 0 alpha, 1 lumakey, 2 inv lumakey, 3 add
+uniform float amount;
+uniform vec3 rgb;
+void main() {
+    vec4 b = texture(bottom, uv);
+    vec4 t = texture(top, uv);
+    float l = dot(t.rgb, vec3(0.299, 0.587, 0.114));
+    float lo = 0.05 + (1.0 - amount) * 0.95;
+    vec3 cp;
+    float a;
+    if (mixType == 3) {
+        cp = b.rgb * b.a + t.rgb * t.a * amount;
+        a = max(b.a, t.a * amount);
+    } else {
+        float w = mixType == 0 ? amount : mixType == 1 ? smoothstep(lo, lo + 0.3, l) : smoothstep(lo, lo + 0.3, 1.0 - l);
+        cp = mix(b.rgb * b.a, t.rgb * t.a, w);
+        a = mix(b.a, t.a, w);
+    }
+    vec3 c = a > 1e-4 ? cp / a : b.rgb;
+    // channels switched off keep the input
+    c = mix(b.rgb, c, rgb);
+    o = vec4(clamp(c, 0.0, 1.0), clamp(a, 0.0, 1.0));
+}
+";
+
 /// Master: brightness, blackout.
 const MASTER_FS: &str = "#version 330
 in vec2 uv;
@@ -430,6 +465,7 @@ pub struct Builtins {
     pub quad: Quad,
     pub blit: Program,
     pub mix: Program,
+    pub fx_mix: Program,
     pub master: Program,
     pub nv12: Program,
     pub slice: Program,
@@ -443,6 +479,7 @@ impl Builtins {
             quad: Quad::new(gl),
             blit: Program::new(gl, VS, BLIT_FS).expect("blit shader"),
             mix: Program::new(gl, VS, MIX_FS).expect("mix shader"),
+            fx_mix: Program::new(gl, VS, FX_MIX_FS).expect("effect mix shader"),
             master: Program::new(gl, VS, MASTER_FS).expect("master shader"),
             nv12: Program::new(gl, VS, NV12_FS).expect("nv12 shader"),
             slice: Program::new(gl, VS, SLICE_FS).expect("slice shader"),
@@ -515,6 +552,18 @@ impl Builtins {
         self.mix.i1(gl, "mixType", mix.mix_type.shader_id());
         self.mix.f1(gl, "amount", mix.amount);
         self.mix.f3(gl, "rgb", mix.rgb.map(|b| if b { 1.0 } else { 0.0 }));
+        self.quad.draw(gl);
+    }
+
+    /// An effect over its input (alpha included, see FX_MIX_FS).
+    pub fn fx_mix(&mut self, gl: &Gl, bottom: glow::Texture, top: glow::Texture, mix: &crate::state::Mix, dst: &Target) {
+        dst.bind(gl);
+        self.fx_mix.use_prog(gl);
+        self.fx_mix.tex(gl, "bottom", 0, Some(bottom));
+        self.fx_mix.tex(gl, "top", 1, Some(top));
+        self.fx_mix.i1(gl, "mixType", mix.mix_type.shader_id());
+        self.fx_mix.f1(gl, "amount", mix.amount);
+        self.fx_mix.f3(gl, "rgb", mix.rgb.map(|b| if b { 1.0 } else { 0.0 }));
         self.quad.draw(gl);
     }
 

@@ -427,6 +427,9 @@ pub struct Config {
     /// anthropic: low / medium / high
     #[serde(default = "ai_effort")]
     pub ai_effort: String,
+    /// the shader editor's ai: reading and writing GLSL needs more thinking than the live chat
+    #[serde(default = "ai_effort_shader")]
+    pub ai_effort_shader: String,
     /// changes (set, load_file, add_effect) wait for "apply" in the chat
     #[serde(default)]
     pub ai_ask: bool,
@@ -440,6 +443,9 @@ fn ai_provider() -> String {
 }
 fn ai_model() -> String {
     "claude-opus-5-5".into()
+}
+fn ai_effort_shader() -> String {
+    "medium".into()
 }
 fn ai_effort() -> String {
     "low".into()
@@ -465,6 +471,7 @@ impl Default for Config {
             ai_url_anthropic: String::new(),
             ai_url_openai: String::new(),
             ai_effort: ai_effort(),
+            ai_effort_shader: ai_effort_shader(),
             ai_ask: false,
             ai_images: true,
         }

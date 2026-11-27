@@ -62,8 +62,6 @@ a GPU driver with <b>OpenGL 3.3</b> or newer (Mesa / NVIDIA / AMD are all fine)
 </li><li>
 <b>GStreamer 1.20+</b> with the usual plugins, for mp4 playback
 </li><li>
-<b>DejaVu Sans</b> font (ui symbols like ▶ ◀ ↑ ↓; without it some icons show as boxes)
-</li><li>
 optional: the <b>NDI 6 runtime</b> for NDI output
 </li><li>
 MIDI controllers: ALSA (<code>libasound2</code>, installed on every desktop); class-compliant USB MIDI devices need no driver
@@ -71,8 +69,7 @@ MIDI controllers: ALSA (<code>libasound2</code>, installed on every desktop); cl
 <p>Ubuntu / Debian / Pop!_OS:</p>
 <pre><code>sudo apt install \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-  gstreamer1.0-libav gstreamer1.0-vaapi \
-  fonts-dejavu-core</code></pre>
+  gstreamer1.0-libav gstreamer1.0-vaapi</code></pre>
 <p><code>gstreamer1.0-vaapi</code> (or the <code>va</code> plugins in plugins-bad) gives hardware H.264 decoding on Intel/AMD. Recording (REC) needs a hardware H.264 encoder: NVENC on NVIDIA (<code>nvcodec</code> in plugins-bad, with the NVIDIA driver) or VA-API on Intel / AMD (<code>va</code> in plugins-bad or <code>gstreamer1.0-vaapi</code>). Without one, REC is disabled.</p>
 <p><b>Keep GStreamer up to date.</b> videoping plays video files from anywhere (also clips other people shared on videopong.net), and GStreamer's file parsers and decoders get security fixes regularly. Install system updates (<code>sudo apt update &amp;&amp; sudo apt upgrade</code>, or your distribution's updater) before a tour, not only when something breaks.</p>
 <h2 id="2-ndi-runtime-optional">2. NDI runtime (optional)</h2>

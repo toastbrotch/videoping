@@ -15,5 +15,5 @@ void main(){
     vec3 c = IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).rgb;
     float l = clamp((dot(c, vec3(0.299, 0.587, 0.114)) - 0.5)*uContrast + 0.5, 0.0, 1.0);
     vec3 dark = hsv(uHueDark, 0.9, 0.35), light = hsv(uHueLight, 0.6, 1.0);
-    gl_FragColor = vec4(mix(dark*l*2.0, mix(dark, light, l*2.0 - 1.0), step(0.5, l)), 1.0);
+    gl_FragColor = vec4(mix(dark*l*2.0, mix(dark, light, l*2.0 - 1.0), step(0.5, l)), IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).a);   // keeps the input's transparency
 }

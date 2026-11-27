@@ -22,5 +22,5 @@ void main(){
     float keep = (1.0 - smoothstep(uWidth*0.6, uWidth, dh))*smoothstep(0.05, 0.2, sat);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     vec3 rest = clamp(mix(vec3(l), c, uRest), 0.0, 1.0);
-    gl_FragColor = vec4(mix(rest, c, keep), 1.0);
+    gl_FragColor = vec4(mix(rest, c, keep), IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).a);   // keeps the input's transparency
 }

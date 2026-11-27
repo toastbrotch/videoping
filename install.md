@@ -22,7 +22,6 @@ font as recommended packages). You need this step for the tar.gz or a build from
 
 - a GPU driver with **OpenGL 3.3** or newer (Mesa / NVIDIA / AMD are all fine)
 - **GStreamer 1.20+** with the usual plugins, for mp4 playback
-- **DejaVu Sans** font (ui symbols like ▶ ◀ ↑ ↓; without it some icons show as boxes)
 - optional: the **NDI 6 runtime** for NDI output
 - MIDI controllers: ALSA (`libasound2`, installed on every desktop); class-compliant USB MIDI
   devices need no driver
@@ -32,8 +31,7 @@ Ubuntu / Debian / Pop!_OS:
 ```sh
 sudo apt install \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-  gstreamer1.0-libav gstreamer1.0-vaapi \
-  fonts-dejavu-core
+  gstreamer1.0-libav gstreamer1.0-vaapi
 ```
 
 `gstreamer1.0-vaapi` (or the `va` plugins in plugins-bad) gives hardware H.264 decoding on Intel/AMD.

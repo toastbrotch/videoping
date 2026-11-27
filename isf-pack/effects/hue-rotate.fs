@@ -16,5 +16,5 @@ void main(){
     vec3 c = IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).rgb;
     c = hueRotate(c, uHue + TIME*uSpeed);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
-    gl_FragColor = vec4(clamp(mix(vec3(l), c, uSat), 0.0, 1.0), 1.0);
+    gl_FragColor = vec4(clamp(mix(vec3(l), c, uSat), 0.0, 1.0), IMG_NORM_PIXEL(inputImage, isf_FragNormCoord).a);   // keeps the input's transparency
 }
