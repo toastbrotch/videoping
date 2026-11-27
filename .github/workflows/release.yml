@@ -59,19 +59,35 @@ jobs:
           name: videoping-packages
           path: target/release-files/*
 
+      - name: release notes (the version's section of CHANGELOG.md + how to install)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          {
+            echo "videoping $version (early alpha)"
+            echo
+            # the lines under "## <version>" up to the next "## "
+            awk -v v="## $version" '$0 == v {on = 1; next} /^## / {on = 0} on' CHANGELOG.md
+            echo
+            echo "**Install**"
+            echo
+            echo '- **Ubuntu / Debian / Pop!_OS 22.04 or newer:** `sudo apt install ./videoping_*_amd64.deb`'
+            echo '  (pulls in GStreamer; the recommended packages add hardware decoding and recording)'
+            echo '- **other distributions:** unpack the tar.gz and run `bin/videoping` (see INSTALL.txt inside)'
+            echo '- check the downloads: `sha256sum -c SHA256SUMS`'
+            echo
+            echo "Install guide and manual:"
+            echo "- Install guide: https://videoping.net/install.html"
+            echo "- Manual: https://videoping.net/manual.html"
+            echo "- https://videoping.net"
+          } > target/release-notes.md
+          cat target/release-notes.md
+
       - name: draft release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           name: videoping ${{ github.ref_name }}
-          body: |
-            videoping ${{ github.ref_name }} (early alpha)
-
-            - **Ubuntu / Debian / Pop!_OS 22.04 or newer:** `sudo apt install ./videoping_*_amd64.deb`
-              (pulls in GStreamer; the recommended packages add hardware decoding and recording)
-            - **other distributions:** unpack the tar.gz and run `bin/videoping` (see INSTALL.txt inside)
-            - check the downloads: `sha256sum -c SHA256SUMS`
-
-            Install guide and manual: https://videoping.net
+          body_path: target/release-notes.md
           files: target/release-files/*

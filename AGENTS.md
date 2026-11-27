@@ -23,8 +23,9 @@ python3 scripts/install-html.py                        # install.md -> website/i
 scripts/screenshots.py                                 # all website / manual screenshots (website/img)
 ```
 
-Release: set `version` in Cargo.toml, tag `v<version>`, push the tag; GitHub Actions builds the .deb
-and tar.gz into a draft release (dev.md, "release").
+Release: set `version` in Cargo.toml, write its section in CHANGELOG.md (the release notes), tag
+`v<version>`, push the tag; GitHub Actions builds the .deb and tar.gz into a draft release (dev.md,
+"release").
 
 ## Rules
 

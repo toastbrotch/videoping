@@ -127,11 +127,12 @@ cargo run --example ndi_loop_test -- [ndi lib dir] # NDI loopback: send, discove
 
 A release is a git tag; GitHub builds the packages (`.github/workflows/release.yml`):
 
-1. set `version` in `Cargo.toml` (shown in the top bar and by `videoping --version`), commit
+1. set `version` in `Cargo.toml` (shown in the top bar and by `videoping --version`) and write its section
+   in `CHANGELOG.md` (it becomes the release notes), commit
 2. `git tag v0.0.1 && git push origin main v0.0.1` (the tag must match the version, or the build stops)
 3. GitHub Actions (Ubuntu 22.04, so the binary runs on 22.04 and newer): `cargo test`, `cargo deb`,
    `scripts/release-tar.sh`, then a **draft** release with the .deb, the tar.gz and `SHA256SUMS`
-4. on GitHub: Releases → the draft → write what's new → Publish
+4. on GitHub: Releases → the draft (notes from CHANGELOG.md, plus how to install) → Publish
 
 A test build without a release: Actions → release → Run workflow (the files land in the run's
 artifacts). Locally: `cargo install cargo-deb`, then `cargo deb && scripts/release-tar.sh`

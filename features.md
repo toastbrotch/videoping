@@ -713,6 +713,9 @@ earlier idea, decided 2026-11-21:
 - install.md: install from source also copies the pack to ~/.local/share/videoping/
 - 0.0.2 (2026-11-27): undo / redo as a basic feature that was missing, and many fixes since 0.0.1 (the user: "it has
   many fixes, and undo"); released the same way
+- release notes from CHANGELOG.md (2026-11-27): a section per version, written before tagging; the workflow takes the
+  tag's section and adds how to install and the links (install guide, manual, website) into the draft release, so
+  nothing is copied by hand (Claude has no access to the GitHub account)
 - 0.0.1 released 2026-11-26 (tag v0.0.1, GitHub release with .deb, tar.gz, SHA256SUMS); the website's "get it"
   section points to releases/latest (download button, apt install line), the alpha box no longer says "no
   packages", the specs name .deb and tar.gz; install.md: the .deb brings the runtime requirements itself

@@ -81,6 +81,7 @@ running on NVIDIA in hybrid laptops: see [install.md](install.md) (also on the w
 - [install.md](install.md): installation
 - [dev.md](dev.md): building, modules, self-tests
 - [features.md](features.md): the spec, with every design decision
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release
 - [ideas.md](ideas.md): ideas that are not built yet
 - [AGENTS.md](AGENTS.md): notes for coding agents
 
