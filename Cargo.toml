@@ -1,6 +1,6 @@
 [package]
 name = "videoping"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Live VJ software for Linux: ISF shaders, clips and NDI on 3 layers, MIDI controllers, an AI in the booth"
