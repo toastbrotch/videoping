@@ -154,12 +154,12 @@ Screenshots of the website and the manual (`website/img/*.png`, 11 pictures) com
 
 ```sh
 cargo build --release
-scripts/screenshots.py            # [--recording <mp4>] [--query arrow]
+scripts/screenshots.py            # [--recording <mp4>] [--query arrow] [--only overview,mixer,ai]
 ```
 
-The pictures show four kinds of sources: the pack's kaleido flower (layer 1, transparent background),
-an NDI source (a second self-test videoping sends the pack's endless corridor as "corridor"; layer 2,
-luma key), your last recording (the newest mp4 in `~/Videos/videoping`; layer 3) and the first
+The pictures show four kinds of sources: the pack's melting blobs as a wireframe (layer 1, transparent
+background), an NDI source (a second self-test videoping sends the pack's starfield warp with big mixed
+geometric forms as "starfield"; layer 2, luma key), your last recording (the newest mp4 in `~/Videos/videoping`; layer 3) and the first
 videopong.net clip of the search "arrow" (selected, with pixelate and rgb split). Needs the internet
 and the NDI library. Every self-test runs in its own temporary folder, never with your session or
 config; the finder shows only the two clips (a folder of links); the ai pictures use the mocks

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Make all screenshots of the website and the manual (website/img/*.png) from self-tests.
 
-usage: scripts/screenshots.py [--recording <mp4>] [--query arrow]
+usage: scripts/screenshots.py [--recording <mp4>] [--query arrow] [--only overview,mixer,ai]
 
-Sources in the pictures: a generator from the pack (kaleido flower), an NDI source (a second
-self-test videoping sends the pack's endless corridor as "corridor"), your last recording (the newest
-mp4 in ~/Videos/videoping, or --recording) and the first videopong.net clip of the search (--query,
-default "arrow"; needs the internet). Every self-test runs in its own temporary folder, never with your
+Sources in the pictures: a generator from the pack (melting blobs as a wireframe, transparent
+background, on top), an NDI source (a second self-test videoping sends the pack's starfield warp with
+big mixed geometric forms as "starfield", luma-keyed), your
+last recording (the newest mp4 in ~/Videos/videoping, or --recording) and the first videopong.net
+clip of the search (--query, default "arrow"; needs the internet). --only writes just those pictures
+(names without .png). Every self-test runs in its own temporary folder, never with your
 session, config or autosave; the ai pictures use the mocks scripts/ai-mock-*.py (no key, nothing is
 billed). The NDI library has to be installed (see install.md). The window has to come out 3000x1818
 (the crops are made for that). Build first: cargo build --release
@@ -22,6 +24,7 @@ def opt(name, default):
 recordings = sorted(glob.glob(os.path.expanduser("~/Videos/videoping/*.mp4")), key=os.path.getmtime)
 recording = os.path.abspath(opt("--recording", recordings[-1] if recordings else ""))
 query = opt("--query", "arrow")
+only = set(opt("--only", "").split(",")) - {""}
 if not os.path.isfile(recording):
     sys.exit("no recording: pass --recording <mp4>")
 repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -70,6 +73,8 @@ def pal(im, n=160):
 
 
 def save(im, name):
+    if only and name[:-4] not in only:
+        return
     im.save(os.path.join(out, name), optimize=True)
     print("wrote", name, im.size)
 
@@ -99,13 +104,14 @@ if not vpclips:
 vpclip = vpclips[0]
 print("videopong clip:", os.path.basename(vpclip))
 
-# 2. the NDI source: a second videoping sends the endless corridor as "corridor"
-sender_session = session([{"id": 1, "name": "corridor", "source": {"Generator": {"path": f"{pack}/generators/endless-corridor.fs", "params": []}}, "effects": [], "seed": 0.3}],
+# 2. the NDI source: a second videoping sends the starfield (big mixed geometric forms) as "starfield"
+sender_session = session([{"id": 1, "name": "starfield", "source": {"Generator": {"path": f"{pack}/generators/starfield-warp.fs",
+                          "params": [{"name": "style", "value": anim(8.0, 0.0, 8.0)}, {"name": "formSize", "value": anim(6.0, 0.3, 16.0)}]}}, "effects": [], "seed": 0.3}],
                          [{"instance": 1, "active": True, "mix": MIX()}, {"instance": None, "active": True, "mix": MIX()}, {"instance": None, "active": True, "mix": MIX()}], None, [pack])
-sender_session["output"].update({"ndi_enabled": True, "ndi_name": "corridor"})
+sender_session["output"].update({"ndi_enabled": True, "ndi_name": "starfield"})
 sender, _, _ = start("ndi-sender", {"VIDEOPING_SELFTEST_STAY": "300", "VIDEOPING_SELFTEST_SHOT_AT": "290"}, sender_session)
 try:
-    # its full network name ("MACHINE (corridor)"), from a probe with MCP
+    # its full network name ("MACHINE (starfield)"), from a probe with MCP
     mport = str(port0 + 60)
     probe, _, _ = start("ndi-probe", {"VIDEOPING_SELFTEST_MCP": mport, "VIDEOPING_SELFTEST_STAY": "40"})
     ndi = None
@@ -114,7 +120,7 @@ try:
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{mport}/mcp", json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_files", "arguments": {"kind": "ndi"}}}).encode(), {"Content-Type": "application/json"})
             text = json.load(urllib.request.urlopen(req, timeout=5))["result"]["content"][0]["text"]
-            ndi = next((l.split(" | ", 1)[1] for l in text.splitlines() if l.startswith("ndi | ") and "(corridor)" in l), None)
+            ndi = next((l.split(" | ", 1)[1] for l in text.splitlines() if l.startswith("ndi | ") and "(starfield)" in l), None)
             if ndi:
                 break
         except Exception:
@@ -127,17 +133,20 @@ try:
     # 3. the session of the pictures; the finder shows only these clips (a folder of links to them)
     media = tempfile.mkdtemp(prefix="vp-shot-media-")
     rec_link = os.path.join(media, os.path.basename(recording))
-    vp_link = os.path.join(media, os.path.basename(vpclip))
+    # a short name: a long one widens the finder column and shifts every crop to its right
+    short = os.path.basename(vpclip).split(" - ")[0].split(" [")[0].strip()
+    vp_link = os.path.join(media, (short or "videopong clip") + ".mp4")
     os.symlink(recording, rec_link)
     os.symlink(vpclip, vp_link)
     recording, vpclip = rec_link, vp_link
     slots = [
-        {"id": 1, "name": "kaleido flower", "source": {"Generator": {"path": f"{pack}/generators/kaleido-flower.fs", "params": [{"name": "bgAlpha", "value": anim(0.0, 0.0, 1.0)}]}}, "effects": [], "seed": 0.5},
-        {"id": 2, "name": "corridor (NDI)", "source": {"Ndi": {"source": ndi}}, "effects": [], "seed": 0.5},
+        {"id": 1, "name": "melting blobs", "source": {"Generator": {"path": f"{pack}/generators/melting-blobs.fs",
+         "params": [{"name": "style", "value": anim(1.0, 0.0, 4.0)}, {"name": "bgAlpha", "value": anim(0.0, 0.0, 1.0)}]}}, "effects": [], "seed": 0.5},
+        {"id": 2, "name": "starfield (NDI)", "source": {"Ndi": {"source": ndi}}, "effects": [], "seed": 0.5},
         {"id": 3, "name": os.path.splitext(os.path.basename(recording))[0], "source": {"Clip": {"path": recording, "transport": dict(TRANSPORT)}}, "effects": [], "seed": 0.5},
         {"id": 4, "name": os.path.splitext(os.path.basename(vpclip))[0], "source": {"Clip": {"path": vpclip, "transport": dict(TRANSPORT)}},
          "effects": [{"uid": 10, "path": f"{pack}/effects/pixelate.fs", "active": True, "mix": MIX(), "params": [{"name": "shape", "value": anim(1.0, 0.0, 4.0)}], "seed": 0.5, "open": True},
-                     {"uid": 11, "path": f"{pack}/effects/rgb-split.fs", "active": True, "mix": MIX(), "params": [], "seed": 0.5, "open": False}], "seed": 0.5},
+                     {"uid": 11, "path": f"{pack}/effects/rgb-split.fs", "active": True, "mix": MIX(), "params": [], "seed": 0.5, "open": True}], "seed": 0.5},
     ]
     layers = [{"instance": 1, "active": True, "mix": MIX()}, {"instance": 2, "active": True, "mix": MIX("LumaKey")}, {"instance": 3, "active": True, "mix": MIX()}]
     main = session(slots, layers, 4, [pack, media])
