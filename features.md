@@ -828,6 +828,13 @@ earlier idea, decided 2026-11-21:
 - scripts/screenshots.py makes all of them from self-tests (one per picture, own folder, never the user's data;
   ai pictures with the mocks scripts/ai-mock-live.py / ai-mock-shader.py, no key); crops for a 3000x1818 window;
   the top bar is stitched (tabs + right side, without the empty middle)
+- what they show (the user: no color-bar test clip, not the "tunnel" clip): four kinds of sources: the pack's kaleido
+  flower (layer 1, transparent background), an NDI source (a second self-test videoping sends the endless corridor
+  as "corridor"; layer 2, luma key), the user's last recording (layer 3), the first videopong.net clip of "arrow"
+  (selected, pixelate with its choice buttons + rgb split); the finder shows only those two clips; the videopong
+  picture shows the "arrow" search
+- self-test: VIDEOPING_SELFTEST_SESSION=<json> (a session instead of the built-in one, no mouse script),
+  VIDEOPING_SELFTEST_SHOT_AT=<seconds> (a later screenshot, e.g. until NDI shows)
 
 # ideas
 

@@ -87,6 +87,8 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_MCP=<port>` | MCP server on that port (otherwise off in the self-test); `_MCP_RO=1`: read only |
 | `VIDEOPING_SELFTEST_STAY=<seconds>` | keep the self-test open that long (for calls from outside, e.g. `scripts/mcp-test.sh <port> <outdir>`) |
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
+| `VIDEOPING_SELFTEST_SESSION=<json>` | that session instead of the built-in test session, without the mouse script (screenshots) |
+| `VIDEOPING_SELFTEST_SHOT_AT=<seconds>` | take the screenshot later than at 4.5 s (e.g. until an NDI source shows); the self-test stays open 2 s longer |
 | `VIDEOPING_SELFTEST_CONFIG=1` | output options and general config folded open, column 2 scrolled to the bottom (screenshot of the settings) |
 | `VIDEOPING_SELFTEST_AI=<url>` | the ai tab talks to a mock Anthropic server at that url (key "selftest"); at 2 s it sends a message, at 5.5 s it prints the brightness and the chat. The mock (`scripts/ai-mock-live.py <port> <log>`) answers with `set /master/brightness 0.5` + `frame`, then a text (see features.md "ai tab") |
 | `VIDEOPING_SELFTEST_FINDER=<search>` | two favorites (color-adjust, trails) and that search typed into the finder (screenshot of the accordion / search; empty = favorites only) |
@@ -152,13 +154,18 @@ Screenshots of the website and the manual (`website/img/*.png`, 11 pictures) com
 
 ```sh
 cargo build --release
-scripts/screenshots.py <testclip.mp4>          # [--no-videopong] without the internet
+scripts/screenshots.py            # [--recording <mp4>] [--query arrow]
 ```
 
-One self-test per picture (live tab, midi mapping, projection mapping, shader editor, ai tab,
-videopong.net), each in its own temporary folder, never your session or config; the ai pictures use
-the mocks `scripts/ai-mock-live.py` / `scripts/ai-mock-shader.py` (no key, nothing billed). The crops
-are made for a 3000x1818 window; on another screen size the script stops and says so.
+The pictures show four kinds of sources: the pack's kaleido flower (layer 1, transparent background),
+an NDI source (a second self-test videoping sends the pack's endless corridor as "corridor"; layer 2,
+luma key), your last recording (the newest mp4 in `~/Videos/videoping`; layer 3) and the first
+videopong.net clip of the search "arrow" (selected, with pixelate and rgb split). Needs the internet
+and the NDI library. Every self-test runs in its own temporary folder, never with your session or
+config; the finder shows only the two clips (a folder of links); the ai pictures use the mocks
+`scripts/ai-mock-live.py` / `scripts/ai-mock-shader.py` (no key, nothing billed). The midi and
+mapping pictures use the built-in test session. The crops are made for a 3000x1818 window; on another
+screen size the script stops and says so.
 
 # architecture
 

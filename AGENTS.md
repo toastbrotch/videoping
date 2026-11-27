@@ -20,7 +20,7 @@ VIDEOPING_SELFTEST=/tmp/st target/release/videoping   # self-test in a real wind
 scripts/render-shaders.py <outdir> <shader.fs>...     # render shaders, GPU time, compile errors
 scripts/mcp-test.sh <port> <outdir>                    # MCP checks against a running self-test
 python3 scripts/install-html.py                        # install.md -> website/install.html
-scripts/screenshots.py <testclip.mp4>                  # all website / manual screenshots (website/img)
+scripts/screenshots.py                                 # all website / manual screenshots (website/img)
 ```
 
 Release: set `version` in Cargo.toml, tag `v<version>`, push the tag; GitHub Actions builds the .deb

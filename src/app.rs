@@ -339,7 +339,12 @@ impl App {
             prep0: 0,
         });
         let (s, status) = if let Some(t) = &selftest {
-            (selftest_session(t), "selftest".to_string())
+            // VIDEOPING_SELFTEST_SESSION=<file>: that session instead of the built-in one (screenshots)
+            match std::env::var("VIDEOPING_SELFTEST_SESSION").ok().map(|p| load_session(Path::new(&p))) {
+                Some(Ok(s)) => (s, "selftest".to_string()),
+                Some(Err(e)) => panic!("VIDEOPING_SELFTEST_SESSION: {e}"),
+                None => (selftest_session(t), "selftest".to_string()),
+            }
         } else {
             match load_session(&ap) {
                 Ok(s) => (s, format!("restored {}", ap.display())),
@@ -2961,7 +2966,7 @@ impl eframe::App for App {
             return;
         }
         // the MIDI self-test plays without the simulated mouse (its clicks select layers too)
-        if ["VIDEOPING_SELFTEST_MIDI", "VIDEOPING_SELFTEST_VP", "VIDEOPING_SELFTEST_QUIT"].iter().any(|v| std::env::var_os(v).is_some()) {
+        if ["VIDEOPING_SELFTEST_MIDI", "VIDEOPING_SELFTEST_VP", "VIDEOPING_SELFTEST_QUIT", "VIDEOPING_SELFTEST_SESSION"].iter().any(|v| std::env::var_os(v).is_some()) {
             return;
         }
         let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
@@ -3844,12 +3849,14 @@ impl App {
                 t.control_done = true;
             }
         }
+        // VIDEOPING_SELFTEST_SHOT_AT=<seconds>: a later screenshot (e.g. until an NDI source shows)
+        let shot_at = std::env::var("VIDEOPING_SELFTEST_SHOT_AT").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(4.5).max(1.0);
         // clean status line for the screenshot (no temporary paths)
-        if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > 4.0) {
+        if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > shot_at - 0.5) {
             self.status.clear();
         }
         // resource meters of the session at screenshot time
-        if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > 4.5) {
+        if self.selftest.as_ref().is_some_and(|t| !t.shot && t.start.elapsed().as_secs_f32() > shot_at) {
             eprintln!(
                 "selftest prepare priority: main mix GPU {:.2} ms of {:.1} ms, prepare every {} frames (0 = paused)",
                 self.main_ms,
@@ -3863,7 +3870,7 @@ impl App {
             }
         }
         let Some(t) = self.selftest.as_mut() else { return };
-        if secs > 4.0 && !t.dumped {
+        if secs > shot_at - 0.5 && !t.dumped {
             t.dumped = true;
             if let Some(r) = self.r.as_ref() {
                 let (w, h) = r.size();
@@ -3871,7 +3878,7 @@ impl App {
                 let _ = std::fs::write(t.dir.join(format!("out_{w}x{h}.rgba")), px);
             }
         }
-        if secs > 4.5 && !t.shot {
+        if secs > shot_at && !t.shot {
             t.shot = true;
             let dir = t.dir.clone();
             ctx.request_screenshot(move |img| {
@@ -3885,7 +3892,7 @@ impl App {
             t.prep0 = self.prepare_renders;
         }
         // a longer test recording (VIDEOPING_SELFTEST_REC=<seconds>) keeps the self-test open
-        let close_at = std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v + 4.0).unwrap_or(0.0).max(6.5)
+        let close_at = std::env::var("VIDEOPING_SELFTEST_REC").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v + 4.0).unwrap_or(0.0).max(6.5).max(shot_at + 2.0)
             // VIDEOPING_SELFTEST_STAY=<seconds>: stay open (e.g. for MCP calls from outside)
             .max(std::env::var("VIDEOPING_SELFTEST_STAY").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0));
         if secs > close_at && !t.closing {
