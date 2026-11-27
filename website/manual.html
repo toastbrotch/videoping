@@ -208,7 +208,7 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
 <p>Four areas from left to right; all column borders can be dragged.</p>
 
 <h3 id="topbar">Top bar</h3>
-<figure><img src="img/topbar.png" width="1000" alt="top bar: name and version, tabs, totals, fps counter, session file, new / save / load, help"></figure>
+<figure><img src="img/topbar.png" width="1058" alt="top bar: name and version, tabs, totals, fps counter, session file, new / save / load, undo / redo, help"></figure>
 <ul>
   <li>The <b>version</b> (e.g. 0.0.1) next to the name; tell it when you report a problem.</li>
   <li>Tabs: <span class="b on">live</span> (everything in this chapter),
@@ -222,7 +222,24 @@ output:    mixer → output effects → freeze → brightness / blackout → scr
     not reach its frame rate.</li>
   <li>The <b>session file</b> path and <span class="b">new</span> <span class="b">save</span>
     <span class="b">load</span> (see <a href="#files">Files and settings</a>).</li>
+  <li><span class="b">↶</span> <span class="b">↷</span>: <a href="#undo">undo / redo</a> in the tab you are in.</li>
   <li><span class="b">help</span> (far right): opens this manual in the browser, at the chapter of the tab you are in.</li>
+</ul>
+
+<h3 id="undo">Undo</h3>
+<ul>
+  <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> (or <kbd>Ctrl</kbd>+<kbd>Y</kbd>)
+    redoes; or the buttons <span class="b">↶</span> <span class="b">↷</span> in the top bar. Hover them to see what
+    would be undone; the status line says what was.</li>
+  <li><b>Only the tab you are in</b>: each tab has its own history, so nothing changes in a tab you cannot see.
+    <b>live</b>: everything in it (slots, parameters, effects, the mixer, master, bpm, output options, "new" and
+    "load"), also what plays live: the output changes with the undo. <b>projection mapping</b>: the preset shown.
+    <b>midi mapping</b>: the profile of the selected device. The <b>shader editor</b> has the text field's own
+    undo, the <b>ai</b> tab an undo next to each change.</li>
+  <li>One step is one finished action: a whole slider drag, a knob turned until it rests. Changes from a MIDI
+    controller are undone like changes with the mouse.</li>
+  <li>Not undone: REC, the bpm tap, blackout / freeze; where you look (page, selected slot) stays. 100 steps per
+    tab, until videoping quits.</li>
 </ul>
 
 <h3 id="finder">Column 1: finder</h3>

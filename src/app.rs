@@ -92,6 +92,20 @@ pub struct App {
     selftest_open_config: bool,
     /// midi mapping tab: selected device (port), address, search
     midi_sel_port: Option<String>,
+    /// undo: one history per tab (undo.rs): the live tab (the session), projection mapping (the
+    /// preset shown), midi mapping (the profile of the selected device)
+    undo_live: crate::undo::History<Session>,
+    undo_map: crate::undo::History<crate::mapping::Mapping>,
+    undo_midi: crate::undo::History<crate::midi::Profile>,
+    undo_checked: Instant,
+    /// the top of the scrolled content of the column being drawn (the effect stacks fill the
+    /// column from there, independent of the scroll position)
+    scroll_content_top: f32,
+    /// self-test: the detail column's scroll position, and one to set
+    detail_scroll: f32,
+    detail_scroll_to: Option<f32>,
+    /// a bpm tap happened: the next change is taken without an undo step (a tap is not undone)
+    undo_absorb: bool,
     midi_sel_addr: Option<String>,
     midi_search: String,
     /// profile name being edited (profile index, text) and a delete waiting for "really?"
@@ -427,6 +441,14 @@ impl App {
                 _ => Tab::Live,
             },
             midi_sel_port: None,
+            undo_live: Default::default(),
+            undo_map: Default::default(),
+            undo_midi: Default::default(),
+            undo_checked: Instant::now(),
+            scroll_content_top: 0.0,
+            detail_scroll: 0.0,
+            detail_scroll_to: None,
+            undo_absorb: false,
             midi_sel_addr: None,
             midi_search: String::new(),
             midi_rename: None,
@@ -564,7 +586,130 @@ impl App {
         }
     }
 
+    /// Undo: show each history its tab's current state, but only after a finished action (no
+    /// mouse button down, no text field in use, no midi control moved in the last 0.4 s), at most
+    /// every 0.3 s.
+    fn undo_observe(&mut self, ctx: &egui::Context) {
+        if self.undo_checked.elapsed().as_millis() < 300 {
+            return;
+        }
+        let midi_moving = self.midi.as_ref().and_then(|m| m.last_hit.as_ref()).is_some_and(|h| h.at.elapsed().as_millis() < 400);
+        if midi_moving || ctx.input(|i| i.pointer.any_down()) || ctx.text_edit_focused() {
+            return;
+        }
+        self.undo_observe_now();
+    }
+
+    /// The same now (also before an undo, so a change just made is undoable too).
+    fn undo_observe_now(&mut self) {
+        use crate::undo::{key_of, live_label_with, live_value, map_label, midi_label};
+        self.undo_checked = Instant::now();
+        let v = live_value(&self.s);
+        let k = key_of(&v);
+        if std::mem::take(&mut self.undo_absorb) {
+            self.undo_live.absorb(&self.s, k, v);
+        } else {
+            let infos = &self.infos;
+            let slider = |path: &str, name: &str| infos.get(Path::new(path)).and_then(|i| i.inputs.iter().find(|x| x.name == name)).map(|x| x.label.clone());
+            self.undo_live.observe(&self.s, k, || v, |a, b| live_label_with(a, b, &slider));
+        }
+        // projection mapping: the preset shown (another preset chosen: no step)
+        if let Some(m) = self.maps.get(&self.s.output.mapping).cloned() {
+            let v = serde_json::to_value(&m).unwrap_or_default();
+            let k = key_of(&v);
+            if self.undo_map.current().is_some_and(|c| c.name != m.name) {
+                self.undo_map.absorb(&m, k, v);
+            } else {
+                self.undo_map.observe(&m, k, || v, map_label);
+            }
+        }
+        // midi mapping: the profile of the selected device (another profile: no step)
+        let prof = self.midi.as_ref().zip(self.midi_sel_port.as_ref()).and_then(|(m, port)| m.device_profile(port).map(|pi| m.profiles()[pi].clone()));
+        if let Some(p) = prof {
+            let v = serde_json::to_value(&p).unwrap_or_default();
+            let k = key_of(&v);
+            if self.undo_midi.current().is_some_and(|c| c.name != p.name) {
+                self.undo_midi.absorb(&p, k, v);
+            } else {
+                self.undo_midi.observe(&p, k, || v, midi_label);
+            }
+        }
+    }
+
+    /// The history of the open tab (None: the tab has no undo here).
+    fn undo_labels(&self) -> Option<(Option<String>, Option<String>)> {
+        let l = |u: Option<&str>| u.map(String::from);
+        match self.tab {
+            Tab::Live => Some((l(self.undo_live.undo_label()), l(self.undo_live.redo_label()))),
+            Tab::Mapping => Some((l(self.undo_map.undo_label()), l(self.undo_map.redo_label()))),
+            Tab::Midi => Some((l(self.undo_midi.undo_label()), l(self.undo_midi.redo_label()))),
+            Tab::Shader | Tab::Ai => None,
+        }
+    }
+
+    /// Undo (or redo) in the open tab.
+    fn undo_redo(&mut self, redo: bool) {
+        use crate::undo::{key_of, live_value};
+        self.undo_observe_now();
+        let word = if redo { "redo" } else { "undo" };
+        let done = match self.tab {
+            Tab::Live => {
+                let now = self.s.clone();
+                let r = if redo { self.undo_live.redo(&now) } else { self.undo_live.undo(&now) };
+                r.map(|(mut st, label)| {
+                    // where you look stays
+                    st.page = self.s.page.min(st.pages() - 1);
+                    st.selected_layer = self.s.selected_layer;
+                    st.selected_instance = self.s.selected_instance.filter(|id| st.find(*id).is_some());
+                    st.focus_fx = self.s.focus_fx;
+                    self.s = st;
+                    let v = live_value(&self.s);
+                    self.undo_live.restored(&self.s, key_of(&v), v);
+                    label
+                })
+            }
+            Tab::Mapping => {
+                let cur = self.maps.get(&self.s.output.mapping).cloned();
+                let r = cur.as_ref().and_then(|c| if redo { self.undo_map.redo(c) } else { self.undo_map.undo(c) });
+                r.map(|(m, label)| {
+                    if let Some(t) = self.maps.get_mut(&m.name) {
+                        *t = m.clone();
+                        self.maps.touch();
+                    }
+                    let v = serde_json::to_value(&m).unwrap_or_default();
+                    self.undo_map.restored(&m, key_of(&v), v);
+                    label
+                })
+            }
+            Tab::Midi => {
+                let port = self.midi_sel_port.clone();
+                let mut out = None;
+                if let (Some(m), Some(port)) = (self.midi.as_mut(), port) {
+                    if let Some(pi) = m.device_profile(&port) {
+                        let cur = m.profiles()[pi].clone();
+                        if let Some((p, label)) = if redo { self.undo_midi.redo(&cur) } else { self.undo_midi.undo(&cur) } {
+                            if let Some(i) = m.profiles().iter().position(|x| x.name == p.name) {
+                                let q = p.clone();
+                                m.edit_profile(i, |x| *x = q);
+                            }
+                            let v = serde_json::to_value(&p).unwrap_or_default();
+                            self.undo_midi.restored(&p, key_of(&v), v);
+                            out = Some(label);
+                        }
+                    }
+                }
+                out
+            }
+            Tab::Shader | Tab::Ai => None,
+        };
+        match done {
+            Some(label) => self.set_status(format!("{word}: {label}")),
+            None => self.set_status(format!("nothing to {word}")),
+        }
+    }
+
     fn tap(&mut self) {
+        self.undo_absorb = true;
         let now = Instant::now();
         if self.taps.last().is_some_and(|t| now.duration_since(*t).as_secs_f32() > 2.0) {
             self.taps.clear();
@@ -998,6 +1143,21 @@ impl App {
                 let url = format!("{MANUAL_URL}#{chapter}");
                 if widgets::btn(ui, "help").on_hover_text(format!("open the manual in the browser\n{url}")).clicked() {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                }
+                ui.separator();
+                // undo / redo of the open tab
+                let labels = self.undo_labels();
+                let (u, r) = labels.clone().unwrap_or((None, None));
+                let tip = |word: &str, l: &Option<String>, key: &str| match (&labels, l) {
+                    (None, _) => format!("{word}: this tab has its own (shader editor: Ctrl+Z in the text; ai: the undo next to each change)"),
+                    (Some(_), Some(l)) => format!("{word}: {l}  ({key})"),
+                    (Some(_), None) => format!("nothing to {word} in this tab  ({key})"),
+                };
+                if ui.add_enabled(r.is_some(), egui::Button::new(egui::RichText::new("↷").size(widgets::BTN_TEXT)).min_size(widgets::BTN)).on_hover_text(tip("redo", &r, "Ctrl+Shift+Z")).on_disabled_hover_text(tip("redo", &r, "Ctrl+Shift+Z")).clicked() {
+                    self.undo_redo(true);
+                }
+                if ui.add_enabled(u.is_some(), egui::Button::new(egui::RichText::new("↶").size(widgets::BTN_TEXT)).min_size(widgets::BTN)).on_hover_text(tip("undo", &u, "Ctrl+Z")).on_disabled_hover_text(tip("undo", &u, "Ctrl+Z")).clicked() {
+                    self.undo_redo(false);
                 }
                 ui.separator();
                 if widgets::btn(ui, "load").clicked() {
@@ -1985,11 +2145,16 @@ impl App {
             String::new()
         };
         let mut new_focus: Option<u64> = None;
+        let content_top = self.scroll_content_top;
         let Some(effects) = self.effects_mut(owner) else { return };
         // the stack (= drop area) reaches down to the bottom of the visible column
         let frame = egui::Frame::group(ui.style());
         let margins = frame.total_margin().sum().y + 2.0;
-        let fill_h = (ui.clip_rect().bottom() - ui.cursor().top() - margins).max(0.0);
+        // measured from the top of the scrolled content, not from the screen: from the screen it
+        // depends on the scroll position, and after folding an effect the column then crept back up
+        // over many frames (the stack kept the content long, the scroll area shortened it a bit)
+        let used = ui.cursor().top() - content_top;
+        let fill_h = (ui.clip_rect().height() - used - margins).max(0.0);
         let frame_resp = frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.set_min_height(fill_h);
@@ -2867,9 +3032,15 @@ impl App {
             // preview stays on top, the rest scrolls below it
             if let Some(id) = self.prepare_detail_header(ui, frame) {
                 ui.add_space(4.0);
-                egui::ScrollArea::vertical().id_salt("detail").auto_shrink([false, false]).show(ui, |ui| {
+                let mut sa = egui::ScrollArea::vertical().id_salt("detail").auto_shrink([false, false]);
+                if let Some(y) = self.detail_scroll_to.take() {
+                    sa = sa.vertical_scroll_offset(y);
+                }
+                let out = sa.show(ui, |ui| {
+                    self.scroll_content_top = ui.min_rect().top();
                     self.prepare_detail_body(ui, id);
                 });
+                self.detail_scroll = out.state.clamped_offset().y;
             }
         });
         // mixer + output merged in the last column (takes the remaining width)
@@ -2878,6 +3049,7 @@ impl App {
             self.output_preview(ui, frame);
             ui.separator();
             egui::ScrollArea::vertical().id_salt("mixout").auto_shrink([false, false]).show(ui, |ui| {
+                self.scroll_content_top = ui.min_rect().top();
                 self.col_mixer(ui, frame);
                 ui.add_space(6.0);
                 self.col_output(ui);
@@ -2924,6 +3096,18 @@ impl eframe::App for App {
             self.shader_poll(&gl);
         }
         egui::Panel::top("top").show(ui, |ui| self.top_bar(ui, &gl));
+        // undo / redo keys (not while typing: text fields have their own)
+        if matches!(self.tab, Tab::Live | Tab::Mapping | Tab::Midi) && !ctx.text_edit_focused() {
+            use egui::{Key, KeyboardShortcut, Modifiers};
+            let redo = ctx.input_mut(|i| {
+                i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z)) || i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Y))
+            });
+            if redo {
+                self.undo_redo(true);
+            } else if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Z))) {
+                self.undo_redo(false);
+            }
+        }
         // the output keeps rendering in every tab (render() above)
         match self.tab {
             Tab::Live => self.live_tab(ui, frame, &ctx),
@@ -2944,6 +3128,7 @@ impl eframe::App for App {
             }
         }
         self.output_window(&ctx, frame);
+        self.undo_observe(&ctx);
         if self.selftest.is_some() {
             self.selftest_step(&ctx, &gl);
         } else {
@@ -2966,7 +3151,7 @@ impl eframe::App for App {
             return;
         }
         // the MIDI self-test plays without the simulated mouse (its clicks select layers too)
-        if ["VIDEOPING_SELFTEST_MIDI", "VIDEOPING_SELFTEST_VP", "VIDEOPING_SELFTEST_QUIT", "VIDEOPING_SELFTEST_SESSION"].iter().any(|v| std::env::var_os(v).is_some()) {
+        if ["VIDEOPING_SELFTEST_MIDI", "VIDEOPING_SELFTEST_VP", "VIDEOPING_SELFTEST_QUIT", "VIDEOPING_SELFTEST_SESSION", "VIDEOPING_SELFTEST_UNDO", "VIDEOPING_SELFTEST_FOLD"].iter().any(|v| std::env::var_os(v).is_some()) {
             return;
         }
         let in_pt = self.s.selected_instance.and_then(|id| self.s.find(id)).and_then(|i| match &i.source {
@@ -3475,6 +3660,7 @@ impl App {
         }
         // learn: cc 20 of the virtual device -> /master/freeze, then use it
         let port = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("vp-selftest pads")).map(|d| d.0));
+        let mut midi_undo_check = false;
         match sim.step {
             42 => {
                 if let (Some(m), Some(port)) = (self.midi.as_mut(), port.clone()) {
@@ -3549,6 +3735,7 @@ impl App {
                     let _ = o.send(&[0xB1, 0, 0]);
                 }
             }
+            124 => midi_undo_check = true,
             116 => {
                 let v = sel1.clone();
                 let ring = sim.rings.lock().unwrap().get(&0).copied();
@@ -3568,6 +3755,27 @@ impl App {
             _ => {}
         }
         sim.step += 1;
+        if midi_undo_check {
+            // undo in the midi mapping tab: the learned binding goes again
+            self.tab = Tab::Midi;
+            let pads = self.midi.as_ref().and_then(|m| m.devices().into_iter().find(|d| d.0.contains("vp-selftest pads")).map(|d| d.0));
+            self.midi_sel_port = pads;
+            self.undo_observe_now();
+            let bound = |a: &App| a.midi.as_ref().and_then(|m| m.profiles().iter().find(|p| p.name == "Bhoreal").map(|p| p.bindings.iter().any(|b| b.msg == crate::midi::Msg::Cc(20) && b.addr == "/master/freeze")));
+            let mut undone = vec![];
+            for _ in 0..3 {
+                if bound(self) != Some(true) {
+                    break;
+                }
+                let l = self.undo_midi.undo_label().map(String::from);
+                self.undo_redo(false);
+                undone.push(l);
+            }
+            eprintln!("selftest midi undo: undone {undone:?}; learned binding still there = {:?} (expected false)", bound(self));
+            self.undo_redo(true);
+            eprintln!("selftest midi redo: binding back = {:?} (expected true), status {:?}", bound(self), self.status);
+            self.tab = Tab::Live;
+        }
     }
 
     fn selftest_step(&mut self, ctx: &egui::Context, gl: &glow::Context) {
@@ -3750,6 +3958,106 @@ impl App {
                 STEP.store(3, Ordering::Relaxed);
                 let err = self.r.as_ref().and_then(|r| r.shader_error(&self.shed.work)).map(String::from);
                 eprintln!("selftest editor: fixed -> error {err:?} (expected None), dirty = {} (expected false), preview = {}", self.shed.dirty(), self.r.as_ref().is_some_and(|r| r.output_of(crate::render::EDITOR_ID).is_some()));
+            }
+        }
+        // VIDEOPING_SELFTEST_FOLD=1: the clip's two effects unfolded, the detail column scrolled to
+        // the bottom, then effect 1 folded: the scroll position per frame (it must settle at once)
+        if std::env::var_os("VIDEOPING_SELFTEST_FOLD").is_some() {
+            use std::sync::Mutex;
+            static LOG: Mutex<Vec<f32>> = Mutex::new(vec![]);
+            static STEP: Mutex<u8> = Mutex::new(0);
+            let mut step = STEP.lock().unwrap();
+            let clip = self.s.slots[8].as_ref().map(|i| i.id);
+            match *step {
+                0 if secs > 1.5 => {
+                    self.s.selected_instance = clip;
+                    if let Some(i) = self.s.slots[8].as_mut() {
+                        i.effects.iter_mut().for_each(|e| e.open = true);
+                    }
+                    *step = 1;
+                }
+                1 if secs > 2.0 => {
+                    self.detail_scroll_to = Some(1.0e6);
+                    *step = 2;
+                }
+                2 if secs > 2.5 => {
+                    eprintln!("selftest fold: scrolled to the bottom: {:.0} px", self.detail_scroll);
+                    if let Some(i) = self.s.slots[8].as_mut() {
+                        i.effects[0].open = false;
+                    }
+                    *step = 3;
+                }
+                3 => {
+                    let mut log = LOG.lock().unwrap();
+                    log.push(self.detail_scroll);
+                    if log.len() >= 40 {
+                        let last = *log.last().unwrap();
+                        let settled = log.iter().position(|v| (v - last).abs() < 0.5).unwrap_or(0);
+                        eprintln!("selftest fold: after folding effect 1 the scroll position settles after {settled} frames (expected 0-2) at {last:.0} px; first frames {:?}", &log[..8].iter().map(|v| v.round()).collect::<Vec<_>>());
+                        *step = 4;
+                    }
+                }
+                _ => {}
+            }
+        }
+        // VIDEOPING_SELFTEST_UNDO=1 (with _MAP=1): a parameter change, undo, redo; an effect removed,
+        // undo; a mapping slice moved, undo in the mapping tab; the clip must keep its GPU state
+        if std::env::var_os("VIDEOPING_SELFTEST_UNDO").is_some() {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static STEP: AtomicU8 = AtomicU8::new(0);
+            let p = "/slot/9/fx/1/param/1";
+            let clip_id = self.s.slots[8].as_ref().map(|i| i.id).unwrap_or(0);
+            let alive = |a: &App| a.r.as_ref().is_some_and(|r| r.output_of(clip_id).is_some());
+            let step = STEP.load(Ordering::Relaxed);
+            match step {
+                0 if secs > 1.5 => {
+                    let _ = self.control_set(p, &crate::control::Value::Num(0.5));
+                    eprintln!("selftest undo: {p} set to {:?}; clip playing = {}", self.control_get(p), alive(self));
+                    STEP.store(1, Ordering::Relaxed);
+                }
+                1 if secs > 2.1 => {
+                    eprintln!("selftest undo: label = {:?}", self.undo_live.undo_label());
+                    self.undo_redo(false);
+                    eprintln!("selftest undo: after undo {p} = {:?} (expected 0), status {:?}, clip playing = {}", self.control_get(p), self.status, alive(self));
+                    STEP.store(2, Ordering::Relaxed);
+                }
+                2 if secs > 2.5 => {
+                    self.undo_redo(true);
+                    eprintln!("selftest undo: after redo {p} = {:?} (expected 0.5), status {:?}", self.control_get(p), self.status);
+                    STEP.store(3, Ordering::Relaxed);
+                }
+                3 if secs > 2.9 => {
+                    if let Some(i) = self.s.slots[8].as_mut() {
+                        i.effects.pop();
+                    }
+                    eprintln!("selftest undo: an effect removed, effects = {}", self.s.slots[8].as_ref().map(|i| i.effects.len()).unwrap_or(0));
+                    STEP.store(4, Ordering::Relaxed);
+                }
+                4 if secs > 3.5 => {
+                    self.undo_redo(false);
+                    eprintln!("selftest undo: after undo effects = {} (expected 2), status {:?}, clip playing = {}", self.s.slots[8].as_ref().map(|i| i.effects.len()).unwrap_or(0), self.status, alive(self));
+                    STEP.store(5, Ordering::Relaxed);
+                }
+                5 if secs > 3.9 => {
+                    self.tab = Tab::Mapping;
+                    let name = self.s.output.mapping.clone();
+                    if let Some(m) = self.maps.get_mut(&name) {
+                        m.slices[0].input[0] += 100.0;
+                        eprintln!("selftest undo: mapping {name:?} slice 1 x = {}", m.slices[0].input[0]);
+                    } else {
+                        eprintln!("selftest undo: no mapping preset (use VIDEOPING_SELFTEST_MAP=1)");
+                    }
+                    self.maps.touch();
+                    STEP.store(6, Ordering::Relaxed);
+                }
+                6 if secs > 4.5 => {
+                    self.undo_redo(false);
+                    let x = self.maps.get(&self.s.output.mapping).map(|m| m.slices[0].input[0]);
+                    eprintln!("selftest undo: after undo in the mapping tab slice 1 x = {x:?}, status {:?}; live undo label now {:?}", self.status, self.undo_live.undo_label());
+                    self.tab = Tab::Live;
+                    STEP.store(7, Ordering::Relaxed);
+                }
+                _ => {}
             }
         }
         // VIDEOPING_SELFTEST_AI=<mock url>: a chat message at 2 s, the result at 5.5 s (with

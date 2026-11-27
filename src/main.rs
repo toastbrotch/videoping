@@ -14,6 +14,7 @@ mod record;
 mod render;
 mod shader_doc;
 mod state;
+mod undo;
 mod video;
 mod videopong;
 mod widgets;

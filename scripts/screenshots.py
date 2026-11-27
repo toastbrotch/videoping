@@ -108,7 +108,8 @@ print("videopong clip:", os.path.basename(vpclip))
 sender_session = session([{"id": 1, "name": "starfield", "source": {"Generator": {"path": f"{pack}/generators/starfield-warp.fs",
                           "params": [{"name": "style", "value": anim(8.0, 0.0, 8.0)}, {"name": "formSize", "value": anim(6.0, 0.3, 16.0)}]}}, "effects": [], "seed": 0.3}],
                          [{"instance": 1, "active": True, "mix": MIX()}, {"instance": None, "active": True, "mix": MIX()}, {"instance": None, "active": True, "mix": MIX()}], None, [pack])
-sender_session["output"].update({"ndi_enabled": True, "ndi_name": "starfield"})
+# 25 fps is plenty for a source, and leaves the GPU to the videoping in the pictures (its fps counter)
+sender_session["output"].update({"ndi_enabled": True, "ndi_name": "starfield", "fps": 25})
 sender, _, _ = start("ndi-sender", {"VIDEOPING_SELFTEST_STAY": "300", "VIDEOPING_SELFTEST_SHOT_AT": "290"}, sender_session)
 try:
     # its full network name ("MACHINE (starfield)"), from a probe with MCP
@@ -150,12 +151,18 @@ try:
     ]
     layers = [{"instance": 1, "active": True, "mix": MIX()}, {"instance": 2, "active": True, "mix": MIX("LumaKey")}, {"instance": 3, "active": True, "mix": MIX()}]
     main = session(slots, layers, 4, [pack, media])
+    # 30 fps output: a laptop decoding two clips, receiving NDI and drawing a 3000x1818 window reaches
+    # it, so the fps counter shows no warning (at 60 it would read ~35 / 60 with a ⚠)
+    main["output"]["fps"] = 30
 
     im, _ = shot("live", {"VIDEOPING_SELFTEST_SHOT_AT": "9"}, main)
     save(pal(im.resize((1500, 909), Image.LANCZOS)), "overview.png")
-    bar = Image.new("RGB", (2000, 36), im.getpixel((1000, 18)))  # top bar without its empty middle
+    # top bar without its empty middle: the tabs, then everything from the first text on the right
+    bg = im.getpixel((1000, 18))
+    right = next((x for x in range(760, W) if any(sum(abs(a - b) for a, b in zip(im.getpixel((x, y)), bg)) > 60 for y in range(6, 30))), 1740) - 16
+    bar = Image.new("RGB", (720 + 20 + W - right, 36), bg)
     bar.paste(im.crop((0, 0, 720, 36)), (0, 0))
-    bar.paste(im.crop((1740, 0, 3000, 36)), (740, 0))
+    bar.paste(im.crop((right, 0, W, 36)), (740, 0))
     save(bar, "topbar.png")
     save(im.crop((0, 36, 390, 36 + 648)), "finder.png")
     save(im.crop((392, 36, 392 + 620, 36 + 1440)), "prepare.png")

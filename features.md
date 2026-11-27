@@ -525,7 +525,7 @@ earlier idea, decided 2026-11-21:
 - network in background threads (search, 4 thumbnail workers, downloads with progress); the ui never waits
 - built: src/videopong.rs (ureq + image/jpeg for the thumbnails, 160x120 max), finder category FileKind::Videopong, Drag::Videopong (downloaded on drop), instance name = the title (without " [id]"); a global "search all" never switches to videopong (its count is the result list, not hits)
 - self-test: VIDEOPING_SELFTEST_VP=<query> (real network: search, thumbnails, first clip into slot 3)
-- later (open): login for the full-quality download; MCP / ai tools to search and load videopong clips
+- later (open): login for the full-quality download; MCP / ai tools to search and load videopong clips (both in ideas.md)
 
 ## mapping (projection mapping) — decided + built 2026-11-22
 - scope: 1 slices (an input rectangle of the composition placed on the output with a corner pin), 2 masks (polygons that black out parts of the output, soft edge, invertible), 3 test grid; not now: mesh warp, soft-edge blending, per-slice on/off / dimming, several mapped outputs
@@ -836,11 +836,53 @@ earlier idea, decided 2026-11-21:
   recording (layer 3), the first videopong.net clip of "arrow"
   (selected, pixelate with its choice buttons + rgb split); the finder shows only those two clips; the videopong
   picture shows the "arrow" search
+- the session in the pictures outputs 30 fps and the NDI sender 25 fps: at 60 the laptop (two clips decoded, NDI
+  received, a 3000x1818 window, a second videoping sending) showed "⚠ 35 / 60 fps" in every picture; the top bar is
+  stitched where the right-hand group really starts (it moved with the undo buttons)
 - the selected clip's two effects are both unfolded (the user: "the prepare needs to expand the effect"); the
   videopong clip gets a short link name ("Arrows and Circles"): a long name widens the finder column and shifts
   every crop to its right; --only <names> renews just some pictures
 - self-test: VIDEOPING_SELFTEST_SESSION=<json> (a session instead of the built-in one, no mouse script),
   VIDEOPING_SELFTEST_SHOT_AT=<seconds> (a later screenshot, e.g. until NDI shows)
+
+## undo (built 2026-11-27; designed 2026-11-24, see the decisions below)
+- undo only undoes what you are looking at: one history per tab, never a change in another tab "in the background"
+- live tab: one history for the whole session (prepare grid, detail: parameters, ranges, animation settings, effects
+  added / removed / reordered / moved, mixer, output effects, master, bpm, output options, finder folders and
+  favorites, "new" and "load"), live instances included (the output changes with the undo: it is all on screen)
+- projection mapping tab: the preset shown (slices, masks); midi mapping tab: the profile of the selected device
+  (bindings, orientation); choosing another preset / profile is no step (undo never writes one preset's state into
+  another); creating, renaming, deleting presets / profiles are file operations: not undone
+- shader editor: its own text undo (Ctrl+Z in the text field); ai tab: its undo next to each change
+- Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and the buttons ↶ ↷ in the top bar act on the open tab (not while a text field has
+  focus: it has its own); hover: what would be undone; the status line: "undo: <what>"; 100 steps per tab, lost on
+  restart
+- steps: after a finished action only (no mouse button down, no text field in use, no midi control moved in the
+  last 0.4 s), checked at most every 0.3 s: a whole slider drag = one step, a knob turned continuously = one step;
+  midi changes are steps like mouse changes (in the tab their target belongs to: mostly live)
+- not undone: REC (not in the session), the bpm tap (the change it makes is taken without a step), blackout / freeze
+  (one-shot output actions, not saved), where you look (page, selected slot / layer stay as they are on undo)
+- how (undo.rs): a history keeps copies of the tab's state; a state's comparable form (JSON without page / selection /
+  next id, without the value of a running animation, which moves by itself) is hashed; a different hash = a step,
+  labeled from the first difference ("slot 9 (testclip) · effect 1 (color-adjust) · Brightness", slider labels from
+  the shaders; "slice 1 (left box)"; "binding 57 (/master/freeze)"); undo puts a copy back: the renderer keeps what
+  each id has (a clip plays on, effects keep their buffers), what is gone is freed, what comes back is built again
+- cost: 0.8 ms per check with the user's real session (865 KB autosave), about 3 times a second while idle; memory:
+  a copy of the session per step (some tens of MB for 100 steps of a big session)
+- tested: unit tests (steps, undo / redo, limit, running animations and navigation not counted, labels); self-test
+  VIDEOPING_SELFTEST_UNDO (a parameter, undo, redo; an effect removed, undo; a mapping slice moved, undo in the
+  mapping tab; the clip keeps playing throughout); the midi self-test (a learned binding: undo removes the
+  orientation step, then the binding; redo brings it back)
+
+## effect stack: no more creeping scroll (2026-11-27)
+- the user: "if i collapse the first effect the second effect is immediately pulled upwards, but the parameters ...
+  are scrolled top-down very slow"; cause: the effect stack (a drop area) stretches to the bottom of the visible
+  column, and that height was measured from the screen, so it depended on the scroll position: scrolled down, the
+  content grew with it (no real bottom: the self-test scrolled to 544,363 px), and after folding an effect the column
+  crept back ~7,000 px per frame (not settled after 40 frames)
+- now measured from the top of the scrolled content (the column's scroll area tells it): the bottom is the real
+  content end (858 px in the same test), and after folding the column is in place the next frame
+- the same for the output effects in the mixer column; self-test VIDEOPING_SELFTEST_FOLD
 
 # ideas
 

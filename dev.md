@@ -87,6 +87,8 @@ Useful env vars:
 | `VIDEOPING_SELFTEST_MCP=<port>` | MCP server on that port (otherwise off in the self-test); `_MCP_RO=1`: read only |
 | `VIDEOPING_SELFTEST_STAY=<seconds>` | keep the self-test open that long (for calls from outside, e.g. `scripts/mcp-test.sh <port> <outdir>`) |
 | `VIDEOPING_SELFTEST_CONTROL=1` | at 2 s: drive the session through the control registry (6 sets incl. a layer alias and an invalid address), print the result and the reported changes |
+| `VIDEOPING_SELFTEST_FOLD=1` | the clip's effects unfolded, the detail column scrolled to the bottom, effect 1 folded: prints the scroll position per frame (it must settle at once; with `VIDEOPING_SELFTEST_EFFECT` a long effect) |
+| `VIDEOPING_SELFTEST_UNDO=1` | with `_MAP=1`: a parameter change, undo, redo; an effect removed, undo; a mapping slice moved, undo in the mapping tab; prints the values and that the clip kept playing (the midi self-test checks undo in the midi mapping tab) |
 | `VIDEOPING_SELFTEST_SESSION=<json>` | that session instead of the built-in test session, without the mouse script (screenshots) |
 | `VIDEOPING_SELFTEST_SHOT_AT=<seconds>` | take the screenshot later than at 4.5 s (e.g. until an NDI source shows); the self-test stays open 2 s longer |
 | `VIDEOPING_SELFTEST_CONFIG=1` | output options and general config folded open, column 2 scrolled to the bottom (screenshot of the settings) |

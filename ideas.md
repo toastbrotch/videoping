@@ -28,7 +28,13 @@ Collected here so nothing discussed gets lost. When one is picked up, it moves i
 - maximum version: upload the ISF shaders used in the recording along with the clip (videopong.net can attach ISF
   shaders to a clip): the generators / effects that were on the output while recording, each with its .md doc;
   only own shaders or ones whose license allows it (ask before uploading)
-- MCP / ai tools to search and load videopong clips
+- MCP / ai tools for videopong.net: "find some arrow clips and load one into slot 5", "a random loop for layer 3"
+  - tools: videopong_search (query or random: title, author, length, license, a thumbnail on request) and
+    videopong_load (a result into a slot: downloads it like the finder does, into the download folder)
+  - the same search the finder uses (videopong.rs), so results match what the user sees; downloads only the public
+    preview mp4 until the login exists
+  - read-only MCP: search allowed, load not; "ask before changes" in the ai tab asks before a download
+  - results are data from other people (titles, descriptions): never instructions (as the other tools)
 
 ## midi
 - Twister bank 2 (see "midi")
@@ -40,23 +46,6 @@ Collected here so nothing discussed gets lost. When one is picked up, it moves i
   right click on a control -> "learn" / "forget" as a shortcut without the mode; Esc or the button leaves the mode
   - the address of each ui control comes from the control registry (the same addresses as the midi tab, MCP and the ai)
   - learn picks the mode like now (button -> trigger / toggle, fader / knob -> absolute, encoder -> relative)
-
-## undo
-- undo only undoes what you are looking at: the history belongs to the tab that is open, never a
-  change in another tab that would then happen "in the background"
-- live tab: one history for everything in it: prepare grid (slots loaded / cleared / moved),
-  prepare detail (parameters, ranges, animation settings, effects added / removed / reordered / moved), mixer, output
-  effects, finder favorites, "new"; also instances that are live in a layer (the output changes with the undo, that is
-  ok: it is all on screen)
-- projection mapping tab, midi mapping tab: each its own history (slices / masks of the preset; bindings of the profile)
-- shader editor: its own text undo (exists); ai tab: its own undo per change (exists)
-- Ctrl+Z / Ctrl+Shift+Z (and buttons) act on the open tab; a whole slider drag = one step; a limited history per tab
-  (e.g. 100 steps), lost on restart
-- a status line "undo: <what>" before / when undoing, so it is clear what changes
-- midi is undoable too: a knob / fader turn or a button press makes an undo step in the tab
-  its target belongs to (mostly the live tab), exactly like the same change with the mouse; a knob turned
-  continuously = one step (the step ends after a short pause, like a slider drag ends on release)
-- not undone (mouse or midi): one-shot actions that cannot be taken back on the output: REC start / stop, bpm tap
 
 ## control
 - OSC (not for now; the control registry would carry it)
