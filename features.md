@@ -719,6 +719,10 @@ earlier idea, decided 2026-11-21:
 - LICENSE-shaders.md: CC BY-NC-SA for isf-pack/
 - checked: cargo test, the full self-test (all expected values), scripts/mcp-test.sh
 
+## midi mapping tab fixes (2026-11-27)
+- crash on deleting a profile: after "really delete?" the frame went on drawing with the deleted profile's index
+  (out of range for the last profile); now the panel stops for that frame (GitHub issue #1)
+
 # future ideas (not planned)
 
 Collected here (decided 2026-11-24) so nothing gets lost; when one is picked, it moves up into its own section.

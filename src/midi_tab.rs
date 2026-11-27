@@ -168,6 +168,7 @@ impl App {
             let name = m.profiles()[pi].name.clone();
             let builtin = m.is_builtin(pi);
             // profile bar: name (rename), new, duplicate, delete / built-in
+            let mut deleted = false;
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("profile").weak());
                 if builtin {
@@ -204,8 +205,9 @@ impl App {
                     }
                 } else if self.midi_confirm_delete == Some(pi) {
                     if widgets::choice(ui, true, "really delete?").clicked() {
-                        if let Err(e) = m.delete_profile(pi) {
-                            self.set_status(e);
+                        match m.delete_profile(pi) {
+                            Ok(()) => deleted = true,
+                            Err(e) => self.set_status(e),
                         }
                         self.midi_confirm_delete = None;
                         self.midi_rename = None;
@@ -217,6 +219,10 @@ impl App {
                     self.midi_confirm_delete = Some(pi);
                 }
             });
+            // the profile is gone: its index (and every one after it) is stale until the next frame
+            if deleted {
+                return;
+            }
             // pad grid (the Bhoreal): how it lies; one press next to the usb cable sets it
             if let Some(g) = m.profiles()[pi].grid {
                 ui.horizontal(|ui| {
